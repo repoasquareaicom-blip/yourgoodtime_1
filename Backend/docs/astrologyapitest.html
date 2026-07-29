@@ -1,0 +1,3641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>yourgoodtime.in — Vedic Kundli Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #e8c872;
+      --gold-deep: #c9a44e;
+      --gold-soft: rgba(232, 200, 114, 0.14);
+      --violet: #9b8afb;
+      --violet-deep: #6d5ce7;
+      --cyan: #6ee7f0;
+      --blue: #5b8def;
+      --fuchsia: #d8a4f5;
+      --rose: #f0a8b8;
+      --amber: #e8c872;
+      --orange: #e8955a;
+      --emerald: #5fd4a4;
+      --text: #f3f1ff;
+      --text-muted: #9499b8;
+      --glass: rgba(12, 14, 28, 0.62);
+      --glass-light: rgba(20, 22, 42, 0.55);
+      --border: rgba(255, 255, 255, 0.09);
+      --border-glow: rgba(155, 138, 251, 0.28);
+      --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.65);
+      --radius: 18px;
+      --radius-sm: 10px;
+      --font-base: 13.5px;
+      --row-h: 2.2rem;
+      --app-gap: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html {
+      font-size: var(--font-base);
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      font-family: "Sora", system-ui, sans-serif;
+      background: #04040c;
+      color: var(--text);
+      height: 100%;
+      overflow: hidden;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    .ambient-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse 90% 60% at 15% -10%, rgba(109, 92, 231, 0.22), transparent 55%),
+        radial-gradient(ellipse 70% 50% at 90% 10%, rgba(232, 200, 114, 0.12), transparent 50%),
+        radial-gradient(ellipse 80% 55% at 50% 110%, rgba(91, 141, 239, 0.16), transparent 55%),
+        linear-gradient(180deg, #04040c 0%, #08081a 45%, #050510 100%);
+    }
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      opacity: 0.55;
+      animation: floatOrb 18s ease-in-out infinite;
+    }
+    .orb-1 {
+      width: 340px; height: 340px;
+      top: -80px; left: -60px;
+      background: rgba(109, 92, 231, 0.35);
+    }
+    .orb-2 {
+      width: 280px; height: 280px;
+      top: 20%; right: -40px;
+      background: rgba(232, 200, 114, 0.22);
+      animation-delay: -6s;
+    }
+    .orb-3 {
+      width: 320px; height: 320px;
+      bottom: -100px; left: 35%;
+      background: rgba(91, 141, 239, 0.2);
+      animation-delay: -12s;
+    }
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(12px, -18px) scale(1.05); }
+    }
+    .app {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      max-width: none;
+      margin: 0;
+      padding: var(--app-gap);
+      display: flex;
+      flex-direction: column;
+      gap: var(--app-gap);
+      overflow: hidden;
+    }
+    .app-top { flex-shrink: 0; }
+    .shell-bar {
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(18, 20, 38, 0.88), rgba(10, 12, 26, 0.92));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(24px);
+    }
+    .shell-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      min-width: 200px;
+    }
+    .brand-glyph {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, var(--gold-soft), rgba(109, 92, 231, 0.18));
+      border: 1px solid rgba(232, 200, 114, 0.35);
+      color: var(--gold);
+      font-size: 1.1rem;
+      box-shadow: 0 0 24px -6px rgba(232, 200, 114, 0.45);
+    }
+    .brand-site {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: 0.01em;
+      line-height: 1.1;
+    }
+    .brand-site:hover { color: var(--gold); }
+    .brand-sub {
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+    .shell-divider {
+      width: 1px;
+      background: linear-gradient(180deg, transparent, var(--border-glow), transparent);
+      flex-shrink: 0;
+    }
+    .shell-form {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .dashboard {
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(300px, 1.05fr) minmax(380px, 1.35fr) minmax(260px, 0.8fr);
+      gap: var(--app-gap);
+      overflow: hidden;
+      align-items: stretch;
+    }
+    .dashboard-center {
+      display: flex;
+      flex-direction: column;
+      gap: var(--app-gap);
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .kundli-panel {
+      flex: 0 0 auto;
+    }
+    .kundli-panel.is-collapsed {
+      flex: 0 0 auto;
+    }
+    .kundli-panel.is-collapsed .kundli-expanded {
+      display: none;
+    }
+    .kundli-collapsed-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 14px;
+      min-height: 44px;
+    }
+    .kundli-panel.is-collapsed .kundli-collapsed-bar {
+      display: flex;
+    }
+    .kundli-collapsed-bar .kundli-collapsed-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .kundli-collapsed-bar .kundli-collapsed-hint {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+    }
+    .kundli-panel .card-body {
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      overflow: hidden;
+    }
+    .kundli-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .kundli-bar .panel-icon {
+      width: 28px;
+      height: 28px;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+      color: var(--rose);
+      border-color: rgba(240, 168, 184, 0.25);
+    }
+    .kundli-title {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+    #kundliData {
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+    }
+    #kundliData.empty-msg {
+      flex: 1;
+      padding: 4px 0;
+      text-align: left;
+      font-size: 0.8rem;
+    }
+    .planets-panel,
+    .houses-panel {
+      flex: 1;
+      min-height: 0;
+    }
+    .planets-panel .card-body,
+    .houses-panel .card-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 10px;
+    }
+    .chart-panel {
+      min-height: 0;
+    }
+    .chart-panel .card-body {
+      flex: 1;
+      min-height: 0;
+      padding: 8px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      gap: 10px;
+    }
+    .dash-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .panel-copy { flex: 1; min-width: 0; }
+    .panel-toggle {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .panel-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex-shrink: 0;
+      margin-left: auto;
+      max-width: 100%;
+    }
+    .planets-panel .card-header {
+      flex-wrap: wrap;
+      row-gap: 8px;
+      overflow: visible;
+    }
+    .houses-panel.is-collapsed {
+      display: none !important;
+    }
+    .dashboard-center:not(.houses-visible) .planets-panel {
+      flex: 1;
+    }
+    .panel-icon {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--gold);
+    }
+    .chart-h .panel-icon { color: var(--violet); border-color: rgba(155, 138, 251, 0.25); }
+    .kundli-h .panel-icon { color: var(--rose); border-color: rgba(240, 168, 184, 0.25); }
+    .split-h .panel-icon { color: var(--emerald); border-color: rgba(95, 212, 164, 0.25); }
+    .dasha-h .panel-icon { color: var(--gold); border-color: rgba(232, 200, 114, 0.3); }
+    .panel-copy h3 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .panel-meta {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      letter-spacing: 0.04em;
+    }
+    .dash-panel .card-header {
+      padding: 10px 14px;
+      flex-shrink: 0;
+    }
+    .dash-panel .card-body {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .dash-panel.chart-panel .card-body {
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    .card {
+      background: linear-gradient(160deg, rgba(16, 18, 34, 0.82), rgba(8, 10, 22, 0.9));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      backdrop-filter: blur(18px);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .dash-panel:hover {
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow), 0 0 32px -12px rgba(109, 92, 231, 0.35);
+    }
+    .card-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .card-header::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 5px;
+    }
+    .card-header h3 { color: #fff; }
+    .card-header span { font-size: 0.95rem; color: var(--text-muted); display: block; margin-top: 4px; }
+    .card-header {
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border);
+    }
+    .card-header::before { width: 3px; opacity: 0.9; }
+    .card-header.form-h::before { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); }
+    .card-header.chart-h::before { background: linear-gradient(180deg, var(--violet), var(--violet-deep)); }
+    .card-header.kundli-h::before { background: linear-gradient(180deg, var(--rose), #c97a8e); }
+    .card-header.split-h::before { background: linear-gradient(180deg, var(--emerald), #3da87a); }
+    .card-header.dasha-h::before { background: linear-gradient(180deg, var(--gold), var(--orange)); }
+    .card-body { padding: 26px 28px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px 12px;
+      align-items: start;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .dob-group { grid-column: span 2; min-width: 0; }
+    .dob-row {
+      display: grid;
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 8px;
+    }
+    .dob-row > select,
+    .dob-row > input { min-width: 0; }
+    #dobYear { padding-left: 8px; padding-right: 8px; }
+    input[type="time"] { min-width: 0; width: 100%; }
+    label {
+      font-size: 0.62rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+    input, select {
+      padding: 8px 11px;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-family: inherit;
+      background: rgba(4, 5, 14, 0.55);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    input:hover, select:hover {
+      border-color: rgba(255, 255, 255, 0.16);
+      background: rgba(6, 8, 18, 0.7);
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: rgba(232, 200, 114, 0.55);
+      box-shadow: 0 0 0 3px rgba(232, 200, 114, 0.12);
+      background: rgba(8, 10, 22, 0.85);
+    }
+    select option { background: #12142a; color: var(--text); }
+    .btn {
+      border: 0;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      font-family: inherit;
+      padding: 9px 18px;
+      letter-spacing: 0.03em;
+      transition: transform 0.18s, box-shadow 0.18s, background 0.18s, border-color 0.18s;
+    }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .btn-primary {
+      color: #1a1408;
+      background: linear-gradient(135deg, #f0d78c 0%, #e8c872 45%, #d4a853 100%);
+      box-shadow: 0 8px 28px -8px rgba(232, 200, 114, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px -6px rgba(232, 200, 114, 0.75);
+    }
+    .btn-ghost, .btn-secondary {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .btn-ghost:hover:not(:disabled), .btn-secondary:hover:not(:disabled) {
+      background: rgba(155, 138, 251, 0.12);
+      border-color: var(--border-glow);
+      transform: translateY(-1px);
+    }
+    .pdf-summary-card {
+      display: none !important;
+    }
+    body.pdf-export-prep .pdf-summary-card {
+      display: flex !important;
+      flex-direction: column;
+    }
+    .pdf-summary-card .card-body { padding: 20px 28px; }
+    .pdf-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px 24px;
+      font-size: 0.98rem;
+    }
+    .pdf-summary-grid dt { font-weight: 700; color: var(--cyan); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .pdf-summary-grid dd { margin: 4px 0 0; color: #fff; font-weight: 600; }
+    body.pdf-export-prep {
+      overflow: auto !important;
+      height: auto !important;
+    }
+    body.pdf-export-prep .app {
+      height: auto !important;
+      overflow: visible !important;
+    }
+    body.pdf-export-prep .dashboard {
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: visible !important;
+    }
+    body.pdf-export-prep .dashboard-center {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    body.pdf-export-prep .houses-panel.is-collapsed {
+      display: flex !important;
+      flex-direction: column;
+    }
+    body.pdf-export-prep .kundli-panel.is-collapsed {
+      display: flex !important;
+      flex-direction: column;
+    }
+    body.pdf-export-prep .dash-panel { min-height: auto !important; }
+    body.pdf-export-prep #dasaData,
+    body.pdf-export-prep #kundliData,
+    body.pdf-export-prep .split-panel-body {
+      overflow: visible !important;
+      max-height: none !important;
+    }
+    body.pdf-export-prep #chartDataSigns { display: block !important; }
+    body.pdf-export-prep .pdf-export-hide { display: none !important; }
+    .location-inline {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.68rem;
+      color: var(--gold);
+      font-family: ui-monospace, monospace;
+      opacity: 0.9;
+    }
+    .chart-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex: 0 0 auto;
+      width: 100%;
+      min-height: 280px;
+      padding: 6px;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(232, 200, 114, 0.12), transparent 45%),
+        linear-gradient(155deg, #faf6ee 0%, #f3eef8 42%, #eef6fa 100%);
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 12px 40px -16px rgba(0, 0, 0, 0.45);
+      overflow: visible;
+    }
+    #chartSvg {
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #chartSvg svg {
+      width: 100% !important;
+      height: auto !important;
+      max-width: 100%;
+      max-height: min(52vh, 520px);
+      display: block;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.18));
+    }
+    #chartDataSigns {
+      display: block;
+      flex: 0 0 auto;
+      margin-top: 0;
+      overflow: visible;
+      padding-right: 4px;
+    }
+    #chartDataSigns .chart-sign-grid {
+      margin-top: 0;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    #chartDataSigns .sign-cell {
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+    }
+    #chartDataSigns .sign-cell.is-lagna {
+      border-color: rgba(232, 200, 114, 0.45);
+      background: rgba(232, 200, 114, 0.08);
+    }
+    #chartDataSigns .sign-cell .sign-name { font-size: 0.82rem; }
+    #chartDataSigns .sign-cell .planets {
+      font-size: 0.78rem;
+      line-height: 1.35;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 6px;
+    }
+    #chartDataSigns .planet-chip {
+      display: inline-block;
+      margin: 0;
+      white-space: normal;
+    }
+    #chartDataSigns .planet-chip-lagna {
+      color: var(--gold);
+      font-weight: 700;
+    }
+    #chartDataSigns .chart-data-label { margin: 0 0 8px; font-size: 0.72rem; }
+    #chartDataSigns .chart-footnote { margin-top: 8px; font-size: 0.72rem; }
+    .chart-sign-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .chart-data-label {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--fuchsia);
+      margin: 24px 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .chart-footnote { margin-top: 12px; color: var(--text-muted); font-size: 0.95rem; }
+    .chart-footnote strong { color: var(--amber); }
+    .current-dasha-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .current-dasha-item {
+      background: linear-gradient(145deg, var(--gold-soft), rgba(12, 14, 28, 0.85));
+      border: 1px solid rgba(232, 200, 114, 0.28);
+      border-radius: var(--radius-sm);
+      padding: 16px 18px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .current-dasha-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px -10px rgba(232, 200, 114, 0.35);
+    }
+    .current-dasha-item strong {
+      display: block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 8px;
+      letter-spacing: 0.06em;
+    }
+    .current-dasha-item .lord {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .current-dasha-item .dates { font-size: 0.88rem; color: var(--text-muted); margin-top: 8px; }
+    .dasa-section { margin-bottom: 24px; }
+    .dasa-section h4 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--gold);
+      margin-bottom: 12px;
+      letter-spacing: 0.03em;
+    }
+    .dasa-row-antar td:first-child { padding-left: 28px; color: var(--text-muted); }
+    .dasa-row-pratyantar td:first-child { padding-left: 44px; color: var(--text-muted); font-size: 0.95rem; }
+    .sign-cell {
+      background: linear-gradient(145deg, rgba(59, 130, 246, 0.25), rgba(20, 15, 45, 0.7));
+      border: 1px solid rgba(96, 165, 250, 0.4);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      min-height: 90px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .sign-cell:hover { border-color: var(--cyan); transform: scale(1.02); }
+    .sign-cell .sign-name { font-weight: 800; color: var(--cyan); margin-bottom: 8px; }
+    .sign-cell .planets { font-size: 1rem; font-weight: 600; color: #e2e8f0; }
+    .split-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+    }
+    .split-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+    .split-panel:first-child { border-right: 1px solid var(--border); }
+    .split-panel-header {
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .split-panel-header.planets {
+      background: rgba(155, 138, 251, 0.08);
+      color: var(--violet);
+    }
+    .split-panel-header.houses {
+      background: rgba(95, 212, 164, 0.08);
+      color: var(--emerald);
+    }
+    .split-panel-body {
+      padding: 8px 10px;
+      background: rgba(8, 12, 28, 0.35);
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      scrollbar-width: thin;
+    }
+    #dasaData {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: var(--gold) rgba(15, 20, 40, 0.8);
+      padding-right: 4px;
+    }
+    #dasaData::-webkit-scrollbar { width: 8px; }
+    #dasaData::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+      border-radius: 8px;
+    }
+    .dasa-scroll {
+      max-height: none;
+      overflow: visible;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 12, 28, 0.5);
+    }
+    .data-table-wide { width: 100%; table-layout: fixed; }
+    .data-table-wide th,
+    .data-table-wide td { word-wrap: break-word; }
+    .planets-panel .data-table,
+    .houses-panel .data-table {
+      font-size: 0.8rem;
+    }
+    .planets-panel .table-wrap {
+      overflow-x: auto;
+    }
+    .tag-set {
+      color: var(--violet);
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+    .planets-panel .data-table th,
+    .planets-panel .data-table td,
+    .houses-panel .data-table th,
+    .houses-panel .data-table td {
+      padding: 9px 12px;
+    }
+    .planets-panel .table-wrap,
+    .houses-panel .table-wrap {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .kundli-strip {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      width: 100%;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      padding-bottom: 2px;
+    }
+    .kundli-chip {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px 12px;
+      min-width: 82px;
+      max-width: 160px;
+      min-height: 58px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      text-align: center;
+      justify-content: center;
+    }
+    .kundli-chip .k-label {
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .kundli-chip .k-val {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1.25;
+    }
+    .kundli-chip .k-val .tamil-label {
+      font-size: 0.68rem;
+      margin-top: 2px;
+    }
+    .laknam-lord-inline {
+      font-size: 0.85em;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .kundli-chip.laknam-chip {
+      min-width: 120px;
+      max-width: 220px;
+      background: rgba(232, 200, 114, 0.1);
+      border-color: rgba(232, 200, 114, 0.38);
+      box-shadow: 0 0 20px -8px rgba(232, 200, 114, 0.35);
+    }
+    .kundli-chip.laknam-chip .k-label {
+      color: var(--gold);
+    }
+    .kundli-chip .laknam-calc-mini {
+      margin-top: 4px;
+      font-size: 0.62rem;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--text-muted);
+      text-align: left;
+    }
+    .laknam-calc {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(232, 200, 114, 0.07);
+      border: 1px solid rgba(232, 200, 114, 0.22);
+      text-align: left;
+    }
+    .laknam-calc-title {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+    .laknam-calc-steps {
+      margin: 0;
+      padding-left: 1.1rem;
+      font-size: 0.74rem;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+    .laknam-calc-steps li + li {
+      margin-top: 4px;
+    }
+    .laknam-calc-steps strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .laknam-calc-note {
+      margin-top: 8px;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .prediction-laknam-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .data-table tr.row-laknam {
+      background: rgba(232, 200, 114, 0.08);
+    }
+    .data-table tr.row-laknam td {
+      border-color: rgba(232, 200, 114, 0.18);
+    }
+    .data-table tr.row-laknam td:first-child strong {
+      color: var(--gold);
+    }
+    .tag-laknam {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #1a1408;
+      background: linear-gradient(135deg, var(--gold), #c9a44e);
+    }
+    .mahadasha-calc {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(109, 92, 231, 0.1);
+      border: 1px solid rgba(155, 138, 251, 0.28);
+      text-align: left;
+    }
+    .mahadasha-calc-title {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--violet);
+      margin-bottom: 8px;
+    }
+    .mahadasha-calc-steps {
+      margin: 0;
+      padding-left: 1.1rem;
+      font-size: 0.74rem;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+    .mahadasha-calc-steps li + li { margin-top: 4px; }
+    .mahadasha-calc-steps strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .mahadasha-calc-note {
+      margin-top: 8px;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .prediction-mahadasha-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .prediction-mahadasha-pill {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(109, 92, 231, 0.12);
+      border: 1px solid rgba(155, 138, 251, 0.32);
+    }
+    .prediction-mahadasha-pill .maha-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--violet);
+    }
+    .prediction-mahadasha-pill .maha-value {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .prediction-mahadasha-pill .maha-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .prediction-context-grid {
+      display: grid;
+      gap: 0;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .prediction-year-card .py-lord {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(109, 92, 231, 0.08);
+      border: 1px solid rgba(155, 138, 251, 0.18);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .prediction-year-card .py-lord span {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--violet);
+      margin-top: 2px;
+    }
+    .prediction-year-card .py-lord .maha-period {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.62rem;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--text-muted);
+    }
+    .dasha-calc-block {
+      margin-bottom: 14px;
+    }
+    .data-table tr.row-mahadasha-active {
+      background: rgba(109, 92, 231, 0.1);
+    }
+    .data-table tr.row-mahadasha-active td {
+      border-color: rgba(155, 138, 251, 0.22);
+    }
+    .data-table tr.row-mahadasha-active td:nth-child(2) strong {
+      color: var(--violet);
+    }
+    .tag-mahadasha {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+      background: linear-gradient(135deg, var(--violet), var(--violet-deep));
+    }
+    .current-dasha-grid {
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .current-dasha-item { padding: 10px 12px; }
+    .current-dasha-item .lord { font-size: 1rem; }
+    .dasa-section { margin-bottom: 14px; }
+    .dasa-section h4 { font-size: 0.92rem; margin-bottom: 8px; }
+    .field.full { grid-column: span 2; }
+    .field-check { grid-column: span 2; }
+    .field-actions { grid-column: span 2; }
+    .field.place-field { grid-column: span 2; }
+    @media (max-width: 1400px) {
+      .form-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .dashboard {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+      }
+      .dasha-panel { grid-column: 2; grid-row: 1 / span 2; }
+      .dashboard-center { grid-column: 1; grid-row: 2; }
+      .chart-panel { grid-column: 1; grid-row: 1; }
+    }
+    @media (max-width: 1100px) {
+      .shell-bar { flex-direction: column; gap: 12px; }
+      .shell-divider { width: 100%; height: 1px; }
+      .shell-brand { min-width: 0; }
+    }
+    @media (max-width: 900px) {
+      html, body { overflow: auto; }
+      .app { height: auto; min-height: 100vh; overflow: visible; }
+      .dashboard {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        overflow: visible;
+      }
+      .chart-panel,
+      .dashboard-center,
+      .dasha-panel {
+        grid-column: auto;
+        grid-row: auto;
+      }
+      .dash-panel { min-height: 280px; }
+      .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dob-group { grid-column: 1 / -1; }
+    }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 12, 28, 0.5);
+    }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+    .data-table th, .data-table td {
+      padding: 13px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table th {
+      background: rgba(255, 255, 255, 0.04);
+      font-weight: 600;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+    .data-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
+    .data-table tbody tr:hover { background: rgba(59, 130, 246, 0.12); }
+    .data-table td strong { color: #fff; }
+    .dasa-scroll .data-table th {
+      background: rgba(232, 200, 114, 0.08);
+      color: var(--gold);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .house-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+    .house-cell {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      min-height: 88px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .house-cell:hover {
+      transform: translateY(-1px);
+      border-color: rgba(95, 212, 164, 0.35);
+    }
+    .house-cell .house-num {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--emerald);
+      margin-bottom: 6px;
+      letter-spacing: 0.06em;
+    }
+    .house-cell .house-meta { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 8px; }
+    .house-cell .house-planets { font-size: 1rem; font-weight: 600; color: #ecfdf5; }
+    .tag-retro { color: #fb923c; font-weight: 700; }
+    .error-block {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      padding: 16px 18px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(248, 113, 113, 0.4);
+    }
+    .empty-msg, .loading-msg {
+      color: var(--text-muted);
+      text-align: center;
+      padding: 16px;
+      font-size: 0.9rem;
+    }
+    .dash-panel .empty-msg,
+    .dash-panel .loading-msg {
+      padding: 10px;
+      font-size: 0.82rem;
+    }
+    .loading-msg::after {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-left: 6px;
+      border-radius: 50%;
+      background: var(--fuchsia);
+      animation: pulse 0.8s ease infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    .cache-status {
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--emerald);
+      min-height: 1.2em;
+      padding-left: 2px;
+    }
+    .cache-status.cached { color: var(--gold); }
+    .birth-id-wrap {
+      margin-top: 4px;
+      overflow-x: auto;
+    }
+    .birth-id-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .birth-id-table th,
+    .birth-id-table td {
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      border: 1px solid var(--border);
+    }
+    .birth-id-table th {
+      width: 33.33%;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .birth-id-table td {
+      color: var(--gold);
+      font-weight: 500;
+      line-height: 1.35;
+      background: rgba(4, 5, 14, 0.35);
+    }
+    .birth-id-table .birth-id-meta {
+      display: block;
+      margin-top: 3px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .field-check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .field-check input { width: auto; accent-color: var(--violet); }
+    .btn-small {
+      padding: 8px 16px;
+      font-size: 0.82rem;
+      border-radius: 999px;
+    }
+    .history-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.25rem;
+      height: 1.25rem;
+      padding: 0 5px;
+      margin-left: 5px;
+      border-radius: 999px;
+      background: rgba(232, 200, 114, 0.2);
+      color: var(--gold);
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+    .history-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(4, 4, 12, 0.82);
+      backdrop-filter: blur(14px);
+    }
+    .history-modal[hidden] { display: none; }
+    .history-panel {
+      width: min(1100px, 100%);
+      max-height: min(85vh, 900px);
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(16, 18, 34, 0.96), rgba(8, 10, 22, 0.98));
+      border: 1px solid var(--border-glow);
+      box-shadow: var(--shadow), 0 0 60px -20px rgba(109, 92, 231, 0.4);
+      overflow: hidden;
+    }
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .history-header h3 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.5rem;
+      color: #fff;
+    }
+    .history-header p {
+      margin-top: 4px;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    .history-close {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 1.4rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .history-close:hover { background: rgba(251, 113, 133, 0.2); border-color: var(--rose); }
+    .history-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-search {
+      flex: 1 1 240px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.25);
+      color: #fff;
+      font: inherit;
+    }
+    .history-search::placeholder { color: var(--text-muted); }
+    .history-body {
+      padding: 0 24px 24px;
+      overflow: auto;
+    }
+    .history-table-wrap { overflow-x: auto; }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .history-table th,
+    .history-table td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .history-table th {
+      position: sticky;
+      top: 0;
+      background: rgba(12, 14, 28, 0.98);
+      color: var(--gold);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .history-table tbody tr:hover { background: rgba(155, 138, 251, 0.08); }
+    .history-place {
+      max-width: 260px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-view {
+      background: rgba(155, 138, 251, 0.14);
+      border: 1px solid rgba(155, 138, 251, 0.35);
+      color: #fff;
+    }
+    .btn-view:hover:not(:disabled) {
+      background: rgba(155, 138, 251, 0.28);
+    }
+    .btn-delete {
+      background: rgba(239, 68, 68, 0.18);
+      border: 1px solid rgba(248, 113, 113, 0.45);
+      color: #fecaca;
+    }
+    .btn-delete:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.32);
+      border-color: var(--rose);
+      color: #fff;
+    }
+    .tamil-label {
+      display: block;
+      margin-top: 3px;
+      font-size: 0.88em;
+      font-weight: 600;
+      color: var(--gold);
+      line-height: 1.35;
+    }
+    .th-tamil {
+      display: block;
+      margin-top: 2px;
+      font-size: 0.65rem;
+      font-weight: 500;
+      color: var(--gold);
+      text-transform: none;
+      letter-spacing: 0;
+      opacity: 0.85;
+    }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 100%;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 20px;
+    }
+    .empty-state-icon {
+      font-size: 1.6rem;
+      color: var(--gold);
+      opacity: 0.7;
+    }
+    .empty-state p { font-size: 0.82rem; max-width: 220px; }
+    .btn-prediction {
+      color: #1a1408;
+      background: linear-gradient(135deg, #c4b5fd 0%, #9b8afb 50%, #6d5ce7 100%);
+      border: 1px solid rgba(155, 138, 251, 0.5);
+      box-shadow: 0 6px 20px -8px rgba(109, 92, 231, 0.65);
+    }
+    .btn-prediction:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px -6px rgba(109, 92, 231, 0.75);
+    }
+    .prediction-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 4, 12, 0.88);
+      backdrop-filter: blur(16px);
+    }
+    .prediction-overlay[hidden] { display: none; }
+    .prediction-loader {
+      text-align: center;
+      width: min(360px, 90vw);
+      padding: 32px 28px;
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(22, 24, 44, 0.95), rgba(10, 12, 26, 0.98));
+      border: 1px solid var(--border-glow);
+      box-shadow: 0 0 60px -12px rgba(109, 92, 231, 0.55);
+    }
+    .ai-orbit {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 24px;
+    }
+    .ai-core {
+      position: absolute;
+      inset: 30%;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--gold) 0%, var(--violet) 70%);
+      box-shadow: 0 0 30px var(--violet);
+      animation: aiPulse 1.6s ease-in-out infinite;
+    }
+    .ai-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--violet);
+      border-right-color: var(--gold);
+      animation: aiSpin 1.2s linear infinite;
+    }
+    .ai-ring-2 {
+      inset: 12%;
+      animation-duration: 1.8s;
+      animation-direction: reverse;
+      border-top-color: var(--cyan);
+    }
+    @keyframes aiSpin { to { transform: rotate(360deg); } }
+    @keyframes aiPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.12); opacity: 0.85; }
+    }
+    .prediction-status {
+      font-size: 0.88rem;
+      color: var(--text);
+      margin-bottom: 16px;
+      min-height: 1.4em;
+    }
+    .prediction-progress {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+    .prediction-progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--violet), var(--gold));
+      transition: width 0.45s ease;
+    }
+    .prediction-loader.excel-phase .ai-ring {
+      border-top-color: var(--emerald);
+      border-right-color: var(--gold);
+    }
+    .prediction-loader.excel-phase .ai-ring-2 {
+      border-top-color: var(--gold);
+      border-right-color: var(--emerald);
+    }
+    .prediction-loader.excel-phase .ai-core {
+      background: radial-gradient(circle, var(--emerald) 0%, var(--violet-deep) 72%);
+      box-shadow: 0 0 34px rgba(95, 212, 164, 0.45);
+    }
+    .prediction-excel-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--emerald);
+      background: rgba(95, 212, 164, 0.1);
+      border: 1px solid rgba(95, 212, 164, 0.28);
+      animation: excelTagPulse 1.4s ease-in-out infinite;
+    }
+    .prediction-excel-tag[hidden] { display: none; }
+    .prediction-excel-tag .excel-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+      animation: excelDotBlink 0.9s ease-in-out infinite;
+    }
+    @keyframes excelTagPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.82; transform: scale(0.98); }
+    }
+    @keyframes excelDotBlink {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 1; }
+    }
+    .prediction-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 2001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(4, 4, 12, 0.82);
+      backdrop-filter: blur(12px);
+    }
+    .prediction-modal[hidden] { display: none; }
+    .prediction-panel {
+      width: min(1180px, 100%);
+      max-height: min(88vh, 800px);
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(16, 18, 34, 0.98), rgba(8, 10, 22, 0.99));
+      border: 1px solid var(--border-glow);
+      box-shadow: var(--shadow), 0 0 80px -20px rgba(109, 92, 231, 0.45);
+      overflow: hidden;
+    }
+    .prediction-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(90deg, rgba(109, 92, 231, 0.15), transparent);
+    }
+    .prediction-header h3 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.6rem;
+      color: #fff;
+    }
+    .prediction-header p {
+      margin-top: 6px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .prediction-laknam {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(232, 200, 114, 0.1);
+      border: 1px solid rgba(232, 200, 114, 0.28);
+    }
+    .prediction-laknam .laknam-segment {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .prediction-laknam .laknam-sep {
+      color: var(--text-muted);
+      opacity: 0.45;
+      user-select: none;
+    }
+    .prediction-laknam .laknam-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--gold);
+    }
+    .prediction-laknam .laknam-value {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .prediction-laknam .laknam-code-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--violet);
+      letter-spacing: 0.04em;
+    }
+    .prediction-laknam .laknam-lord {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .prediction-body {
+      padding: 16px 24px 24px;
+      overflow: auto;
+    }
+    .prediction-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .prediction-year-card {
+      display: grid;
+      grid-template-columns: 72px 56px minmax(80px, 0.85fr) minmax(140px, 1.15fr) minmax(120px, 1fr);
+      gap: 12px 16px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .prediction-year-card:hover {
+      border-color: var(--border-glow);
+      background: rgba(155, 138, 251, 0.06);
+    }
+    .prediction-year-card .py-year {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .prediction-year-card .py-age {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .prediction-year-card .py-position {
+      font-size: 0.8rem;
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .prediction-year-card .py-position .tamil-label {
+      display: inline;
+      margin-left: 4px;
+      font-size: 0.85em;
+    }
+    .prediction-year-card .py-prediction {
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+    .prediction-year-card .py-pred-file {
+      font-weight: 600;
+      color: var(--gold);
+      word-break: break-all;
+    }
+    .prediction-year-card .py-pred-code {
+      margin-top: 4px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .prediction-year-card .py-pred-code span.code-label {
+      display: inline-block;
+      min-width: 2.8em;
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--violet);
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .prediction-year-card .py-pred-code .code-value {
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .code-ai-loader {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 1.2em;
+    }
+    .code-ai-mini-ring {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--violet);
+      border-right-color: var(--gold);
+      animation: aiSpin 1s linear infinite;
+      flex-shrink: 0;
+    }
+    .code-ai-label {
+      font-size: 0.72rem;
+      font-weight: 500;
+      background: linear-gradient(90deg, var(--text-muted) 0%, var(--violet) 35%, var(--gold) 65%, var(--text-muted) 100%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: codeAiShimmer 2.2s ease-in-out infinite;
+    }
+    .code-ai-ellipsis {
+      display: inline-flex;
+      gap: 2px;
+      margin-left: 1px;
+    }
+    .code-ai-ellipsis i {
+      display: block;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--gold);
+      opacity: 0.35;
+      animation: codeAiDot 1.2s ease-in-out infinite;
+    }
+    .code-ai-ellipsis i:nth-child(2) { animation-delay: 0.15s; }
+    .code-ai-ellipsis i:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes codeAiShimmer {
+      0% { background-position: 100% 50%; }
+      100% { background-position: -100% 50%; }
+    }
+    @keyframes codeAiDot {
+      0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+      40% { opacity: 1; transform: translateY(-2px); }
+    }
+    .prediction-col-head {
+      display: grid;
+      grid-template-columns: 72px 56px minmax(80px, 0.85fr) minmax(140px, 1.15fr) minmax(120px, 1fr);
+      gap: 12px 16px;
+      padding: 0 16px 10px;
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+    }
+    @media (max-width: 700px) {
+      .prediction-year-card,
+      .prediction-col-head {
+        grid-template-columns: 1fr 1fr;
+      }
+      .prediction-year-card .py-position,
+      .prediction-year-card .py-prediction { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+<div class="ambient-bg" aria-hidden="true">
+  <span class="orb orb-1"></span>
+  <span class="orb orb-2"></span>
+  <span class="orb orb-3"></span>
+</div>
+<div class="app">
+
+  <div class="app-top pdf-export-hide">
+  <header class="shell-bar">
+    <div class="shell-brand">
+      <span class="brand-glyph" aria-hidden="true">✦</span>
+      <div>
+        <a href="https://yourgoodtime.in" class="brand-site" target="_blank" rel="noopener">yourgoodtime.in</a>
+        <p class="brand-sub">Vedic Kundli Studio · AstrologyAPI</p>
+      </div>
+    </div>
+    <div class="shell-divider" aria-hidden="true"></div>
+    <div class="shell-form">
+      <div class="form-grid">
+        <div class="field dob-group">
+          <label>Date of birth</label>
+          <div class="dob-row">
+            <select id="dobDay" aria-label="Day of birth">
+              <option value="">DD</option>
+            </select>
+            <select id="dobMonth" aria-label="Month of birth">
+              <option value="">Mmm</option>
+              <option value="01">Jan</option>
+              <option value="02">Feb</option>
+              <option value="03">Mar</option>
+              <option value="04">Apr</option>
+              <option value="05">May</option>
+              <option value="06">Jun</option>
+              <option value="07">Jul</option>
+              <option value="08">Aug</option>
+              <option value="09">Sep</option>
+              <option value="10">Oct</option>
+              <option value="11">Nov</option>
+              <option value="12">Dec</option>
+            </select>
+            <input type="number" id="dobYear" min="1900" max="2100" step="1" value="1992" placeholder="YYYY" aria-label="Year of birth">
+          </div>
+        </div>
+        <div class="field">
+          <label for="birthTime">Time of birth</label>
+          <input type="time" id="birthTime" value="14:30">
+        </div>
+        <div class="field">
+          <label for="timezone">Timezone</label>
+          <select id="timezone">
+            <option value="Asia/Kolkata" selected>Asia/Kolkata (IST +5:30)</option>
+            <option value="Asia/Colombo">Asia/Colombo</option>
+            <option value="Asia/Kathmandu">Asia/Kathmandu</option>
+            <option value="Asia/Dhaka">Asia/Dhaka</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="chartId">Chart</label>
+          <select id="chartId">
+            <option value="D1" selected>D1 — Birth chart (Rasi)</option>
+            <option value="D9">D9 — Navamsa</option>
+            <option value="MOON">Moon chart</option>
+            <option value="SUN">Sun chart</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="chartStyle">Chart style</label>
+          <select id="chartStyle">
+            <option value="south" selected>South Indian</option>
+            <option value="north">North Indian</option>
+            <option value="east">East Indian</option>
+          </select>
+        </div>
+        <div class="field place-field">
+          <label for="place">Place of birth</label>
+          <input type="text" id="place" value="Chennai, India" placeholder="City, country" autocomplete="off">
+          <input type="hidden" id="coordinates">
+        </div>
+        <div class="field field-check">
+          <input type="checkbox" id="forceRefresh">
+          <label for="forceRefresh">Force refresh</label>
+        </div>
+        <div class="field field-actions">
+          <label>Actions</label>
+          <div class="btn-row">
+            <button type="button" class="btn btn-primary" id="genBtn" onclick="generateAll()">✧ Generate Kundli</button>
+            <button type="button" class="btn btn-ghost" id="historyBtn" onclick="openHistory()">
+              History<span class="history-badge" id="historyCount" hidden>0</span>
+            </button>
+            <button type="button" class="btn btn-prediction" id="predictionFlowBtn" onclick="openPredictionFlow()" disabled>Prediction Flow</button>
+            <button type="button" class="btn btn-ghost" id="exportPdfBtn" onclick="exportToPdf()" disabled>Export PDF</button>
+          </div>
+        </div>
+      </div>
+      <div class="birth-id-wrap" id="birthIdentityWrap" hidden aria-live="polite">
+        <table class="birth-id-table">
+          <thead>
+            <tr>
+              <th>Lagnam<span class="th-tamil">லக்னம்</span></th>
+              <th>Rasi<span class="th-tamil">ராசி</span></th>
+              <th>Nakshatra<span class="th-tamil">நட்சத்திரம்</span></th>
+            </tr>
+          </thead>
+          <tbody id="birthIdentityBody"></tbody>
+        </table>
+      </div>
+      <div class="cache-status" id="cacheStatus"></div>
+    </div>
+  </header>
+  </div>
+
+  <div class="history-modal" id="historyModal" hidden>
+    <div class="history-panel" role="dialog" aria-labelledby="historyTitle" aria-modal="true">
+      <div class="history-header">
+        <div>
+          <h3 id="historyTitle">Report history</h3>
+          <p>View and reopen saved birth charts without calling the API again</p>
+        </div>
+        <button type="button" class="history-close" onclick="closeHistory()" aria-label="Close history">&times;</button>
+      </div>
+      <div class="history-toolbar">
+        <input type="search" class="history-search" id="historySearch" placeholder="Search by place, date, chart type…" oninput="filterHistory()">
+        <button type="button" class="btn btn-small btn-secondary" onclick="refreshHistory()">Refresh</button>
+        <button type="button" class="btn btn-small btn-delete" onclick="clearAllHistory()">Clear all</button>
+      </div>
+      <div class="history-body">
+        <div class="history-table-wrap" id="historyTableWrap">
+          <p class="empty-msg">Loading history…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard" id="pdfExportRoot">
+    <section class="card pdf-summary-card" id="pdfSummaryCard" hidden>
+      <div class="card-header form-h">
+        <div><h3>Birth chart report</h3><span>yourgoodtime.in · AstrologyAPI</span></div>
+      </div>
+      <div class="card-body">
+        <dl class="pdf-summary-grid" id="pdfSummaryGrid"></dl>
+      </div>
+    </section>
+
+    <section class="card dash-panel chart-panel">
+      <div class="card-header chart-h panel-head">
+        <span class="panel-icon" aria-hidden="true">◎</span>
+        <div class="panel-copy">
+          <h3>Horoscope Chart</h3>
+          <span class="panel-meta" id="chartMeta">—</span>
+          <span class="location-inline" id="locationResult">—</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" id="chartSvgWrap">
+          <div id="chartSvg" class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">◎</span>
+            <p>Enter birth details and tap <strong>Generate Kundli</strong></p>
+          </div>
+        </div>
+        <div id="chartDataSigns"></div>
+      </div>
+    </section>
+
+    <div class="dashboard-center" id="dashboardCenter">
+      <section class="card dash-panel kundli-panel is-collapsed" id="kundliPanel">
+        <div class="kundli-collapsed-bar" id="kundliCollapsedBar">
+          <div class="kundli-collapsed-label">
+            <span class="panel-icon" aria-hidden="true">❋</span>
+            <span>Kundli Details</span>
+            <span class="kundli-collapsed-hint">Hidden</span>
+          </div>
+          <button type="button" class="btn btn-small btn-ghost" id="kundliExpandBtn" onclick="toggleKundliDetails()">Show kundli</button>
+        </div>
+        <div class="kundli-expanded" id="kundliExpanded">
+          <div class="card-body">
+            <div class="kundli-bar">
+              <span class="panel-icon" aria-hidden="true">❋</span>
+              <span class="kundli-title">Kundli Details</span>
+              <button type="button" class="btn btn-small btn-ghost panel-toggle" id="kundliInlineToggleBtn" onclick="toggleKundliDetails()">Show kundli</button>
+              <div id="kundliData" class="empty-msg">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card dash-panel planets-panel">
+        <div class="card-header split-h panel-head">
+          <span class="panel-icon" aria-hidden="true">☉</span>
+          <div class="panel-copy">
+            <h3>Planet Positions</h3>
+            <span class="panel-meta">Full planetary data — sign, degree, nakshatra &amp; more</span>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-small btn-prediction panel-toggle" id="predictionFlowBtn2" onclick="openPredictionFlow()" disabled>Prediction Flow</button>
+            <button type="button" class="btn btn-small btn-ghost panel-toggle" id="houseToggleBtn" onclick="toggleHouseChart()">Show house chart</button>
+          </div>
+        </div>
+        <div class="card-body" id="planetData"><p class="empty-msg">—</p></div>
+      </section>
+
+      <section class="card dash-panel houses-panel is-collapsed" id="housesPanel">
+        <div class="card-header split-h panel-head">
+          <span class="panel-icon" aria-hidden="true">⌂</span>
+          <div class="panel-copy">
+            <h3>House Chart</h3>
+            <span class="panel-meta">Bhava · Sign · Planets</span>
+          </div>
+        </div>
+        <div class="card-body" id="houseData"><p class="empty-msg">—</p></div>
+      </section>
+    </div>
+
+    <section class="card dash-panel dasha-panel">
+      <div class="card-header dasha-h panel-head">
+        <span class="panel-icon" aria-hidden="true">◈</span>
+        <div class="panel-copy">
+          <h3>Vimshottari Dasha</h3>
+          <span class="panel-meta">Mahadasha · Antardasha · Pratyantar</span>
+        </div>
+      </div>
+      <div class="card-body"><div id="dasaData" class="empty-msg dasha-scroll-host">—</div></div>
+    </section>
+  </div>
+</div>
+
+<div class="prediction-overlay" id="predictionOverlay" hidden>
+  <div class="prediction-loader" id="predictionLoader">
+    <div class="ai-orbit">
+      <div class="ai-ring ai-ring-2"></div>
+      <div class="ai-ring"></div>
+      <div class="ai-core"></div>
+    </div>
+    <p class="prediction-status" id="predictionStatus">Reading birth chart…</p>
+    <div class="prediction-excel-tag" id="predictionExcelTag" hidden>
+      <span class="excel-dot" aria-hidden="true"></span>
+      <span>Analysing XLS</span>
+    </div>
+    <div class="prediction-progress">
+      <div class="prediction-progress-bar" id="predictionProgressBar"></div>
+    </div>
+  </div>
+</div>
+
+<div class="prediction-modal" id="predictionModal" hidden>
+  <div class="prediction-panel" role="dialog" aria-labelledby="predictionTitle" aria-modal="true">
+    <div class="prediction-header">
+      <div>
+        <h3 id="predictionTitle">Prediction Flow</h3>
+        <p id="predictionSubtitle">Past 10 years · Age · Mahadasha lord · Chart position</p>
+        <div class="prediction-context-grid">
+          <div class="prediction-laknam-wrap" id="predictionLaknamWrap" hidden>
+            <div class="prediction-laknam" id="predictionLaknam"></div>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="history-close" onclick="closePredictionFlow()" aria-label="Close">&times;</button>
+    </div>
+    <div class="prediction-body">
+      <div class="prediction-col-head">
+        <span>Year</span>
+        <span>Age</span>
+        <span>Mahadasha</span>
+        <span>Lord in chart</span>
+        <span>Prediction Identified</span>
+      </div>
+      <div class="prediction-timeline" id="predictionTimeline"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_URL = "astrologyapi-api.php";
+let cachedReport = null;
+let predictionDataFiles = [];
+
+const PREDICTION_CHART_STEPS = [
+  "Reading birth chart…",
+  "Tracing vimshottari mahadasha…",
+  "Mapping dasha lords to planets…",
+  "Matching age-based prediction files…"
+];
+
+const PREDICTION_EXCEL_STEPS = [
+  "Opening age-based Excel workbook…",
+  "Finding mahadasha lord sheet…",
+  "Matching laknam & chart position…",
+  "Reading year codes from XLS…",
+  "Finalizing prediction flow…"
+];
+
+async function getLatLong(place) {
+  const coords = document.getElementById("coordinates").value;
+  if (coords) {
+    const [lat, lon] = coords.split(",").map(Number);
+    return { lat, lon, name: place };
+  }
+  const url = "https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(place) + "&format=json&limit=1";
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const data = await response.json();
+  if (!data.length) throw new Error("Place not found: " + place);
+  return { lat: Number(data[0].lat), lon: Number(data[0].lon), name: data[0].display_name };
+}
+
+function initBirthDateFields() {
+  const daySelect = document.getElementById("dobDay");
+  if (daySelect.options.length <= 1) {
+    for (let day = 1; day <= 31; day += 1) {
+      const value = String(day).padStart(2, "0");
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      daySelect.appendChild(option);
+    }
+  }
+  setBirthDateFromIso("1992-10-25");
+}
+
+function getBirthDateIso() {
+  const day = document.getElementById("dobDay").value;
+  const month = document.getElementById("dobMonth").value;
+  const year = document.getElementById("dobYear").value.trim();
+  if (!day || !month || !year || !/^\d{4}$/.test(year)) return "";
+  return `${year}-${month}-${day}`;
+}
+
+function isValidBirthDate(iso) {
+  const [year, month, day] = iso.split("-").map(Number);
+  const dt = new Date(year, month - 1, day);
+  return dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+}
+
+function getBirthDateDisplay() {
+  const day = document.getElementById("dobDay").value;
+  const month = document.getElementById("dobMonth").value;
+  const year = document.getElementById("dobYear").value.trim();
+  if (!day || !month || !year) return "";
+  const monthLabel = document.getElementById("dobMonth").selectedOptions[0]?.textContent || month;
+  return `${day} ${monthLabel} ${year}`;
+}
+
+function setBirthDateFromIso(isoDate) {
+  const [year = "", month = "", day = ""] = String(isoDate || "").split("-");
+  if (day) document.getElementById("dobDay").value = day.padStart(2, "0");
+  if (month) document.getElementById("dobMonth").value = month.padStart(2, "0");
+  if (year) document.getElementById("dobYear").value = year;
+}
+
+function buildBirthRequest(location) {
+  const dob = getBirthDateIso();
+  const time = document.getElementById("birthTime").value;
+  if (!dob) throw new Error("Please enter day, month and year of birth.");
+  if (!isValidBirthDate(dob)) throw new Error("Please enter a valid date of birth.");
+  return {
+    datetime: `${dob}T${time}:00`,
+    timezone: document.getElementById("timezone").value,
+    latitude: location.lat,
+    longitude: location.lon,
+    place_name: location.name,
+    chart_id: document.getElementById("chartId").value,
+    chart_style: document.getElementById("chartStyle").value,
+    image_type: "svg",
+    force_refresh: document.getElementById("forceRefresh").checked
+  };
+}
+
+function populateFormFromMeta(meta) {
+  if (!meta) return;
+  const [datePart, timePart = "12:00:00"] = String(meta.datetime || "").split("T");
+  if (datePart) setBirthDateFromIso(datePart);
+  if (timePart) document.getElementById("birthTime").value = timePart.slice(0, 5);
+  if (meta.timezone) document.getElementById("timezone").value = meta.timezone;
+  if (meta.chart_id) document.getElementById("chartId").value = meta.chart_id;
+  if (meta.chart_style) document.getElementById("chartStyle").value = meta.chart_style;
+  if (meta.place_name) document.getElementById("place").value = meta.place_name;
+  if (meta.latitude != null && meta.longitude != null) {
+    document.getElementById("coordinates").value = `${meta.latitude},${meta.longitude}`;
+  }
+}
+
+function updateCacheStatus(res) {
+  const el = document.getElementById("cacheStatus");
+  if (!res || !res.reportId) {
+    el.textContent = "";
+    el.className = "cache-status";
+    return;
+  }
+  const label = res.fromCache
+    ? `Loaded from saved report #${res.reportId} (${res.savedAt}) — no API call made`
+    : `Saved as report #${res.reportId} (${res.savedAt})`;
+  el.textContent = label;
+  el.className = "cache-status" + (res.fromCache ? " cached" : "");
+}
+
+function setPredictionButtonsEnabled(enabled) {
+  ["predictionFlowBtn", "predictionFlowBtn2"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !enabled;
+  });
+}
+
+function applyReportData(res) {
+  const report = res.report || {};
+  cachedReport = report;
+  setPredictionButtonsEnabled(true);
+  const chartImage = report.chartImage || {};
+  const chartData = report.chartData || {};
+  const planets = Array.isArray(report.planets?.data) ? report.planets.data : [];
+  const astro = report.astroDetails?.data || {};
+  const vim = report.vimshottari || {};
+  const location = report.location || {};
+
+  if (location.name || location.lat != null) {
+    document.getElementById("locationResult").textContent = location.name
+      ? `${location.name} · ${Number(location.lat).toFixed(4)}°, ${Number(location.lon).toFixed(4)}°`
+      : `${Number(location.lat).toFixed(4)}°, ${Number(location.lon).toFixed(4)}°`;
+  }
+
+  document.getElementById("chartSvg").innerHTML = chartImage.svg || '<p class="empty-msg">No chart image.</p>';
+  document.getElementById("chartMeta").textContent =
+    `${chartImage.chartId || "D1"} · ${chartImage.chartStyle || "south"} Indian style`;
+  document.getElementById("chartDataSigns").innerHTML =
+    `<p class="chart-data-label">Planets per rasi (chart data)</p>` +
+    formatChart(chartData.data, chartData.chartId || chartImage.chartId || "D1", planets);
+
+  document.getElementById("planetData").innerHTML = formatPlanets(planets);
+  document.getElementById("houseData").innerHTML = formatHouses(planets);
+  document.getElementById("kundliData").innerHTML = formatAstroDetails(astro, report);
+  document.getElementById("dasaData").innerHTML = formatVimshottari(vim, report);
+  updateBirthIdentityDisplay(report);
+  updateCacheStatus(res);
+  updatePdfSummary();
+}
+
+async function parseApiResponse(response) {
+  const text = await response.text();
+  if (!text || !text.trim()) {
+    throw new Error(
+      `Server returned an empty response (HTTP ${response.status}). `
+      + "On shared hosting, upload data/cache/ JSON files (run build_prediction_cache.php locally) "
+      + "or enable the PHP zip extension."
+    );
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 180);
+    throw new Error(`Invalid server response (HTTP ${response.status}): ${preview}`);
+  }
+}
+
+async function callApi(action, birth) {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...birth, action })
+  });
+  const data = await parseApiResponse(res);
+  if (!data.ok) throw new Error(data.error || "API error");
+  return data;
+}
+
+async function fetchPredictionDataFiles() {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "list_prediction_data" })
+  });
+  const data = await parseApiResponse(res);
+  if (!data.ok) throw new Error(data.error || "Could not load prediction data files");
+  predictionDataFiles = Array.isArray(data.files) ? data.files : [];
+  return predictionDataFiles;
+}
+
+function resolvePredictionFileForAge(age, files) {
+  if (!Number.isFinite(age) || !Array.isArray(files) || !files.length) return "";
+
+  for (const file of files) {
+    if (file.type === "single" && file.age === age) {
+      return file.filename || "";
+    }
+  }
+  for (const file of files) {
+    if (file.type === "range" && age >= file.minAge && age <= file.maxAge) {
+      return file.filename || "";
+    }
+  }
+  return "";
+}
+
+
+async function fetchPredictionCodes(rows, onProgress) {
+  const laknam = getLaknamFromReport(cachedReport);
+  if (!laknam?.sign) return rows;
+
+  const items = rows
+    .map((row, index) => {
+      if (!row.predFile || !row.planet?.house) return null;
+      return {
+        index,
+        filename: row.predFile,
+        dashaLord: row.lord,
+        laknam: laknam.sign,
+        position: Number(row.planet.house),
+        year: row.year,
+        dashaStartYear: row.dashaStartYear,
+        dashaEndYear: row.dashaEndYear
+      };
+    })
+    .filter(Boolean);
+
+  if (!items.length) return rows;
+
+  const codeByIndex = new Map();
+  const errorByIndex = new Map();
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    onProgress?.(i + 1, items.length, item);
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "lookup_prediction_codes", items: [item] })
+    });
+    const data = await parseApiResponse(res);
+    if (!data.ok) throw new Error(data.error || "Could not load prediction codes");
+
+    for (const result of Array.isArray(data.results) ? data.results : []) {
+      codeByIndex.set(result.index, result.code ?? "");
+      if (result.ok === false && result.error) {
+        errorByIndex.set(result.index, result.error);
+        console.warn("Prediction code lookup:", result.error);
+      }
+    }
+  }
+
+  return rows.map((row, index) => ({
+    ...row,
+    predCode: codeByIndex.has(index) ? (codeByIndex.get(index) ?? "") : row.predCode,
+    predCodeError: errorByIndex.get(index) || row.predCodeError || ""
+  }));
+}
+
+function formatPredictionCodeLoadingHtml() {
+  return `
+    <span class="code-ai-loader" aria-live="polite" aria-busy="true">
+      <span class="code-ai-mini-ring" aria-hidden="true"></span>
+      <span class="code-ai-label">AI analysing</span>
+      <span class="code-ai-ellipsis" aria-hidden="true"><i></i><i></i><i></i></span>
+    </span>
+  `;
+}
+
+function formatPredictionCodeContent(row) {
+  if (row.predCode !== null && row.predCode !== undefined) {
+    if (row.predCodeError) {
+      return `<span class="code-error" title="${String(row.predCodeError).replace(/"/g, "&quot;")}">${row.predCode || "—"}</span>`;
+    }
+    return row.predCode || "—";
+  }
+  if (row.predFile) return formatPredictionCodeLoadingHtml();
+  return "—";
+}
+
+const TAMIL_SIGNS = {
+  aries: "மேஷம்",
+  taurus: "ரிஷபம்",
+  gemini: "மிதுனம்",
+  cancer: "கடகம்",
+  leo: "சிம்மம்",
+  virgo: "கன்னி",
+  libra: "துலாம்",
+  scorpio: "விருச்சிகம்",
+  sagittarius: "தனுசு",
+  capricorn: "மகரம்",
+  aquarius: "கும்பம்",
+  pisces: "மீனம்"
+};
+
+const TAMIL_NAKSHATRAS = {
+  ashwini: "அசுவினி",
+  bharani: "பரணி",
+  krittika: "கிருத்திகை",
+  krithika: "கிருத்திகை",
+  rohini: "ரோகிணி",
+  mrigashira: "மிருகசீரிடம்",
+  mrigshira: "மிருகசீரிடம்",
+  ardra: "ஆருத்ரா",
+  arudra: "ஆருத்ரா",
+  punarvasu: "புனர்பூசம்",
+  pushya: "பூசம்",
+  pooyam: "பூசம்",
+  ashlesha: "ஆயில்யம்",
+  ayilyam: "ஆயில்யம்",
+  magha: "மகம்",
+  magham: "மகம்",
+  purvaphalguni: "பூரம்",
+  poorvaphalguni: "பூரம்",
+  pooram: "பூரம்",
+  uttaraphalguni: "உத்திரம்",
+  uttraphalguni: "உத்திரம்",
+  utraphalguni: "உத்திரம்",
+  utthram: "உத்திரம்",
+  uthram: "உத்திரம்",
+  hasta: "அத்தம்",
+  hastham: "அத்தம்",
+  chitra: "சித்திரை",
+  chithirai: "சித்திரை",
+  swati: "சுவாதி",
+  swathi: "சுவாதி",
+  vishakha: "விசாகம்",
+  visakam: "விசாகம்",
+  anuradha: "அனுஷம்",
+  anusham: "அனுஷம்",
+  jyeshtha: "கேட்டை",
+  jyeshta: "கேட்டை",
+  kettai: "கேட்டை",
+  mula: "மூலம்",
+  mool: "மூலம்",
+  moolam: "மூலம்",
+  purvaashadha: "பூராடம்",
+  poorvashadha: "பூராடம்",
+  pooradam: "பூராடம்",
+  uttaraashadha: "உத்திராடம்",
+  uttraashadha: "உத்திராடம்",
+  uthradam: "உத்திராடம்",
+  shravana: "திருவோணம்",
+  shravan: "திருவோணம்",
+  sravana: "திருவோணம்",
+  thiruvonam: "திருவோணம்",
+  dhanishta: "அவிட்டம்",
+  avittam: "அவிட்டம்",
+  shatabhisha: "சதயம்",
+  shatbhisha: "சதயம்",
+  satabhisha: "சதயம்",
+  sadhayam: "சதயம்",
+  purvabhadrapada: "பூரட்டாதி",
+  purvabhadrapad: "பூரட்டாதி",
+  poorvabhadrapada: "பூரட்டாதி",
+  uttarabhadrapada: "உத்திரட்டாதி",
+  uttarabhadrapad: "உத்திரட்டாதி",
+  uttrabhadrapad: "உத்திரட்டாதி",
+  revati: "ரேவதி",
+  revathi: "ரேவதி"
+};
+
+const PLANET_DISPLAY_NAMES = {
+  sun: "Sun",
+  moon: "Moon",
+  mars: "Mars",
+  mercury: "Mercury",
+  jupiter: "Jupiter",
+  venus: "Venus",
+  saturn: "Saturn",
+  rahu: "Rahu",
+  ketu: "Ketu",
+  ascendant: "Ascendant",
+  asc: "Ascendant",
+  lagna: "Ascendant",
+  pluto: "Pluto",
+  neptune: "Neptune",
+  uranus: "Uranus"
+};
+
+const CHART_PLANET_KEYS = {
+  sun: "sun",
+  su: "sun",
+  moon: "moon",
+  mo: "moon",
+  mars: "mars",
+  ma: "mars",
+  mercury: "mercury",
+  me: "mercury",
+  jupiter: "jupiter",
+  ju: "jupiter",
+  venus: "venus",
+  ve: "venus",
+  saturn: "saturn",
+  sa: "saturn",
+  rahu: "rahu",
+  ra: "rahu",
+  ketu: "ketu",
+  ke: "ketu",
+  ascendant: "ascendant",
+  asc: "ascendant",
+  as: "ascendant",
+  lagna: "ascendant"
+};
+
+function normalizeAstroKey(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function tamilSign(value) {
+  return TAMIL_SIGNS[normalizeAstroKey(value)] || "";
+}
+
+function tamilNakshatra(value) {
+  return TAMIL_NAKSHATRAS[normalizeAstroKey(value)] || "";
+}
+
+function formatBilingualLabel(value, tamil) {
+  if (!value) return "—";
+  if (!tamil) return value;
+  return `${value}<span class="tamil-label">${tamil}</span>`;
+}
+
+function formatSignLabel(value) {
+  return formatBilingualLabel(value, tamilSign(value));
+}
+
+function formatNakshatraLabel(value) {
+  return formatBilingualLabel(value, tamilNakshatra(value));
+}
+
+function resolveChartPlanetKey(token) {
+  const raw = String(token || "").trim().toLowerCase().replace(/[^a-z]/g, "");
+  if (!raw) return "";
+  if (CHART_PLANET_KEYS[raw]) return CHART_PLANET_KEYS[raw];
+  if (PLANET_DISPLAY_NAMES[raw]) return raw;
+  return raw;
+}
+
+function formatPlanetDisplayName(name, options = {}) {
+  const key = resolveChartPlanetKey(name);
+  if (!key) return "—";
+  if (key === "ascendant") {
+    if (options.laknam) return "Lagna";
+    if (options.short) return "Asc";
+    return "Ascendant";
+  }
+  return PLANET_DISPLAY_NAMES[key] || String(name || key).replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function findPlanetRecord(planets, key) {
+  if (!Array.isArray(planets) || !key) return null;
+  return planets.find(p => resolveChartPlanetKey(p.name) === key) || null;
+}
+
+function formatChartPlanetChip(token, planets, options = {}) {
+  const key = resolveChartPlanetKey(token);
+  if (!key) return "";
+  const planet = findPlanetRecord(planets, key);
+  const isLagna = key === "ascendant";
+  const label = formatPlanetDisplayName(planet?.name || token, {
+    laknam: isLagna,
+    short: options.short
+  });
+  const retro = planet && (planet.isRetro === "true" || planet.isRetro === true) ? " ↺" : "";
+  const degree = planet?.normDegree != null ? ` ${Number(planet.normDegree).toFixed(1)}°` : "";
+  const house = planet?.house != null && options.showHouse ? ` · H${planet.house}` : "";
+  const className = isLagna ? "planet-chip planet-chip-lagna" : "planet-chip";
+  return `<span class="${className}">${label}${degree}${house}${retro}</span>`;
+}
+
+function signsMatch(left, right) {
+  if (!left || !right) return false;
+  return normalizeAstroKey(left) === normalizeAstroKey(right);
+}
+
+function formatChart(cells, chartId, planets) {
+  if (!Array.isArray(cells) || !cells.length) return '<p class="empty-msg">No chart data.</p>';
+  const asc = findPlanetRecord(planets, "ascendant");
+  const sorted = [...cells].sort((a, b) => (a.sign ?? 0) - (b.sign ?? 0));
+  const html = sorted.map(c => {
+    const signName = c.sign_name ?? ("Sign " + c.sign);
+    const tokens = Array.isArray(c.planet) ? c.planet : [];
+    const keys = new Set(tokens.map(resolveChartPlanetKey).filter(Boolean));
+    const isLagnaSign = asc?.sign && signsMatch(signName, asc.sign);
+    if (isLagnaSign && !keys.has("ascendant")) {
+      keys.add("ascendant");
+    }
+    const orderedKeys = [
+      ...Array.from(keys).filter(k => k === "ascendant"),
+      ...Array.from(keys).filter(k => k !== "ascendant")
+    ];
+    const chips = orderedKeys
+      .map(key => {
+        const token = key === "ascendant"
+          ? "Ascendant"
+          : (tokens.find(t => resolveChartPlanetKey(t) === key) || key.toUpperCase());
+        return formatChartPlanetChip(token, planets, { showHouse: false, short: false });
+      })
+      .filter(Boolean);
+    return `
+    <div class="sign-cell${isLagnaSign ? " is-lagna" : ""}">
+      <div class="sign-name">${formatSignLabel(signName)}</div>
+      <div class="planets">${chips.length ? chips.join("") : "—"}</div>
+    </div>
+  `;
+  }).join("");
+  return `<div class="chart-sign-grid">${html}</div><p class="chart-footnote">Chart division: <strong>${chartId}</strong> · planets per rasi sign · Lagna sign highlighted</p>`;
+}
+
+function formatPlanetStatus(p) {
+  const tags = [];
+  if (p.isRetro === "true" || p.isRetro === true) tags.push('<span class="tag-retro">Retro</span>');
+  if (p.is_planet_set) tags.push('<span class="tag-set">Set</span>');
+  return tags.length ? tags.join(" ") : "—";
+}
+
+function formatPlanets(planets) {
+  if (!Array.isArray(planets) || !planets.length) return '<p class="empty-msg">No planet data.</p>';
+  const rows = planets.map(p => {
+    const planetKey = resolveChartPlanetKey(p.name);
+    const isLaknam = planetKey === "ascendant";
+    const displayName = formatPlanetDisplayName(p.name, { laknam: isLaknam });
+    return `
+    <tr class="${isLaknam ? "row-laknam" : ""}">
+      <td><strong>${displayName}</strong>${isLaknam ? '<span class="tag-laknam">Laknam</span>' : ""}</td>
+      <td>${p.house ?? "—"}</td>
+      <td>${formatSignLabel(p.sign)}</td>
+      <td>${p.normDegree != null ? Number(p.normDegree).toFixed(2) + "°" : "—"}</td>
+      <td>${p.signLord ?? "—"}</td>
+      <td>${formatNakshatraLabel(p.nakshatra)}</td>
+      <td>${p.nakshatra_pad ?? "—"}</td>
+      <td>${p.nakshatraLord ?? "—"}</td>
+      <td>${p.planet_awastha ?? "—"}</td>
+      <td>${formatPlanetStatus(p)}</td>
+    </tr>
+  `;
+  }).join("");
+  return `<div class="table-wrap"><table class="data-table data-table-wide">
+    <thead><tr>
+      <th>Planet</th>
+      <th>House</th>
+      <th>Sign<span class="th-tamil">ராசி</span></th>
+      <th>Degree</th>
+      <th>Sign lord</th>
+      <th>Nakshatra<span class="th-tamil">நட்சத்திரம்</span></th>
+      <th>Pada</th>
+      <th>Nak. lord</th>
+      <th>Awastha</th>
+      <th>Status</th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+let kundliDetailsVisible = false;
+let houseChartVisible = false;
+
+function updateKundliToggleButtons(visible) {
+  const label = visible ? "Hide kundli" : "Show kundli";
+  ["kundliExpandBtn", "kundliInlineToggleBtn"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.textContent = label;
+  });
+  const hint = document.querySelector("#kundliCollapsedBar .kundli-collapsed-hint");
+  if (hint) hint.textContent = visible ? "Visible" : "Hidden";
+}
+
+function toggleKundliDetails() {
+  kundliDetailsVisible = !kundliDetailsVisible;
+  const panel = document.getElementById("kundliPanel");
+  const center = document.getElementById("dashboardCenter");
+  if (!panel || !center) return;
+
+  panel.classList.toggle("is-collapsed", !kundliDetailsVisible);
+  center.classList.toggle("kundli-visible", kundliDetailsVisible);
+  updateKundliToggleButtons(kundliDetailsVisible);
+}
+
+function toggleHouseChart() {
+  houseChartVisible = !houseChartVisible;
+  const panel = document.getElementById("housesPanel");
+  const center = document.getElementById("dashboardCenter");
+  const btn = document.getElementById("houseToggleBtn");
+  if (!panel || !center || !btn) return;
+
+  panel.classList.toggle("is-collapsed", !houseChartVisible);
+  center.classList.toggle("houses-visible", houseChartVisible);
+  btn.textContent = houseChartVisible ? "Hide house chart" : "Show house chart";
+}
+
+function formatHouses(planets) {
+  if (!Array.isArray(planets) || !planets.length) return '<p class="empty-msg">No house data.</p>';
+  const rows = [];
+  for (let h = 1; h <= 12; h++) {
+    const inHouse = planets.filter(p => Number(p.house) === h);
+    const sign = inHouse[0]?.sign ?? "";
+    const names = inHouse.map(p => {
+      const retro = p.isRetro === "true" || p.isRetro === true ? " ↺" : "";
+      return formatPlanetDisplayName(p.name, { laknam: resolveChartPlanetKey(p.name) === "ascendant" }) + retro;
+    }).join(", ") || "—";
+    rows.push(`
+      <tr>
+        <td><strong>House ${h}</strong></td>
+        <td>${formatSignLabel(sign)}</td>
+        <td>${names}</td>
+      </tr>
+    `);
+  }
+  return `<div class="table-wrap"><table class="data-table data-table-wide">
+    <thead><tr>
+      <th>House</th>
+      <th>Sign<span class="th-tamil">ராசி</span></th>
+      <th>Planets</th>
+    </tr></thead>
+    <tbody>${rows.join("")}</tbody></table></div>`;
+}
+
+function getLaknamDetailsFromReport(report) {
+  const astro = report?.astroDetails?.data || {};
+  const planets = Array.isArray(report?.planets?.data) ? report.planets.data : [];
+  const location = report?.location || {};
+  const asc = planets.find(p => normalizePlanetName(p.name) === "ascendant") || null;
+
+  const sign = astro.ascendant || asc?.sign || "";
+  if (!sign) return null;
+
+  const degree = asc?.normDegree != null
+    ? Number(asc.normDegree)
+    : (astro.ascendant_degree != null ? Number(astro.ascendant_degree) : null);
+
+  return {
+    sign,
+    lord: astro.ascendant_lord || asc?.signLord || "",
+    degree,
+    house: asc?.house ?? 1,
+    nakshatra: asc?.nakshatra || astro.Naksahtra || "",
+    pada: asc?.nakshatra_pad ?? astro.Charan ?? "",
+    birthDate: getBirthDateDisplay(),
+    birthTime: document.getElementById("birthTime")?.value || "",
+    timezone: document.getElementById("timezone")?.value || "",
+    place: location.name || document.getElementById("place")?.value || "",
+    latitude: location.lat,
+    longitude: location.lon
+  };
+}
+
+function getLaknamFromReport(report) {
+  const details = getLaknamDetailsFromReport(report);
+  if (!details) return null;
+  return { sign: details.sign, lord: details.lord };
+}
+
+function getBirthIdentityFromReport(report) {
+  if (!report) return null;
+  const astro = report?.astroDetails?.data || {};
+  const laknam = getLaknamDetailsFromReport(report);
+  const lagnam = laknam?.sign || astro.ascendant || "";
+  const rasi = astro.sign || "";
+  const nakshatra = astro.Naksahtra || "";
+  if (!lagnam && !rasi && !nakshatra) return null;
+  return {
+    lagnam,
+    lagnamLord: laknam?.lord || astro.ascendant_lord || "",
+    rasi,
+    rasiLord: astro.SignLord || "",
+    nakshatra,
+    pada: astro.Charan || "",
+    nakshatraLord: astro.NaksahtraLord || ""
+  };
+}
+
+function formatBirthIdentityCell(labelHtml, lord) {
+  if (!labelHtml) return "—";
+  return lord
+    ? `${labelHtml}<span class="birth-id-meta">Lord · ${lord}</span>`
+    : labelHtml;
+}
+
+function formatBirthIdentityNakshatraCell(identity) {
+  if (!identity?.nakshatra) return "—";
+  let html = formatNakshatraLabel(identity.nakshatra);
+  const meta = [];
+  if (identity.pada) meta.push(`Pada ${identity.pada}`);
+  if (identity.nakshatraLord) meta.push(`Lord ${identity.nakshatraLord}`);
+  if (meta.length) html += `<span class="birth-id-meta">${meta.join(" · ")}</span>`;
+  return html;
+}
+
+function updateBirthIdentityDisplay(report) {
+  const wrap = document.getElementById("birthIdentityWrap");
+  const body = document.getElementById("birthIdentityBody");
+  if (!wrap || !body) return;
+
+  const identity = getBirthIdentityFromReport(report);
+  if (!identity) {
+    wrap.hidden = true;
+    body.innerHTML = "";
+    return;
+  }
+
+  wrap.hidden = false;
+  body.innerHTML = `
+    <tr>
+      <td>${formatBirthIdentityCell(identity.lagnam ? formatSignLabel(identity.lagnam) : "", identity.lagnamLord)}</td>
+      <td>${formatBirthIdentityCell(identity.rasi ? formatSignLabel(identity.rasi) : "", identity.rasiLord)}</td>
+      <td>${formatBirthIdentityNakshatraCell(identity)}</td>
+    </tr>
+  `;
+}
+
+function formatCoordinates(lat, lon) {
+  if (lat == null || lon == null || Number.isNaN(Number(lat)) || Number.isNaN(Number(lon))) {
+    return "—";
+  }
+  return `${Number(lat).toFixed(4)}°, ${Number(lon).toFixed(4)}°`;
+}
+
+function formatLaknamCalculationHtml(details, compact = false) {
+  if (!details) return "";
+
+  const degreeText = details.degree != null && !Number.isNaN(details.degree)
+    ? `${details.degree.toFixed(2)}° ${details.sign}`
+    : formatSignLabel(details.sign);
+
+  const birthMoment = [details.birthDate, details.birthTime].filter(Boolean).join(" · ") || "—";
+  const placeLine = details.place
+    ? `${details.place} · ${formatCoordinates(details.latitude, details.longitude)}`
+    : formatCoordinates(details.latitude, details.longitude);
+
+  const nakLine = details.nakshatra
+    ? `${formatNakshatraLabel(details.nakshatra)}${details.pada ? ` · Pada ${details.pada}` : ""}`
+    : "";
+
+  if (compact) {
+    return `<div class="laknam-calc-mini">Ascendant at birth: <strong>${degreeText}</strong>${nakLine ? `<br>Nakshatra: ${nakLine}` : ""}</div>`;
+  }
+
+  return `
+    <div class="laknam-calc">
+      <p class="laknam-calc-title">How Laknam is calculated</p>
+      <ol class="laknam-calc-steps">
+        <li>Birth date &amp; time: <strong>${birthMoment}</strong>${details.timezone ? ` (${details.timezone})` : ""}</li>
+        <li>Birth place: <strong>${placeLine}</strong></li>
+        <li>Sign rising on the eastern horizon (Ascendant / Lagna): <strong>${degreeText}</strong></li>
+        <li>Laknam rasi: <strong>${formatSignLabel(details.sign)}</strong>${details.lord ? ` · Lord <strong>${details.lord}</strong>` : ""}</li>
+        ${nakLine ? `<li>Ascendant nakshatra: <strong>${nakLine}</strong></li>` : ""}
+      </ol>
+      <p class="laknam-calc-note">Computed from your birth chart via AstrologyAPI · used to select the correct Excel laknam row in Prediction Flow.</p>
+    </div>
+  `;
+}
+
+function formatLaknamLabel(sign, lord) {
+  if (!sign) return "—";
+  let html = formatSignLabel(sign);
+  if (lord) html += ` <span class="laknam-lord-inline">(${lord})</span>`;
+  return html;
+}
+
+function renderPredictionLaknam(report, identity, videoLookup) {
+  const wrap = document.getElementById("predictionLaknamWrap");
+  const el = document.getElementById("predictionLaknam");
+  if (!wrap || !el) return;
+
+  const details = report ? getLaknamDetailsFromReport(report) : null;
+  const birth = identity || (report ? getBirthIdentityFromReport(report) : null);
+
+  if (!details?.sign && !birth?.rasi && !birth?.nakshatra) {
+    wrap.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+
+  const segments = [];
+  if (details?.sign) {
+    segments.push(`
+      <span class="laknam-segment">
+        <span class="laknam-label">Laknam</span>
+        <span class="laknam-value">${formatSignLabel(details.sign)}</span>
+      </span>
+    `);
+  }
+  if (birth?.rasi) {
+    segments.push(`
+      <span class="laknam-segment">
+        <span class="laknam-label">Rasi</span>
+        <span class="laknam-value">${formatSignLabel(birth.rasi)}</span>
+      </span>
+    `);
+  }
+  if (birth?.nakshatra) {
+    segments.push(`
+      <span class="laknam-segment">
+        <span class="laknam-label">Nakshatra</span>
+        <span class="laknam-value">${formatNakshatraLabel(birth.nakshatra)}</span>
+      </span>
+    `);
+  }
+  if (videoLookup !== undefined) {
+    const code = videoLookup?.found && videoLookup.code ? videoLookup.code : "—";
+    segments.push(`
+      <span class="laknam-segment">
+        <span class="laknam-label">Intro Code</span>
+        <span class="laknam-value laknam-code-value">${code}</span>
+        ${videoLookup?.error && !videoLookup?.found ? `<span class="laknam-lord" title="${videoLookup.error.replace(/"/g, "&quot;")}">No code</span>` : ""}
+      </span>
+    `);
+  }
+
+  wrap.hidden = false;
+  el.innerHTML = segments.join('<span class="laknam-sep" aria-hidden="true">·</span>');
+}
+
+async function fetchNakshatraLagnamVideoCode(identity) {
+  if (!identity?.lagnam || !identity?.rasi || !identity?.nakshatra) {
+    return { found: false, code: "", error: "Missing birth lagnam, rasi or nakshatra." };
+  }
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "lookup_nakshatra_lagnam_code",
+        lagnam: identity.lagnam,
+        rasi: identity.rasi,
+        nakshatra: identity.nakshatra
+      })
+    });
+    const data = await parseApiResponse(res);
+    if (!data.ok) {
+      return { found: false, code: "", error: data.error || "Intro code lookup failed." };
+    }
+    return data.result || { found: false, code: "", error: "Intro code lookup returned no result." };
+  } catch (err) {
+    console.warn("Intro code lookup:", err);
+    return { found: false, code: "", error: err.message || "Intro code lookup failed." };
+  }
+}
+
+function formatAstroDetails(a, report) {
+  if (!a || typeof a !== "object") return '<p class="empty-msg">No kundli data.</p>';
+  const laknamDetails = report ? getLaknamDetailsFromReport(report) : null;
+  const laknamVal = laknamDetails
+    ? `${formatLaknamLabel(laknamDetails.sign, laknamDetails.lord)}${formatLaknamCalculationHtml(laknamDetails, true)}`
+    : formatLaknamLabel(a.ascendant, a.ascendant_lord);
+
+  const items = [
+    ["Laknam", laknamVal, "laknam-chip"],
+    ["Sign", formatSignLabel(a.sign)], ["Sign lord", a.SignLord], ["Nakshatra", formatNakshatraLabel(a.Naksahtra)], ["Nakshatra lord", a.NaksahtraLord],
+    ["Pada", a.Charan], ["Gan", a.Gan], ["Nadi", a.Nadi], ["Yog", a.Yog], ["Karan", a.Karan], ["Tithi", a.Tithi],
+    ["Varna", a.Varna], ["Yoni", a.Yoni], ["Tatva", a.tatva], ["Paya", a.paya]
+  ];
+  return `<div class="kundli-strip">${items.map(([k, v, extraClass]) =>
+    `<div class="kundli-chip${extraClass ? ` ${extraClass}` : ""}"><span class="k-label">${k}</span><span class="k-val">${v ?? "—"}</span></div>`
+  ).join("")}</div>`;
+}
+
+function getMahadashaContextFromReport(report) {
+  const astro = report?.astroDetails?.data || {};
+  const vim = report?.vimshottari || {};
+  const currentMajor = vim.current?.major || null;
+  const major = Array.isArray(vim.major) ? vim.major : [];
+
+  return {
+    birthNakshatra: astro.Naksahtra || "",
+    birthNakshatraLord: astro.NaksahtraLord || "",
+    birthMoonSign: astro.sign || "",
+    currentMajorLord: currentMajor?.planet || "",
+    currentMajorStart: currentMajor?.start || "",
+    currentMajorEnd: currentMajor?.end || "",
+    majorPeriods: major
+  };
+}
+
+function formatMahadashaCalculationHtml(context, compact = false) {
+  if (!context) return "";
+
+  const seed = context.birthNakshatra
+    ? `${formatNakshatraLabel(context.birthNakshatra)}${context.birthNakshatraLord ? ` (lord ${context.birthNakshatraLord})` : ""}`
+    : "birth Moon nakshatra";
+
+  if (compact) {
+    return context.currentMajorLord
+      ? `<div class="laknam-calc-mini">Running now: <strong>${context.currentMajorLord}</strong> mahadasha</div>`
+      : "";
+  }
+
+  return `
+    <div class="mahadasha-calc">
+      <p class="mahadasha-calc-title">How Mahadasha is calculated</p>
+      <ol class="mahadasha-calc-steps">
+        <li>Vimshottari dasha starts from birth Moon nakshatra: <strong>${seed}</strong></li>
+        <li>AstrologyAPI computes the full mahadasha timeline from date, time &amp; place of birth</li>
+        <li>For each prediction year, the lord running on <strong>1 July</strong> of that year is taken</li>
+        <li>That planet selects the Excel sheet (e.g. <strong>Venus</strong>, <strong>Ketu</strong>) for code lookup</li>
+        ${context.currentMajorLord ? `<li>Currently running: <strong>${context.currentMajorLord}</strong> · ${context.currentMajorStart || "—"} → ${context.currentMajorEnd || "—"}</li>` : ""}
+      </ol>
+    </div>
+  `;
+}
+
+function formatMahadashaPeriodMini(dasha) {
+  if (!dasha?.planet || dasha.planet === "—") return "";
+  const start = dasha.startLabel || "";
+  const end = dasha.endLabel || "";
+  if (!start && !end) return "";
+  return `<span class="maha-period">${start}${end ? ` → ${end}` : ""}</span>`;
+}
+
+const DASHA_LEVEL_LABELS = {
+  major: "Mahadasha",
+  minor: "Antardasha",
+  sub_minor: "Pratyantar",
+  sub_sub_minor: "Sookshma",
+  sub_sub_sub_minor: "Prana"
+};
+
+function formatDashaTable(periods, levelLabel, rowClass = "", activePlanet = "") {
+  if (!Array.isArray(periods) || !periods.length) {
+    return `<p class="empty-msg">No ${levelLabel.toLowerCase()} data.</p>`;
+  }
+  const activeKey = normalizePlanetName(activePlanet);
+  const rows = periods.map(p => {
+    const isActive = activeKey && normalizePlanetName(p.planet) === activeKey;
+    return `
+    <tr class="${rowClass}${isActive ? " row-mahadasha-active" : ""}">
+      <td>${levelLabel}${isActive ? '<span class="tag-mahadasha">Active</span>' : ""}</td>
+      <td><strong>${p.planet ?? "—"}</strong></td>
+      <td>${p.start ?? "—"}</td>
+      <td>${p.end ?? "—"}</td>
+    </tr>
+  `;
+  }).join("");
+  return `<div class="dasa-scroll"><table class="data-table">
+    <thead><tr><th>Level</th><th>Lord</th><th>Start</th><th>End</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function formatCurrentDasha(current) {
+  if (!current || typeof current !== "object") return "";
+  const items = Object.entries(DASHA_LEVEL_LABELS).map(([key, label]) => {
+    const d = current[key];
+    if (!d) return "";
+    return `<div class="current-dasha-item">
+      <strong>${label}</strong>
+      <div class="lord">${d.planet ?? "—"}</div>
+      <div class="dates">${d.start ?? "—"} → ${d.end ?? "—"}</div>
+    </div>`;
+  }).join("");
+  return items
+    ? `<div class="dasa-section"><h4>Running now (today)</h4><div class="current-dasha-grid">${items}</div></div>`
+    : "";
+}
+
+function formatVimshottari(v, report) {
+  if (!v) return '<p class="empty-msg">No dasha data.</p>';
+  const context = report ? getMahadashaContextFromReport(report) : null;
+  const activeMajor = v.current?.major?.planet || context?.currentMajorLord || "";
+
+  let html = context
+    ? `<div class="dasha-calc-block">${formatMahadashaCalculationHtml(context, false)}</div>`
+    : "";
+
+  html += formatCurrentDasha(v.current);
+  if (Array.isArray(v.major) && v.major.length) {
+    html += `<div class="dasa-section"><h4>All mahadasha periods</h4>${formatDashaTable(v.major, "Mahadasha", "", activeMajor)}</div>`;
+  }
+  if (Array.isArray(v.antardasha) && v.antardasha.length) {
+    const title = v.mahaDashaLord
+      ? `Antardasha in current ${v.mahaDashaLord} mahadasha`
+      : "Antardasha (current mahadasha)";
+    html += `<div class="dasa-section"><h4>${title}</h4>${formatDashaTable(v.antardasha, "Antardasha", "dasa-row-antar")}</div>`;
+  }
+  if (Array.isArray(v.pratyantardasha) && v.pratyantardasha.length) {
+    const title = v.mahaDashaLord && v.antarDashaLord
+      ? `Pratyantar in ${v.mahaDashaLord} / ${v.antarDashaLord}`
+      : "Pratyantar (current antardasha)";
+    html += `<div class="dasa-section"><h4>${title}</h4>${formatDashaTable(v.pratyantardasha, "Pratyantar", "dasa-row-pratyantar")}</div>`;
+  }
+  return html || '<p class="empty-msg">No dasha data.</p>';
+}
+
+let lastReportReady = false;
+
+function parseDashaDate(str) {
+  const datePart = String(str || "").trim().split(/\s+/)[0];
+  const [day, month, year] = datePart.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function getAgeOnDate(birthIso, targetDate) {
+  const [y, m, d] = birthIso.split("-").map(Number);
+  const birth = new Date(y, m - 1, d);
+  let age = targetDate.getFullYear() - birth.getFullYear();
+  const monthDiff = targetDate.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && targetDate.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+  return age;
+}
+
+function getMahadashaLordAt(majorPeriods, date) {
+  const period = getMahadashaPeriodAt(majorPeriods, date);
+  return period?.planet || "—";
+}
+
+function getMahadashaPeriodAt(majorPeriods, date) {
+  if (!Array.isArray(majorPeriods) || !date) return null;
+  const t = date.getTime();
+  for (const period of majorPeriods) {
+    const start = parseDashaDate(period.start);
+    const end = parseDashaDate(period.end);
+    if (!start || !end) continue;
+    if (t >= start.getTime() && t < end.getTime()) {
+      return {
+        planet: period.planet || "—",
+        start,
+        end,
+        startYear: start.getFullYear(),
+        endYear: end.getFullYear(),
+        startLabel: period.start || "",
+        endLabel: period.end || ""
+      };
+    }
+  }
+  return null;
+}
+
+function normalizePlanetName(name) {
+  return resolveChartPlanetKey(name);
+}
+
+function findPlanetInChart(planets, lordName) {
+  const key = normalizePlanetName(lordName);
+  return planets.find(p => normalizePlanetName(p.name) === key) || null;
+}
+
+function formatLordChartPosition(planet) {
+  if (!planet) return "—";
+  const sign = formatSignLabel(planet.sign);
+  const nak = formatNakshatraLabel(planet.nakshatra);
+  const deg = planet.normDegree != null ? Number(planet.normDegree).toFixed(2) + "°" : "—";
+  return `House ${planet.house ?? "—"} · ${sign} · ${deg} · ${nak}`;
+}
+
+function buildPredictionFlowRows() {
+  const birthIso = getBirthDateIso();
+  if (!birthIso || !cachedReport) return [];
+
+  const major = cachedReport.vimshottari?.major || [];
+  const planets = Array.isArray(cachedReport.planets?.data) ? cachedReport.planets.data : [];
+  const currentYear = new Date().getFullYear();
+  const rows = [];
+
+  for (let i = 10; i >= 1; i--) {
+    const year = currentYear - i;
+    const refDate = new Date(year, 6, 1);
+    const age = getAgeOnDate(birthIso, refDate);
+    const dasha = getMahadashaPeriodAt(major, refDate);
+    const lord = dasha?.planet || "—";
+    const planet = findPlanetInChart(planets, lord);
+    const predFile = resolvePredictionFileForAge(age, predictionDataFiles);
+    rows.push({
+      year,
+      age,
+      lord,
+      planet,
+      predFile,
+      predCode: null,
+      dasha,
+      dashaStartYear: dasha?.startYear ?? year,
+      dashaEndYear: dasha?.endYear ?? year
+    });
+  }
+  return rows;
+}
+
+function renderPredictionTimeline(rows) {
+  const el = document.getElementById("predictionTimeline");
+  if (!rows.length) {
+    el.innerHTML = '<p class="empty-msg">No prediction data available. Generate a kundli first.</p>';
+    return;
+  }
+  el.innerHTML = rows.map(row => `
+    <div class="prediction-year-card">
+      <div class="py-year">${row.year}</div>
+      <div class="py-age">${row.age} yrs</div>
+      <div class="py-lord">
+        <strong>${row.lord}</strong>
+        <span>Mahadasha lord · 1 Jul ${row.year}</span>
+        ${formatMahadashaPeriodMini(row.dasha)}
+      </div>
+      <div class="py-position">${formatLordChartPosition(row.planet)}</div>
+      <div class="py-prediction">
+        <div class="py-pred-file">${row.predFile || "—"}</div>
+        <div class="py-pred-code">
+          <span class="code-label">Code</span>
+          <span class="code-value">${formatPredictionCodeContent(row)}</span>
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function showPredictionOverlay() {
+  document.getElementById("predictionOverlay").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function hidePredictionOverlay() {
+  const overlay = document.getElementById("predictionOverlay");
+  const bar = document.getElementById("predictionProgressBar");
+  const loader = document.getElementById("predictionLoader");
+  const excelTag = document.getElementById("predictionExcelTag");
+  overlay.hidden = true;
+  bar.style.width = "0%";
+  loader?.classList.remove("excel-phase");
+  if (excelTag) excelTag.hidden = true;
+}
+
+function setPredictionOverlayProgress(percent) {
+  document.getElementById("predictionProgressBar").style.width = `${percent}%`;
+}
+
+function setPredictionOverlayStatus(text) {
+  document.getElementById("predictionStatus").textContent = text;
+}
+
+function setPredictionExcelPhase(active) {
+  const loader = document.getElementById("predictionLoader");
+  const excelTag = document.getElementById("predictionExcelTag");
+  if (loader) loader.classList.toggle("excel-phase", active);
+  if (excelTag) excelTag.hidden = !active;
+}
+
+async function runPredictionStepAnimation(steps, startPercent, endPercent, stepDelayMs = 520) {
+  if (!steps.length) return;
+
+  for (let i = 0; i < steps.length; i++) {
+    setPredictionOverlayStatus(steps[i]);
+    const progress = startPercent + ((i + 1) / steps.length) * (endPercent - startPercent);
+    setPredictionOverlayProgress(progress);
+    await sleep(i === steps.length - 1 ? 320 : stepDelayMs);
+  }
+}
+
+async function runPredictionExcelAnalysis(taskFn) {
+  setPredictionExcelPhase(true);
+  setPredictionOverlayProgress(48);
+
+  let stepIndex = 0;
+  setPredictionOverlayStatus(PREDICTION_EXCEL_STEPS[0]);
+
+  const ticker = setInterval(() => {
+    if (stepIndex >= PREDICTION_EXCEL_STEPS.length - 1) return;
+    stepIndex += 1;
+    setPredictionOverlayStatus(PREDICTION_EXCEL_STEPS[stepIndex]);
+  }, 900);
+
+  const onProgress = (current, total, item) => {
+    const fileLabel = item?.filename || "workbook";
+    const lordLabel = item?.dashaLord || "dasha";
+    setPredictionOverlayStatus(`Analysing XLS ${current}/${total}: ${fileLabel} · ${lordLabel}…`);
+    setPredictionOverlayProgress(48 + (current / total) * 46);
+  };
+
+  try {
+    return await taskFn(onProgress);
+  } finally {
+    clearInterval(ticker);
+    setPredictionOverlayStatus("Complete");
+    setPredictionOverlayProgress(100);
+    await sleep(380);
+    setPredictionExcelPhase(false);
+  }
+}
+
+
+function closePredictionFlow() {
+  document.getElementById("predictionModal").hidden = true;
+  document.body.style.overflow = "";
+  renderPredictionLaknam(null);
+}
+
+async function openPredictionFlow() {
+  if (!cachedReport || !hasReportData()) {
+    alert("Please generate a kundli first, then open Prediction Flow.");
+    return;
+  }
+
+  const birthDisplay = getBirthDateDisplay();
+  document.getElementById("predictionSubtitle").textContent =
+    `Past 10 years for ${birthDisplay || "birth chart"} · Mahadasha lord · Natal chart position`;
+  const identity = getBirthIdentityFromReport(cachedReport);
+
+  try {
+    showPredictionOverlay();
+    await runPredictionStepAnimation(PREDICTION_CHART_STEPS, 0, 42);
+    const videoLookup = identity ? await fetchNakshatraLagnamVideoCode(identity) : null;
+    renderPredictionLaknam(cachedReport, identity, videoLookup);
+    await fetchPredictionDataFiles();
+    let rows = buildPredictionFlowRows();
+    rows = await runPredictionExcelAnalysis(onProgress => fetchPredictionCodes(rows, onProgress));
+    hidePredictionOverlay();
+    renderPredictionTimeline(rows);
+    document.getElementById("predictionModal").hidden = false;
+    document.body.style.overflow = "hidden";
+  } catch (err) {
+    hidePredictionOverlay();
+    document.body.style.overflow = "";
+    alert("Prediction Flow failed: " + err.message);
+  }
+}
+
+document.getElementById("predictionModal")?.addEventListener("click", (event) => {
+  if (event.target.id === "predictionModal") closePredictionFlow();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !document.getElementById("predictionModal").hidden) {
+    closePredictionFlow();
+  }
+});
+
+function updatePdfSummary() {
+  const dob = getBirthDateDisplay();
+  const time = document.getElementById("birthTime").value;
+  const place = document.getElementById("place").value;
+  const tz = document.getElementById("timezone").value;
+  const chartId = document.getElementById("chartId").value;
+  const chartStyle = document.getElementById("chartStyle").value;
+  const meta = document.getElementById("chartMeta").textContent;
+  const loc = document.getElementById("locationResult").textContent;
+  const identity = getBirthIdentityFromReport(cachedReport);
+
+  document.getElementById("pdfSummaryGrid").innerHTML = `
+    <div><dt>Date of birth</dt><dd>${dob || "—"}</dd></div>
+    <div><dt>Time</dt><dd>${time || "—"}</dd></div>
+    ${identity?.lagnam ? `<div><dt>Lagnam</dt><dd>${formatSignLabel(identity.lagnam)}${identity.lagnamLord ? ` · Lord ${identity.lagnamLord}` : ""}</dd></div>` : ""}
+    ${identity?.rasi ? `<div><dt>Rasi</dt><dd>${formatSignLabel(identity.rasi)}${identity.rasiLord ? ` · Lord ${identity.rasiLord}` : ""}</dd></div>` : ""}
+    ${identity?.nakshatra ? `<div><dt>Nakshatra</dt><dd>${formatNakshatraLabel(identity.nakshatra)}${identity.pada ? ` · Pada ${identity.pada}` : ""}${identity.nakshatraLord ? ` · Lord ${identity.nakshatraLord}` : ""}</dd></div>` : ""}
+    <div><dt>Timezone</dt><dd>${tz}</dd></div>
+    <div><dt>Place</dt><dd>${place || "—"}</dd></div>
+    <div><dt>Location</dt><dd>${loc}</dd></div>
+    <div><dt>Chart</dt><dd>${chartId} · ${chartStyle}</dd></div>
+    <div><dt>Generated</dt><dd>${meta}</dd></div>
+    <div><dt>Exported</dt><dd>${new Date().toLocaleString()}</dd></div>
+  `;
+}
+
+function hasReportData() {
+  return document.querySelector("#chartSvg svg") !== null;
+}
+
+async function exportToPdf() {
+  if (!hasReportData()) {
+    alert("Please generate chart & data first, then export PDF.");
+    return;
+  }
+
+  const exportBtn = document.getElementById("exportPdfBtn");
+  const label = exportBtn.textContent;
+  exportBtn.disabled = true;
+  exportBtn.textContent = "Preparing PDF…";
+  document.body.classList.add("pdf-export-prep");
+
+  const dob = getBirthDateIso() || "chart";
+  const filename = `yourgoodtime-kundli-${dob}.pdf`;
+
+  try {
+    const root = document.getElementById("pdfExportRoot");
+    await html2pdf().set({
+      margin: [8, 8, 8, 8],
+      filename,
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#0a0618",
+        windowWidth: root.scrollWidth,
+        scrollX: 0,
+        scrollY: 0
+      },
+      jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+      pagebreak: { mode: ["css", "legacy"], avoid: [".card", ".chart-wrap", ".current-dasha-item"] }
+    }).from(root).save();
+  } catch (err) {
+    console.error(err);
+    alert("PDF export failed: " + err.message);
+  } finally {
+    document.body.classList.remove("pdf-export-prep");
+    exportBtn.disabled = !lastReportReady;
+    exportBtn.textContent = label;
+  }
+}
+
+let historyReports = [];
+let activeReportId = null;
+
+function resetReportView() {
+  activeReportId = null;
+  cachedReport = null;
+  lastReportReady = false;
+  document.getElementById("exportPdfBtn").disabled = true;
+  setPredictionButtonsEnabled(false);
+  document.getElementById("pdfSummaryCard").hidden = true;
+  updateCacheStatus(null);
+  document.getElementById("locationResult").textContent = "—";
+  document.getElementById("chartMeta").textContent = "—";
+  updateBirthIdentityDisplay(null);
+  document.getElementById("chartSvg").innerHTML = `
+    <div class="empty-state">
+      <span class="empty-state-icon" aria-hidden="true">◎</span>
+      <p>Enter birth details and tap <strong>Generate Kundli</strong></p>
+    </div>`;
+  document.getElementById("chartDataSigns").innerHTML = "";
+  document.getElementById("planetData").innerHTML = '<p class="empty-msg">—</p>';
+  document.getElementById("houseData").innerHTML = '<p class="empty-msg">—</p>';
+  document.getElementById("kundliData").innerHTML = '<p class="empty-msg">—</p>';
+  document.getElementById("dasaData").innerHTML = '<p class="empty-msg">—</p>';
+  history.replaceState(null, "", window.location.pathname);
+}
+
+function parseReportDateTime(datetime) {
+  if (!datetime) return null;
+  const dt = new Date(String(datetime));
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function formatHistoryDate(datetime) {
+  const dt = parseReportDateTime(datetime);
+  if (!dt) return "—";
+  return dt.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function formatHistoryTime(datetime) {
+  const dt = parseReportDateTime(datetime);
+  if (!dt) return "—";
+  return dt.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
+function formatSavedReportLabel(item) {
+  const place = item.place_name || `${item.latitude}, ${item.longitude}`;
+  return `${formatHistoryDate(item.datetime)} ${formatHistoryTime(item.datetime)} · ${place}`;
+}
+
+function updateHistoryCount(count) {
+  const badge = document.getElementById("historyCount");
+  if (!badge) return;
+  if (count > 0) {
+    badge.hidden = false;
+    badge.textContent = String(count);
+  } else {
+    badge.hidden = true;
+    badge.textContent = "0";
+  }
+}
+
+function renderHistoryTable(reports) {
+  const wrap = document.getElementById("historyTableWrap");
+  if (!reports.length) {
+    wrap.innerHTML = '<p class="empty-msg">No saved reports yet. Generate a chart to save one.</p>';
+    return;
+  }
+
+  const rows = reports.map(item => {
+    const place = item.place_name || `${Number(item.latitude).toFixed(4)}, ${Number(item.longitude).toFixed(4)}`;
+    const savedAt = item.updated_at || item.created_at || "—";
+    return `
+      <tr>
+        <td>#${item.id}</td>
+        <td>${formatHistoryDate(item.datetime)}</td>
+        <td>${formatHistoryTime(item.datetime)}</td>
+        <td class="history-place" title="${place.replace(/"/g, "&quot;")}">${place}</td>
+        <td>${item.chart_id}</td>
+        <td>${item.chart_style}</td>
+        <td>${savedAt}</td>
+        <td>
+          <div class="history-actions">
+            <button type="button" class="btn btn-small btn-view" onclick="loadReportById(${item.id})">View</button>
+            <button type="button" class="btn btn-small btn-delete" onclick="deleteReportById(${item.id})">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  wrap.innerHTML = `
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Place</th>
+          <th>Chart</th>
+          <th>Style</th>
+          <th>Saved</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function filterHistory() {
+  const query = document.getElementById("historySearch").value.trim().toLowerCase();
+  if (!query) {
+    renderHistoryTable(historyReports);
+    return;
+  }
+  const filtered = historyReports.filter(item => {
+    const haystack = [
+      item.id,
+      item.datetime,
+      item.place_name,
+      item.chart_id,
+      item.chart_style,
+      item.timezone,
+      item.latitude,
+      item.longitude,
+      item.created_at,
+      item.updated_at
+    ].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+  renderHistoryTable(filtered);
+}
+
+async function refreshHistory() {
+  const wrap = document.getElementById("historyTableWrap");
+  wrap.innerHTML = '<p class="loading-msg">Loading history…</p>';
+  try {
+    const res = await callApi("list_reports", { limit: 50 });
+    historyReports = Array.isArray(res.reports) ? res.reports : [];
+    updateHistoryCount(historyReports.length);
+    filterHistory();
+  } catch (err) {
+    wrap.innerHTML = `<div class="error-block">${err.message}</div>`;
+  }
+}
+
+function openHistory() {
+  const modal = document.getElementById("historyModal");
+  modal.hidden = false;
+  document.body.style.overflow = "hidden";
+  refreshHistory();
+}
+
+function closeHistory() {
+  const modal = document.getElementById("historyModal");
+  modal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+async function deleteReportById(id) {
+  const item = historyReports.find(report => Number(report.id) === Number(id));
+  const label = item ? formatSavedReportLabel(item) : `report #${id}`;
+  if (!confirm(`Delete saved report #${id}?\n${label}`)) return;
+
+  try {
+    await callApi("delete_report", { id });
+    if (Number(activeReportId) === Number(id)) {
+      resetReportView();
+    }
+    await refreshHistory();
+  } catch (err) {
+    alert("Could not delete report: " + err.message);
+  }
+}
+
+async function clearAllHistory() {
+  if (!historyReports.length) {
+    alert("No saved reports to delete.");
+    return;
+  }
+  if (!confirm(`Delete all ${historyReports.length} saved reports? This cannot be undone.`)) return;
+
+  try {
+    await callApi("delete_all_reports", {});
+    resetReportView();
+    await refreshHistory();
+  } catch (err) {
+    alert("Could not clear history: " + err.message);
+  }
+}
+
+async function loadReportById(id) {
+  const btn = document.getElementById("genBtn");
+  const exportBtn = document.getElementById("exportPdfBtn");
+  lastReportReady = false;
+  exportBtn.disabled = true;
+  btn.disabled = true;
+  const loading = '<p class="loading-msg">Loading saved report…</p>';
+  document.getElementById("chartSvg").innerHTML = loading;
+  document.getElementById("chartDataSigns").innerHTML = "";
+  document.getElementById("planetData").innerHTML = loading;
+  document.getElementById("houseData").innerHTML = loading;
+  document.getElementById("kundliData").innerHTML = loading;
+  document.getElementById("dasaData").innerHTML = loading;
+
+  try {
+    const res = await callApi("get_report", { id });
+    populateFormFromMeta(res.meta);
+    applyReportData(res);
+    activeReportId = res.reportId;
+    lastReportReady = true;
+    exportBtn.disabled = false;
+    setPredictionButtonsEnabled(true);
+    closeHistory();
+    history.replaceState(null, "", `?report=${res.reportId}`);
+  } catch (err) {
+    lastReportReady = false;
+    exportBtn.disabled = true;
+    document.getElementById("pdfSummaryCard").hidden = true;
+    updateCacheStatus(null);
+    const msg = `<div class="error-block">${err.message}</div>`;
+    document.getElementById("chartSvg").innerHTML = msg;
+    document.getElementById("chartDataSigns").innerHTML = "";
+    ["planetData", "houseData", "kundliData", "dasaData"].forEach(elId => {
+      document.getElementById(elId).innerHTML = msg;
+    });
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function generateAll() {
+  const btn = document.getElementById("genBtn");
+  const exportBtn = document.getElementById("exportPdfBtn");
+  lastReportReady = false;
+  exportBtn.disabled = true;
+  btn.disabled = true;
+  const loading = '<p class="loading-msg">Loading…</p>';
+  document.getElementById("chartSvg").innerHTML = loading;
+  document.getElementById("chartDataSigns").innerHTML = "";
+  document.getElementById("planetData").innerHTML = loading;
+  document.getElementById("houseData").innerHTML = loading;
+  document.getElementById("kundliData").innerHTML = loading;
+  document.getElementById("dasaData").innerHTML = loading;
+  updateCacheStatus(null);
+  updateBirthIdentityDisplay(null);
+
+  try {
+    const location = await getLatLong(document.getElementById("place").value.trim());
+    document.getElementById("locationResult").textContent =
+      `${location.name} · ${location.lat.toFixed(4)}°, ${location.lon.toFixed(4)}°`;
+
+    const birth = buildBirthRequest(location);
+    const reportRes = await callApi("report", birth);
+
+    applyReportData(reportRes);
+    activeReportId = reportRes.reportId || null;
+    await refreshHistory();
+    if (reportRes.reportId) {
+      history.replaceState(null, "", `?report=${reportRes.reportId}`);
+    }
+    lastReportReady = true;
+    exportBtn.disabled = false;
+    setPredictionButtonsEnabled(true);
+  } catch (err) {
+    lastReportReady = false;
+    exportBtn.disabled = true;
+    document.getElementById("pdfSummaryCard").hidden = true;
+    const msg = `<div class="error-block">${err.message}</div>`;
+    document.getElementById("chartSvg").innerHTML = msg;
+    document.getElementById("chartDataSigns").innerHTML = "";
+    ["planetData", "houseData", "kundliData", "dasaData"].forEach(elId => {
+      document.getElementById(elId).innerHTML = msg;
+    });
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  initBirthDateFields();
+  await refreshHistory();
+  const params = new URLSearchParams(window.location.search);
+  const reportId = Number(params.get("report"));
+  if (reportId > 0) {
+    loadReportById(reportId);
+  } else if (params.get("history") === "1") {
+    openHistory();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !document.getElementById("historyModal").hidden) {
+    closeHistory();
+  }
+});
+
+document.getElementById("historyModal").addEventListener("click", (event) => {
+  if (event.target.id === "historyModal") {
+    closeHistory();
+  }
+});
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
+</body>
+</html>

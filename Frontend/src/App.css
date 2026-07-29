@@ -1,0 +1,23 @@
+.app-shell {
+  min-height: 100svh;
+}
+
+.page {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.page h2 {
+  margin: 0;
+  font-size: 34px;
+  color: #1f2937;
+  text-align: center;
+}
+
+@media (max-width: 1024px) {
+  .page h2 {
+    font-size: 28px;
+  }
+}

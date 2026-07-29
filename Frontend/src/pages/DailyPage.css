@@ -1,0 +1,293 @@
+.daily-page {
+  min-height: 100svh;
+  background: linear-gradient(180deg, #fffdf7 0%, #fff4df 100%);
+  font-family: "Segoe UI", sans-serif;
+}
+
+.daily-page::before {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 78px;
+  z-index: 35;
+  background: #fff8e8;
+  box-shadow: 0 10px 24px rgba(124, 73, 10, 0.12);
+  pointer-events: none;
+}
+
+.daily-page::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 92px;
+  z-index: 25;
+  background: linear-gradient(180deg, rgba(255, 244, 223, 0), #fff4df 28%, #fff4df 100%);
+  pointer-events: none;
+}
+
+.daily-shell {
+  min-height: 100svh;
+  padding: 86px 14px 110px;
+  overflow: visible;
+}
+
+.daily-page .home-hero-header {
+  z-index: 80;
+}
+
+.daily-content {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.daily-page .home-footer-nav {
+  z-index: 80;
+}
+
+.daily-newsletter,
+.daily-featured-story,
+.daily-blog-card,
+.daily-gallery {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 253, 246, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 -18px 28px rgba(255, 255, 255, 0.18),
+    0 12px 28px rgba(124, 73, 10, 0.15);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.daily-newsletter::before,
+.daily-blog-card::before,
+.daily-gallery::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(255, 255, 255, 0.62);
+  border-left: 1px solid rgba(255, 255, 255, 0.38);
+}
+
+.daily-newsletter::after,
+.daily-blog-card::after,
+.daily-gallery::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  width: 54px;
+  height: 54px;
+  z-index: -1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 36px rgba(255, 255, 255, 0.46);
+}
+
+.daily-tag {
+  margin: 0;
+  color: #de8b18;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.daily-newsletter h2,
+.daily-featured-story h3,
+.daily-gallery h3,
+.daily-blog-card h4 {
+  margin: 0;
+  color: #173466;
+  font-size: 1rem;
+}
+
+.daily-newsletter p,
+.daily-featured-story p,
+.daily-blog-card p {
+  margin: 8px 0 0;
+  color: #435675;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.daily-featured-story {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background:
+    linear-gradient(145deg, rgba(255, 253, 246, 0.98), rgba(255, 239, 207, 0.94)),
+    radial-gradient(circle at 16% 10%, rgba(255, 186, 74, 0.32), transparent 38%);
+}
+
+.daily-featured-thumb {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(28, 14, 6, 0.08);
+  box-shadow: 0 8px 18px rgba(124, 73, 10, 0.14);
+}
+
+.daily-featured-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 716 / 328;
+  height: auto;
+  object-fit: contain;
+}
+
+.daily-featured-thumb span {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(22, 20, 18, 0.48);
+  color: #fff7e8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 5px 14px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(12px) saturate(1.35);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.daily-featured-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.daily-featured-stats span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(222, 139, 24, 0.22);
+  border-radius: 999px;
+  padding: 7px 8px;
+  background: rgba(255, 247, 232, 0.82);
+  color: #7a5520;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.daily-featured-stats strong {
+  color: #173466;
+  font-size: 0.76rem;
+}
+
+.daily-blog-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-newsletter {
+  border-color: rgba(255, 222, 146, 0.72);
+  background: rgba(255, 196, 62, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -20px 28px rgba(255, 255, 255, 0.16),
+    0 13px 28px rgba(194, 123, 10, 0.18);
+}
+
+.daily-blog-card:nth-child(1) {
+  border-color: rgba(121, 190, 255, 0.7);
+  background: rgba(73, 160, 255, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -20px 28px rgba(255, 255, 255, 0.16),
+    0 13px 28px rgba(36, 105, 184, 0.18);
+}
+
+.daily-blog-card:nth-child(2) {
+  border-color: rgba(202, 151, 255, 0.7);
+  background: rgba(157, 82, 255, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -20px 28px rgba(255, 255, 255, 0.16),
+    0 13px 28px rgba(113, 57, 177, 0.18);
+}
+
+.daily-blog-card:nth-child(3) {
+  border-color: rgba(128, 226, 160, 0.72);
+  background: rgba(50, 197, 102, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -20px 28px rgba(255, 255, 255, 0.16),
+    0 13px 28px rgba(28, 133, 68, 0.18);
+}
+
+.daily-gallery {
+  border-color: rgba(255, 154, 142, 0.7);
+  background: rgba(255, 104, 91, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -20px 28px rgba(255, 255, 255, 0.16),
+    0 13px 28px rgba(174, 72, 58, 0.16);
+}
+
+.daily-newsletter .daily-tag,
+.daily-blog-card h4,
+.daily-gallery h3 {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.daily-newsletter p,
+.daily-blog-card p {
+  color: #2d4261;
+}
+
+.daily-gallery-grid {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.daily-gallery-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.daily-gallery-grid img {
+  flex: 0 0 82%;
+  width: 82%;
+  max-width: 320px;
+  aspect-ratio: 716 / 328;
+  height: auto;
+  border-radius: 10px;
+  object-fit: contain;
+  scroll-snap-align: start;
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+}
+
+@media (max-width: 370px) {
+  .daily-gallery-grid img {
+    flex-basis: 88%;
+    width: 88%;
+  }
+}
+
+.daily-section ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+}
