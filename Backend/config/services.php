@@ -38,6 +38,7 @@ return [
         'url' => env('MAIL_GATEWAY_URL', 'https://api.yourgoodtime.in/api/internal/mail/send-otp'),
         'key' => env('MAIL_GATEWAY_KEY'),
         'timeout' => (int) env('MAIL_GATEWAY_TIMEOUT', 10),
+        'use_local_mailer' => env('MAIL_GATEWAY_USE_LOCAL_MAILER', false),
     ],
 
     'razorpay' => [

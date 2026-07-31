@@ -1,12 +1,17 @@
 <?php
 
 use App\Http\Controllers\AstrologyController;
+use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FutureAccessController;
 use App\Http\Controllers\InternalMailController;
+use App\Http\Controllers\MyAccountPredictionController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PredictionFeedbackController;
 use App\Http\Controllers\PredictionController;
+use App\Http\Controllers\PredictionProductController;
+use App\Http\Controllers\TempleRemedyController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', function () {
@@ -27,15 +32,39 @@ Route::post('/predictions/result', [PredictionController::class, 'result']);
 Route::get('/predictions/session-status', [PredictionController::class, 'sessionStatus']);
 Route::get('/predictions/{id}/result', [PredictionController::class, 'storedResult']);
 Route::post('/predictions/{predictionRequest}/feedback', [PredictionFeedbackController::class, 'store']);
+Route::get('/prediction-products/future/active', [PredictionProductController::class, 'activeFuture']);
 Route::get('/predictions/future-access', [FutureAccessController::class, 'show'])->middleware('auth:sanctum');
 Route::post('/payments/future-prediction/order', [PaymentController::class, 'createFutureOrder'])->middleware('auth:sanctum');
 Route::post('/payments/razorpay/verify', [PaymentController::class, 'verify'])->middleware('auth:sanctum');
 Route::post('/webhooks/razorpay', [PaymentController::class, 'webhook']);
 Route::post('/auth/send-otp', [AuthController::class, 'sendOtp']);
+Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/validate-otp', [AuthController::class, 'validateOtp']);
 Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::get('/auth/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
 Route::get('/auth/profile', [AuthController::class, 'profile'])->middleware('auth:sanctum');
+Route::put('/auth/profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
 Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::get('/my-account/predictions', [MyAccountPredictionController::class, 'index'])->middleware('auth:sanctum');
+Route::get('/temple-remedies', [TempleRemedyController::class, 'index'])->middleware('auth:sanctum');
+Route::post('/temple-remedies', [TempleRemedyController::class, 'store'])->middleware('auth:sanctum');
+Route::post('/temple-remedies/{templeRemedy}/feedback', [TempleRemedyController::class, 'feedback'])->middleware('auth:sanctum');
+
+Route::prefix('admin')
+    ->group(function (): void {
+        Route::post('/auth/login', [AdminAuthController::class, 'login']);
+
+        Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
+            Route::get('/auth/me', [AdminAuthController::class, 'me']);
+            Route::post('/auth/logout', [AdminAuthController::class, 'logout']);
+            Route::get('/overview', [AdminDashboardController::class, 'overview']);
+            Route::get('/users', [AdminDashboardController::class, 'users']);
+            Route::get('/prediction-requests', [AdminDashboardController::class, 'predictionRequests']);
+            Route::get('/prediction-requests/{predictionRequest}', [AdminDashboardController::class, 'predictionRequest']);
+            Route::get('/temple-remedies', [AdminDashboardController::class, 'templeRemedies']);
+            Route::patch('/temple-remedies/{templeRemedy}', [AdminDashboardController::class, 'updateTempleRemedy']);
+        });
+    });
 
 Route::prefix('internal/mail')
     ->middleware(['mail.gateway', 'throttle:internal-mail-otp'])

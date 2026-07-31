@@ -1,19 +1,106 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import HeaderAuthActions from '../components/common/HeaderAuthActions'
+import PrimaryNav from '../components/common/PrimaryNav'
+import TempleRemedyModal from '../components/common/TempleRemedyModal'
 import ygtLogo from '../assets/yt-logo.png'
 import futureIcon from '../assets/future.png'
 import templeIcon from '../assets/temple.png'
 import callIcon from '../assets/call.png'
 import PastPredictionPage from './PastPredictionPage'
+import { isLoggedIn } from '../utils/auth'
 import './HomePage.css'
+
+const TEMPLE_REMEDY_DRAFT_KEY = 'temple-remedy-draft'
 
 function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [isPastPredictionOpen, setIsPastPredictionOpen] = useState(false)
+  const [isFuturePurchaseOpen, setIsFuturePurchaseOpen] = useState(false)
+  const [isTempleRemedyOpen, setIsTempleRemedyOpen] = useState(false)
+  const [isTempleLoginPromptOpen, setIsTempleLoginPromptOpen] = useState(false)
+  const [templeProblem, setTempleProblem] = useState('')
+  const [shouldReturnToAccount, setShouldReturnToAccount] = useState(false)
   const cameFromIntro = Boolean(location.state?.fromIntro)
+
+  useEffect(() => {
+    if (!isLoggedIn()) return
+
+    try {
+      const draft = window.localStorage.getItem(TEMPLE_REMEDY_DRAFT_KEY)
+
+      if (draft) {
+        setTempleProblem(draft)
+        setIsTempleRemedyOpen(true)
+        window.localStorage.removeItem(TEMPLE_REMEDY_DRAFT_KEY)
+      }
+    } catch {
+      // Draft restore is useful but not required for submission.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (location.state?.openTempleRemedy) {
+      setIsTempleRemedyOpen(true)
+      setShouldReturnToAccount(Boolean(location.state?.returnToAccount))
+    }
+  }, [location.state])
   const handleQuerySubmit = (event) => {
     event.preventDefault()
+  }
+  const openAccountLoading = () => {
+    navigate('/account-loading?redirect=/account')
+  }
+
+  const handlePastClick = () => {
+    if (isLoggedIn()) {
+      openAccountLoading()
+      return
+    }
+
+    setIsPastPredictionOpen(true)
+  }
+
+  const handleFutureClick = () => {
+    if (isLoggedIn()) {
+      openAccountLoading()
+      return
+    }
+
+    setIsFuturePurchaseOpen(true)
+  }
+
+  const handleTempleRemedyClick = () => {
+    if (!isLoggedIn()) {
+      setIsTempleLoginPromptOpen(true)
+      return
+    }
+
+    setIsTempleRemedyOpen(true)
+  }
+
+  const handleTempleLoginProceed = () => {
+    setIsTempleLoginPromptOpen(false)
+    navigate('/login?redirect=/account', { state: { redirectTo: '/account' } })
+  }
+
+  const closeTempleRemedy = () => {
+    setIsTempleRemedyOpen(false)
+
+    if (shouldReturnToAccount) {
+      navigate('/account')
+    }
+  }
+
+  const requireTempleLogin = (problemText) => {
+    try {
+      window.localStorage.setItem(TEMPLE_REMEDY_DRAFT_KEY, problemText)
+    } catch {
+      // Login can continue even when storage is unavailable.
+    }
+    setIsTempleRemedyOpen(false)
+    setIsTempleLoginPromptOpen(true)
   }
 
   return (
@@ -28,13 +115,7 @@ function HomePage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="home-hero-login"
-            onClick={() => navigate('/login?mode=login&redirect=/account', { state: { backgroundLocation: location } })}
-          >
-            Login
-          </button>
+          <HeaderAuthActions />
         </header>
 
         <div className="home-hero-title">
@@ -79,7 +160,7 @@ function HomePage() {
             <button
               type="button"
               className="past-prediction-btn"
-              onClick={() => setIsPastPredictionOpen(true)}
+              onClick={handlePastClick}
             >
               <span className="btn-shine"></span>
               Get Past Prediction
@@ -94,16 +175,7 @@ function HomePage() {
               <strong>Know Your Future</strong>
               <small>Daily and yearly insights for your path</small>
             </span>
-            <button type="button" className="quick-link-action">Get In</button>
-          </article>
-
-          <article className="home-quick-link">
-            <img src={templeIcon} alt="" />
-            <span className="quick-link-copy">
-              <strong>Temple Remidy</strong>
-              <small>Simple spiritual remedies for balance</small>
-            </span>
-            <button type="button" className="quick-link-action">Get In</button>
+            <button type="button" className="quick-link-action" onClick={handleFutureClick}>Get In</button>
           </article>
 
           <article className="home-quick-link">
@@ -113,6 +185,15 @@ function HomePage() {
               <small>Connect directly for personal guidance</small>
             </span>
             <button type="button" className="quick-link-action">Get In</button>
+          </article>
+
+          <article className="home-quick-link">
+            <img src={templeIcon} alt="" />
+            <span className="quick-link-copy">
+              <strong>Temple Remedy</strong>
+              <small>Explain your concern and request a guided remedy</small>
+            </span>
+            <button type="button" className="quick-link-action" onClick={handleTempleRemedyClick}>Get In</button>
           </article>
         </section>
 
@@ -246,54 +327,62 @@ function HomePage() {
             <button type="button">Disclaimer</button>
           </section>
         </footer>
-
-        <nav className="home-footer-nav" aria-label="Primary">
-          <button type="button" className="footer-nav-item is-active" aria-current="page">
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>
-            </span>
-            <span className="footer-nav-label">Home</span>
-          </button>
-          <button
-            type="button"
-            className="footer-nav-item"
-            onClick={() => navigate('/account')}
-          >
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12m0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14" /></svg>
-            </span>
-            <span className="footer-nav-label">My Account</span>
-          </button>
-          <button
-            type="button"
-            className="footer-nav-item"
-            onClick={() => navigate('/daily')}
-          >
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9m1 9.4V7h-2v6.2l4.7 2.8 1-1.7z" /></svg>
-            </span>
-            <span className="footer-nav-label">Daily</span>
-          </button>
-          <button
-            type="button"
-            className="footer-nav-item"
-            onClick={() => navigate('/videos')}
-          >
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 6h5v5H4zm0 7h5v5H4zm7-7h9v5h-9zm0 7h9v5h-9z" /></svg>
-            </span>
-            <span className="footer-nav-label">Gallery</span>
-          </button>
-          <button type="button" className="footer-nav-item" onClick={() => navigate('/settings')}>
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="m19.4 13.5 1.3-1.5-1.3-1.5-1.9.2a6 6 0 0 0-.8-.5l-.3-1.9-2-.3-.8 1.7a5 5 0 0 0-.9 0l-.8-1.7-2 .3-.3 1.9c-.3.1-.6.3-.8.5l-1.9-.2L3.3 12l1.3 1.5-.2 1.9 1.9.8.8 1.7 2-.3.8-1.7h.9l.8 1.7 2-.3.3-1.9.8-.5 1.9.2.9-1.9zM12 14.8a2.8 2.8 0 1 1 2.8-2.8 2.8 2.8 0 0 1-2.8 2.8" /></svg>
-            </span>
-            <span className="footer-nav-label">Settings</span>
-          </button>
-        </nav>
+        <PrimaryNav />
 
         {isPastPredictionOpen ? (
           <PastPredictionPage forceModal onClose={() => setIsPastPredictionOpen(false)} />
+        ) : null}
+
+        {isFuturePurchaseOpen ? (
+          <PastPredictionPage
+            forceModal
+            predictionIntent="future"
+            onClose={() => setIsFuturePurchaseOpen(false)}
+          />
+        ) : null}
+
+        {isTempleLoginPromptOpen ? (
+          <section className="temple-remedy-overlay" role="dialog" aria-modal="true" aria-label="Temple Remedy login required">
+            <div className="temple-remedy-panel temple-login-panel">
+              <button
+                type="button"
+                className="temple-remedy-close"
+                onClick={() => setIsTempleLoginPromptOpen(false)}
+                aria-label="Close Temple Remedy login prompt"
+              >
+                x
+              </button>
+              <span className="temple-remedy-kicker">Login Required</span>
+              <h2>Sign in to request a Temple Remedy</h2>
+              <p>
+                User login is required to continue. If you do not have an account, you can create one during login.
+              </p>
+              <p>
+                Your birth details are required so we can understand your situation and prepare a suitable remedy solution.
+              </p>
+              <p>
+                Depending on the review, you may need to pay a remedy preparation fee from your dashboard before the final remedy is prepared.
+              </p>
+              <div className="temple-remedy-actions">
+                <button type="button" onClick={handleTempleLoginProceed}>OK Proceed</button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {isTempleRemedyOpen ? (
+          <TempleRemedyModal
+            initialProblem={templeProblem}
+            isAuthenticated={isLoggedIn()}
+            onClose={closeTempleRemedy}
+            onRequireLogin={requireTempleLogin}
+            onSubmitted={() => {
+              setTempleProblem('')
+              if (shouldReturnToAccount) {
+                window.setTimeout(() => navigate('/account'), 900)
+              }
+            }}
+          />
         ) : null}
       </section>
     </main>
@@ -301,3 +390,4 @@ function HomePage() {
 }
 
 export default HomePage
+

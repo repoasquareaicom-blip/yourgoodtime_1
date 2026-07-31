@@ -33,16 +33,22 @@ class PaymentController extends Controller
             return response()->json(['success' => false, 'message' => 'You are not authorised to purchase this prediction.'], 403);
         }
 
-        if (! $accessService->canPurchase($predictionRequest)) {
-            return response()->json(['success' => false, 'message' => 'Future prediction is already active for this request.'], 409);
-        }
-
         $product = $accessService->activeProductById((int) $validated['product_id']);
         if ($product === null) {
             return response()->json(['success' => false, 'message' => 'Future prediction checkout is not available right now.'], 404);
         }
 
-        $transaction = $paymentService->createOrder($predictionRequest, $product, $request->user());
+        $nextPurchase = $accessService->nextPurchaseBlock($request->user(), $predictionRequest);
+        if (! $nextPurchase['can_purchase']) {
+            return response()->json([
+                'success' => false,
+                'status' => $nextPurchase['reason'] ?? 'NO_NEW_FUTURE_YEARS_AVAILABLE',
+                'message' => $nextPurchase['message'] ?? 'You already have all currently supported future predictions.',
+                'next_purchase' => $nextPurchase,
+            ], 409);
+        }
+
+        $transaction = $paymentService->createOrder($predictionRequest, $product, $request->user(), $nextPurchase);
 
         return response()->json([
             'success' => true,
@@ -53,6 +59,7 @@ class PaymentController extends Controller
                 'razorpay_key_id' => config('services.razorpay.key_id'),
                 'prefill' => $paymentService->checkoutPrefill($request->user()),
                 'product' => $accessService->productPayload($product),
+                'next_purchase' => $nextPurchase,
             ],
         ]);
     }
@@ -79,15 +86,17 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        $entitlement = $accessService->activeEntitlement(
-            PredictionRequest::query()->findOrFail($transaction->prediction_request_id)
-        );
+        $entitlement = \App\Models\PredictionEntitlement::query()
+            ->where('payment_transaction_id', $transaction->id)
+            ->where('prediction_type', 'future')
+            ->first();
 
         return response()->json([
             'success' => true,
             'message' => 'Payment verified successfully.',
             'future_prediction_enabled' => $entitlement !== null,
             'entitlement' => $accessService->entitlementPayload($entitlement),
+            'purchased_block' => $entitlement ? $accessService->purchasedBlockPayload($entitlement) : null,
         ]);
     }
 

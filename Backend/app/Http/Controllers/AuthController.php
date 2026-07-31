@@ -38,13 +38,26 @@ class AuthController extends Controller
         $purpose = $validated['purpose'] ?? 'login';
         $normalizedEmail = $otpVerificationService->normalizeEmail($validated['email']);
         $pendingPayload = null;
+        $nextAction = $purpose === 'signup' ? 'VERIFY_REGISTRATION_OTP' : null;
+        $accountState = null;
 
         if ($purpose === 'signup') {
-            if ($registrationPredictionRequestService->emailExists($normalizedEmail)) {
-                return $this->alreadyRegisteredResponse();
-            }
+            $hasPredictionPayload = $request->filled('full_name') || $request->filled('fullName') || $request->filled('date_of_birth') || $request->filled('dateOfBirth');
+            $existingUser = User::query()->where('email', $normalizedEmail)->first();
 
-            $pendingPayload = $registrationPredictionRequestService->payloadFromRequest($request);
+            if ($existingUser !== null) {
+                return $this->alreadyRegisteredResponse();
+            } elseif ($registrationPredictionRequestService->emailExists($normalizedEmail)) {
+                return $this->alreadyRegisteredResponse();
+            } else {
+                $pendingPayload = $hasPredictionPayload
+                    ? $registrationPredictionRequestService->payloadFromRequest($request)
+                    : [
+                        'registration_only' => true,
+                        'name' => trim((string) $request->input('name', '')),
+                        'email' => $normalizedEmail,
+                    ];
+            }
         }
 
         try {
@@ -54,11 +67,21 @@ class AuthController extends Controller
                 $pendingPayload,
             );
 
-            return response()->json([
+            $payload = [
                 'success' => true,
                 'code' => 'OTP_SENT',
                 'message' => 'OTP sent successfully.',
-            ]);
+            ];
+
+            if ($nextAction !== null) {
+                $payload['next_action'] = $nextAction;
+            }
+
+            if ($accountState !== null) {
+                $payload['account_state'] = $accountState;
+            }
+
+            return response()->json($payload);
         } catch (MailGatewayException $exception) {
             Log::warning('Public OTP mail gateway send failed.', [
                 'email' => isset($validated['email']) ? $this->maskEmail($validated['email']) : null,
@@ -87,6 +110,67 @@ class AuthController extends Controller
         }
     }
 
+    public function login(Request $request, LoginTokenService $loginTokenService): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:254'],
+            'password' => ['required', 'string'],
+        ]);
+
+        $user = $loginTokenService->findUserByEmail($validated['email']);
+
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email or password.',
+            ], 422);
+        }
+
+        if (! $loginTokenService->isActive($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account is inactive.',
+            ], 403);
+        }
+
+        $token = $loginTokenService->createSingleDeviceToken($user);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful.',
+            'token' => $token,
+            'token_type' => 'Bearer',
+            'user' => $loginTokenService->safeUser($user->refresh()),
+        ]);
+    }
+
+    public function validateOtp(Request $request, OtpVerificationService $otpVerificationService): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:254'],
+            'otp' => ['required', 'regex:/^\d{6}$/'],
+            'purpose' => ['required', 'string', 'in:login,signup,email_verification,password_reset'],
+        ]);
+
+        if (! $otpVerificationService->validate(
+            $validated['email'],
+            $validated['otp'],
+            $validated['purpose'],
+        )) {
+            return response()->json([
+                'success' => false,
+                'code' => 'INVALID_OTP',
+                'message' => 'Invalid or expired OTP.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'code' => 'OTP_VALID',
+            'message' => 'OTP verified successfully.',
+        ]);
+    }
+
     public function verifyOtp(
         VerifyOtpRequest $request,
         OtpVerificationService $otpVerificationService,
@@ -104,6 +188,14 @@ class AuthController extends Controller
                 $predictionRequestProcessor,
                 $loginTokenService
             );
+        }
+
+        if ($validated['purpose'] === 'password_reset' && empty($validated['password'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Password is required.',
+                'errors' => ['password' => ['The password field is required.']],
+            ], 422);
         }
 
         $verified = $otpVerificationService->verify(
@@ -148,6 +240,28 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($validated['purpose'] === 'password_reset') {
+            $user = $loginTokenService->findUserByEmail($validated['email']);
+
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired OTP.',
+                ], 422);
+            }
+
+            $user->forceFill(['password' => Hash::make($validated['password'])])->save();
+            $token = $loginTokenService->createSingleDeviceToken($user);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset successfully.',
+                'token' => $token,
+                'token_type' => 'Bearer',
+                'user' => $loginTokenService->safeUser($user->refresh()),
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'OTP verified successfully.',
@@ -162,6 +276,14 @@ class AuthController extends Controller
         LoginTokenService $loginTokenService
     ): JsonResponse {
         $normalizedEmail = $otpVerificationService->normalizeEmail($validated['email']);
+
+        if (empty($validated['password'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Password is required.',
+                'errors' => ['password' => ['The password field is required.']],
+            ], 422);
+        }
 
         try {
             $registration = DB::transaction(function () use (
@@ -189,7 +311,7 @@ class AuthController extends Controller
                     return $this->otpErrorResponse('OTP_EXPIRED', 'The OTP has expired. Please request a new OTP.');
                 }
 
-                if ($registrationPredictionRequestService->emailExists($normalizedEmail)) {
+                if ($registrationPredictionRequestService->emailExists($normalizedEmail) || User::query()->where('email', $normalizedEmail)->exists()) {
                     return $this->alreadyRegisteredResponse();
                 }
 
@@ -197,6 +319,15 @@ class AuthController extends Controller
 
                 if (! is_array($pendingPayload)) {
                     return $this->otpErrorResponse('INVALID_OTP', 'The OTP you entered is invalid.');
+                }
+
+                if (($pendingPayload['registration_only'] ?? false) === true) {
+                    return [
+                        'otp_record_id' => $record->id,
+                        'prediction_request' => null,
+                        'prediction_input' => null,
+                        'name' => $pendingPayload['name'] ?: strtok($normalizedEmail, '@'),
+                    ];
                 }
 
                 $predictionRequest = $registrationPredictionRequestService->createFromPendingPayload($pendingPayload);
@@ -221,19 +352,21 @@ class AuthController extends Controller
 
         $predictionRequest = $registration['prediction_request'];
 
-        try {
-            $predictionRequestProcessor->processPast(
-                $predictionRequest,
-                $registration['prediction_input'],
-                $predictionRequest->birth_payload
-            );
-        } catch (ConnectionException $exception) {
-            return $this->markPredictionFailed($predictionRequest, $exception, 504, $predictionRequestProcessor);
-        } catch (Throwable $exception) {
-            return $this->markPredictionFailed($predictionRequest, $exception, 502, $predictionRequestProcessor);
+        if ($predictionRequest !== null) {
+            try {
+                $predictionRequestProcessor->processPast(
+                    $predictionRequest,
+                    $registration['prediction_input'],
+                    $predictionRequest->birth_payload
+                );
+            } catch (ConnectionException $exception) {
+                return $this->markPredictionFailed($predictionRequest, $exception, 504, $predictionRequestProcessor);
+            } catch (Throwable $exception) {
+                return $this->markPredictionFailed($predictionRequest, $exception, 502, $predictionRequestProcessor);
+            }
         }
 
-        $user = DB::transaction(function () use ($registration, $normalizedEmail): User {
+        $user = DB::transaction(function () use ($registration, $normalizedEmail, $validated): User {
             OtpRecord::query()
                 ->whereKey($registration['otp_record_id'])
                 ->lockForUpdate()
@@ -244,27 +377,32 @@ class AuthController extends Controller
             return User::query()->updateOrCreate(
                 ['email' => $normalizedEmail],
                 [
-                    'name' => $registration['prediction_request']->full_name,
-                    'password' => Hash::make(Str::random(40)),
+                    'name' => $registration['prediction_request']?->full_name ?? $registration['name'] ?? strtok($normalizedEmail, '@'),
+                    'password' => Hash::make($validated['password']),
                     'email_verified_at' => now(),
                     'is_active' => true,
                 ]
             );
         });
 
-        $predictionRequest->refresh();
+        $predictionRequest?->refresh();
         $token = $loginTokenService->createSingleDeviceToken($user);
 
-        return response()->json([
+        $payload = [
             'success' => true,
             'code' => 'REGISTRATION_COMPLETED',
             'message' => 'Registration completed successfully.',
-            'prediction_request_id' => $predictionRequest->id,
-            'request_uuid' => $predictionRequest->request_uuid,
             'token' => $token,
             'token_type' => 'Bearer',
             'user' => $loginTokenService->safeUser($user->refresh()),
-        ]);
+        ];
+
+        if ($predictionRequest !== null) {
+            $payload['prediction_request_id'] = $predictionRequest->id;
+            $payload['request_uuid'] = $predictionRequest->request_uuid;
+        }
+
+        return response()->json($payload);
     }
 
     private function markPredictionFailed(
@@ -302,8 +440,8 @@ class AuthController extends Controller
     {
         return response()->json([
             'success' => false,
-            'code' => 'ALREADY_REGISTERED',
-            'message' => 'This email is already registered.',
+            'code' => 'EMAIL_ALREADY_REGISTERED',
+            'message' => 'This email is already registered. Please log in to continue.',
         ], 409);
     }
 
@@ -339,6 +477,35 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'profile' => $userProfileService->profile($request->user()),
+        ]);
+    }
+
+    public function updateProfile(Request $request, UserProfileService $userProfileService): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:160'],
+            'country_code' => ['nullable', 'string', 'size:2'],
+            'phone_e164' => ['nullable', 'string', 'regex:/^\+\d{8,15}$/'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user = $request->user();
+        $updates = [
+            'name' => trim($validated['name']),
+            'country_code' => isset($validated['country_code']) ? strtoupper($validated['country_code']) : null,
+            'phone_e164' => $validated['phone_e164'] ?? null,
+        ];
+
+        if (! empty($validated['password'])) {
+            $updates['password'] = Hash::make($validated['password']);
+        }
+
+        $user->forceFill($updates)->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully.',
+            'profile' => $userProfileService->profile($user->refresh()),
         ]);
     }
 

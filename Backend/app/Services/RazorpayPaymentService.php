@@ -19,9 +19,9 @@ class RazorpayPaymentService
     {
     }
 
-    public function createOrder(PredictionRequest $predictionRequest, PredictionProduct $product, User $user): PaymentTransaction
+    public function createOrder(PredictionRequest $predictionRequest, PredictionProduct $product, User $user, ?array $nextPurchase = null): PaymentTransaction
     {
-        return DB::transaction(function () use ($predictionRequest, $product, $user): PaymentTransaction {
+        return DB::transaction(function () use ($predictionRequest, $product, $user, $nextPurchase): PaymentTransaction {
             $transaction = PaymentTransaction::query()->create([
                 'prediction_request_id' => $predictionRequest->id,
                 'user_id' => $user->id,
@@ -31,7 +31,10 @@ class RazorpayPaymentService
                 'amount_minor' => $product->price_inclusive_tax_minor,
                 'tax_inclusive' => $product->tax_inclusive,
                 'status' => 'PENDING',
-                'metadata' => ['product_code' => $product->code],
+                'metadata' => [
+                    'product_code' => $product->code,
+                    'proposed_future_period' => $nextPurchase,
+                ],
             ]);
 
             $providerOrderId = $this->createProviderOrder($transaction, $product);
@@ -63,6 +66,10 @@ class RazorpayPaymentService
 
             if ($transaction === null) {
                 throw new RuntimeException('Payment transaction not found for authenticated user.');
+            }
+
+            if ($transaction->status === 'CAPTURED' && $transaction->provider_payment_id === $paymentId) {
+                return $transaction;
             }
 
             $this->applyPaymentEntity($transaction, $paymentEntity);

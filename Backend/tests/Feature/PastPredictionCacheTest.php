@@ -181,6 +181,92 @@ class PastPredictionCacheTest extends TestCase
         Http::assertSentCount(5);
     }
 
+    public function test_fingerprint_ignores_personal_auth_product_payment_and_prediction_type_fields(): void
+    {
+        $cache = app(PredictionCacheService::class);
+
+        $first = $cache->fingerprint($this->payload([
+            'full_name' => 'Past Buyer',
+            'email' => 'past@example.com',
+            'prediction_type' => 'past',
+            'user_id' => 10,
+            'product_id' => 20,
+            'payment_transaction_id' => 30,
+            'prediction_entitlement_id' => 40,
+            'marriage_status' => 'married',
+        ]));
+
+        $second = $cache->fingerprint($this->payload([
+            'full_name' => 'Future Buyer',
+            'email' => 'future@example.com',
+            'prediction_type' => 'future',
+            'user_id' => 99,
+            'product_id' => 88,
+            'payment_transaction_id' => 77,
+            'prediction_entitlement_id' => 66,
+            'marriage_status' => 'unmarried',
+        ]));
+
+        $this->assertSame($first, $second);
+    }
+
+    public function test_reusable_api_result_is_not_limited_to_past_prediction_type(): void
+    {
+        $cache = app(PredictionCacheService::class);
+        $fingerprint = $cache->fingerprint($this->payload());
+
+        $source = PredictionRequest::query()->create($this->storedPredictionAttributes([
+            'prediction_type' => 'future',
+            'chart_fingerprint' => $fingerprint,
+            'raw_astrology_response' => ['future' => true],
+            'normalized_astrology_data' => ['future' => true],
+        ]));
+
+        $reusable = $cache->findReusableCompleted($fingerprint);
+
+        $this->assertNotNull($reusable);
+        $this->assertTrue($reusable->is($source));
+    }
+
+    public function test_reused_from_request_id_points_to_original_matching_fingerprint_source(): void
+    {
+        $cache = app(PredictionCacheService::class);
+        $fingerprint = $cache->fingerprint($this->payload());
+
+        $original = PredictionRequest::query()->create($this->storedPredictionAttributes([
+            'chart_fingerprint' => $fingerprint,
+            'raw_astrology_response' => ['source' => 'original'],
+            'normalized_astrology_data' => ['source' => 'original'],
+            'completed_at' => now()->subMinutes(2),
+        ]));
+
+        $intermediate = PredictionRequest::query()->create($this->storedPredictionAttributes([
+            'email' => 'intermediate@example.com',
+            'chart_fingerprint' => $fingerprint,
+            'raw_astrology_response' => ['source' => 'original'],
+            'normalized_astrology_data' => ['source' => 'original'],
+            'cache_hit' => true,
+            'reused_from_request_id' => $original->id,
+            'completed_at' => now()->subMinute(),
+        ]));
+
+        $target = PredictionRequest::query()->create($this->storedPredictionAttributes([
+            'email' => 'target@example.com',
+            'chart_fingerprint' => $fingerprint,
+            'status' => 'pending',
+            'raw_astrology_response' => null,
+            'normalized_astrology_data' => null,
+            'completed_at' => null,
+        ]));
+
+        $cache->copyReusableAstrologyData($target, $intermediate);
+
+        $target->refresh();
+        $this->assertTrue($target->cache_hit);
+        $this->assertSame($original->id, $target->reused_from_request_id);
+        $this->assertSame($original->chart_fingerprint, $target->chart_fingerprint);
+    }
+
     private function fakeAstrologyApi(): void
     {
         config([

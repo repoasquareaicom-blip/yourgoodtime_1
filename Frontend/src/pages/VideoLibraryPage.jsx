@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import HeaderAuthActions from '../components/common/HeaderAuthActions'
 import ygtLogo from '../assets/yt-logo.png'
 import { videoLibrary } from '../data/videoLibrary'
 import './HomePage.css'
@@ -90,13 +91,7 @@ function VideoLibraryPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="home-hero-login"
-            onClick={() => navigate('/login?mode=login&redirect=/account', { state: { backgroundLocation: location } })}
-          >
-            Login
-          </button>
+          <HeaderAuthActions />
         </header>
       )}
 

@@ -196,6 +196,59 @@ class VerifyOtpTest extends TestCase
         $this->assertSame('auth-token', $user->tokens()->first()->name);
     }
 
+    public function test_password_login_generates_sanctum_token(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Password Person',
+            'email' => 'person@example.com',
+            'password' => Hash::make('secret123'),
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'person@example.com',
+            'password' => 'secret123',
+        ])
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'message' => 'Login successful.',
+                'token_type' => 'Bearer',
+                'user' => [
+                    'id' => $user->id,
+                    'name' => 'Password Person',
+                    'email' => 'person@example.com',
+                ],
+            ])
+            ->assertJsonStructure(['token']);
+    }
+
+    public function test_password_reset_uses_otp_and_logs_user_in(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'person@example.com',
+            'password' => Hash::make('old-password'),
+        ]);
+        $this->createOtpRecord(['purpose' => 'password_reset']);
+
+        $this->postJson('/api/auth/verify-otp', [
+            'email' => 'person@example.com',
+            'otp' => '123456',
+            'purpose' => 'password_reset',
+            'password' => 'newsecret123',
+            'password_confirmation' => 'newsecret123',
+        ])
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'message' => 'Password reset successfully.',
+                'token_type' => 'Bearer',
+            ])
+            ->assertJsonStructure(['token']);
+
+        $this->assertTrue(Hash::check('newsecret123', $user->refresh()->password));
+    }
+
     public function test_email_otp_and_purpose_are_validated(): void
     {
         $this->postJson('/api/auth/verify-otp', [

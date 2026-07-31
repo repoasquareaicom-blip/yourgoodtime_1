@@ -5,11 +5,12 @@ import api from './api'
 
 const localVideoFallbacks = [demoPredictionVideoOne, demoPredictionVideoTwo]
 
-export async function fetchPredictionResult({ predictionRequestId, requestUuid, type = 'past', signal } = {}) {
+export async function fetchPredictionResult({ predictionRequestId, requestUuid, type = 'past', entitlementId, signal } = {}) {
   const response = await api.post('/predictions/result', {
     id: predictionRequestId,
     type,
     request_uuid: requestUuid,
+    ...(entitlementId ? { entitlement_id: entitlementId } : {}),
   }, { signal, timeout: 120000 })
 
   return response.data?.data
@@ -19,11 +20,12 @@ export async function fetchPastPredictionResult(options = {}) {
   return fetchPredictionResult({ ...options, type: 'past' })
 }
 
-export async function fetchStoredPredictionResult({ predictionRequestId, requestUuid, type = 'past', signal } = {}) {
+export async function fetchStoredPredictionResult({ predictionRequestId, requestUuid, type = 'past', entitlementId, signal } = {}) {
   const response = await api.get(`/predictions/${predictionRequestId}/result`, {
     params: {
       type,
       request_uuid: requestUuid,
+      ...(entitlementId ? { entitlement_id: entitlementId } : {}),
     },
     signal,
     timeout: 30000,

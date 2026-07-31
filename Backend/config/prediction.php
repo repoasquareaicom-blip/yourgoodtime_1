@@ -3,7 +3,7 @@
 return [
     'past_years' => 40,
 
-    'future_years' => 40,
+    'future_years' => 1,
 
     'age_limits' => [
         'past' => [

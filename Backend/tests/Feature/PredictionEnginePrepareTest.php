@@ -338,6 +338,7 @@ class PredictionEnginePrepareTest extends TestCase
     {
         $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
         $request = $this->requestForAgeTimeline();
+        $expectedDirectory = $this->predictionDataDirectory().DIRECTORY_SEPARATOR.'past';
 
         $this->postJson('/api/predictions/past/prepare', [
             'prediction_request_id' => $request->id,
@@ -345,7 +346,23 @@ class PredictionEnginePrepareTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('prediction_videos.0.status', 'UNAVAILABLE')
-            ->assertJsonPath('prediction_videos.0.warning', 'Workbook directory not found: past');
+            ->assertJsonPath('prediction_videos.0.warning', "Workbook directory not found: {$expectedDirectory}");
+    }
+
+    public function test_workbook_directory_is_resolved_from_prediction_type_and_configured_base_path(): void
+    {
+        config(['prediction.excel_path' => $this->predictionDataDirectory()]);
+
+        $resolver = app(\App\Services\Prediction\AgeWorkbookResolver::class);
+
+        $this->assertSame(
+            $this->predictionDataDirectory().DIRECTORY_SEPARATOR.'past',
+            $resolver->resolveExcelDirectory('past')
+        );
+        $this->assertSame(
+            $this->predictionDataDirectory().DIRECTORY_SEPARATOR.'future',
+            $resolver->resolveExcelDirectory('future')
+        );
     }
 
     public function test_missing_lagnam_rasi_position_or_year_mapping_returns_structured_warning(): void

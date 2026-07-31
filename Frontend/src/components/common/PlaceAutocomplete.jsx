@@ -253,7 +253,7 @@ function PlaceAutocomplete({
   const shouldShowPanel = isOpen && status !== 'idle'
 
   return (
-    <div className="place-autocomplete" ref={rootRef}>
+    <div className={`place-autocomplete ${shouldShowPanel ? 'is-open' : ''}`} ref={rootRef}>
       <div className="place-autocomplete__field">
         <span className="place-autocomplete__search" aria-hidden="true" />
         <input

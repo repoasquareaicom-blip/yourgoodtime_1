@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import HeaderAuthActions from '../components/common/HeaderAuthActions'
 import ygtLogo from '../assets/yt-logo.png'
 import { getStoredLanguageName, languageOptions, savePreferredLanguage } from '../data/languageOptions'
 import './HomePage.css'
@@ -7,7 +8,6 @@ import './SettingsPage.css'
 
 function SettingsPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [selectedLanguage, setSelectedLanguage] = useState(() => (
     window.localStorage.getItem('ygtPreferredLanguage') || ''
   ))
@@ -31,13 +31,7 @@ function SettingsPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="home-hero-login"
-            onClick={() => navigate('/login?mode=login&redirect=/account', { state: { backgroundLocation: location } })}
-          >
-            Login
-          </button>
+          <HeaderAuthActions />
         </header>
 
         <section className="settings-content" aria-label="Settings">

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -47,6 +48,8 @@ class AuthProfileTest extends TestCase
                     'id',
                     'name',
                     'email',
+                    'country_code',
+                    'phone_e164',
                     'email_verified_at',
                     'created_at',
                 ],
@@ -59,5 +62,34 @@ class AuthProfileTest extends TestCase
             ->assertJsonMissingPath('profile.remember_token')
             ->assertJsonMissingPath('profile.tokens')
             ->assertJsonMissingPath('profile.personal_access_tokens');
+    }
+
+    public function test_profile_can_update_editable_fields_and_password_without_email_change(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Old Name',
+            'email' => 'profile@example.com',
+            'password' => Hash::make('oldsecret'),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->putJson('/api/auth/profile', [
+            'name' => 'New Name',
+            'email' => 'changed@example.com',
+            'country_code' => 'us',
+            'phone_e164' => '+14155552671',
+            'password' => 'newsecret123',
+            'password_confirmation' => 'newsecret123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('profile.name', 'New Name')
+            ->assertJsonPath('profile.email', 'profile@example.com')
+            ->assertJsonPath('profile.country_code', 'US')
+            ->assertJsonPath('profile.phone_e164', '+14155552671');
+
+        $user->refresh();
+        $this->assertSame('profile@example.com', $user->email);
+        $this->assertTrue(Hash::check('newsecret123', $user->password));
     }
 }

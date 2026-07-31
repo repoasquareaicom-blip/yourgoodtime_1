@@ -37,11 +37,8 @@ class AstrologyApiService extends BaseService
 
     public function buildBirthPayload(array $input): array
     {
-        $dateTime = CarbonImmutable::createFromFormat(
-            'Y-m-d H:i',
-            $input['date_of_birth'].' '.$input['time_of_birth'],
-            $input['timezone'] ?? 'Asia/Kolkata'
-        );
+        $timezone = $input['timezone'] ?? 'Asia/Kolkata';
+        $dateTime = CarbonImmutable::parse($input['date_of_birth'].' '.$input['time_of_birth'], $timezone);
 
         return [
             'day' => (int) $dateTime->format('j'),

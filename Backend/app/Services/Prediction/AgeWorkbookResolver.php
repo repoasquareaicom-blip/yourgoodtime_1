@@ -2,6 +2,7 @@
 
 namespace App\Services\Prediction;
 
+use InvalidArgumentException;
 use Illuminate\Support\Str;
 
 class AgeWorkbookResolver
@@ -13,12 +14,10 @@ class AgeWorkbookResolver
     public function resolve(string $predictionPeriod, int $age): AgeWorkbookResult
     {
         $period = strtolower(trim($predictionPeriod));
-        $directory = rtrim($this->predictionConfig->excelPath(), DIRECTORY_SEPARATOR)
-            .DIRECTORY_SEPARATOR
-            .$period;
+        $directory = $this->resolveExcelDirectory($period);
 
         if (! is_dir($directory)) {
-            return new AgeWorkbookResult(false, null, null, $period, remarks: "Workbook directory not found: {$period}");
+            return new AgeWorkbookResult(false, null, null, $period, remarks: "Workbook directory not found: {$directory}");
         }
 
         $matches = [];
@@ -58,6 +57,19 @@ class AgeWorkbookResolver
         }
 
         return new AgeWorkbookResult(false, null, null, $period, supportedFromAge: $supportedFromAge, supportedToAge: $supportedToAge, remarks: "No {$period} workbook covers age {$age}.");
+    }
+
+    public function resolveExcelDirectory(string $predictionType): string
+    {
+        $period = strtolower(trim($predictionType));
+
+        if (! in_array($period, ['past', 'future'], true)) {
+            throw new InvalidArgumentException("Unsupported prediction workbook period: {$predictionType}");
+        }
+
+        return rtrim($this->predictionConfig->excelPath(), DIRECTORY_SEPARATOR)
+            .DIRECTORY_SEPARATOR
+            .$period;
     }
 
     private function ageRange(string $fileName): ?array

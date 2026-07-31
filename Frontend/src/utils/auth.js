@@ -1,5 +1,7 @@
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
+const ADMIN_TOKEN_KEY = 'admin_auth_token'
+const ADMIN_USER_KEY = 'admin_auth_user'
 
 function readStorageValue(key) {
   try {
@@ -72,4 +74,53 @@ export function removeUser() {
 
 export function isLoggedIn() {
   return Boolean(getToken())
+}
+
+export function saveAdminToken(token) {
+  if (!token) {
+    removeAdminToken()
+    return
+  }
+
+  writeStorageValue(ADMIN_TOKEN_KEY, token)
+}
+
+export function getAdminToken() {
+  return readStorageValue(ADMIN_TOKEN_KEY)
+}
+
+export function removeAdminToken() {
+  removeStorageValue(ADMIN_TOKEN_KEY)
+}
+
+export function saveAdminUser(user) {
+  if (!user) {
+    removeAdminUser()
+    return
+  }
+
+  writeStorageValue(ADMIN_USER_KEY, JSON.stringify(user))
+}
+
+export function getAdminUser() {
+  const storedUser = readStorageValue(ADMIN_USER_KEY)
+
+  if (!storedUser) {
+    return null
+  }
+
+  try {
+    return JSON.parse(storedUser)
+  } catch {
+    removeAdminUser()
+    return null
+  }
+}
+
+export function removeAdminUser() {
+  removeStorageValue(ADMIN_USER_KEY)
+}
+
+export function isAdminLoggedIn() {
+  return Boolean(getAdminToken())
 }

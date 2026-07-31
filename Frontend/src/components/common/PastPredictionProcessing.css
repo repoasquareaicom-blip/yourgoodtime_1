@@ -1522,7 +1522,42 @@
   aspect-ratio: 1;
   border: 1px dashed rgba(255, 207, 124, 0.38);
   border-radius: 999px;
-  animation: predictionOrbit 13s linear infinite;
+  pointer-events: none;
+  animation:
+    predictionOrbit 13s linear infinite,
+    predictionGlow 2.8s ease-in-out infinite;
+}
+
+.prediction-player__complete-ring::before,
+.prediction-player__complete-ring::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.prediction-player__complete-ring::before {
+  border: 1px solid rgba(255, 178, 42, 0.26);
+  box-shadow:
+    0 0 26px rgba(255, 178, 42, 0.24),
+    inset 0 0 24px rgba(255, 178, 42, 0.12);
+}
+
+.prediction-player__complete-ring::after {
+  inset: 42%;
+  background: rgba(255, 178, 42, 0.5);
+  box-shadow:
+    0 0 20px rgba(255, 178, 42, 0.9),
+    0 0 46px rgba(255, 122, 0, 0.42);
+  transform: translateY(-130px);
+}
+
+.prediction-player__complete > h2,
+.prediction-player__complete > p,
+.prediction-player__complete > .prediction-player__actions {
+  position: relative;
+  z-index: 1;
 }
 
 .prediction-countdown__orbit--two {
@@ -1631,6 +1666,8 @@
 }
 
 .prediction-player__actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -1894,6 +1931,142 @@
   }
 }
 
+.prediction-player__feedback-overlay {
+  position: fixed;
+  place-items: center;
+  padding: 18px;
+}
+
+.prediction-player__feedback-sheet {
+  justify-items: center;
+  box-sizing: border-box;
+  width: min(400px, calc(100vw - 36px));
+  max-height: min(720px, calc(100dvh - 44px));
+  margin: auto;
+  border-radius: 22px;
+  padding: 24px;
+  text-align: center;
+  overflow-x: hidden;
+}
+
+.prediction-player__feedback-close {
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.prediction-player__feedback-sheet h2 {
+  padding-right: 0;
+  font-size: clamp(1.25rem, 3vw, 1.7rem);
+  line-height: 1.1;
+  text-align: center;
+}
+
+.prediction-player__feedback-sheet p {
+  max-width: 320px;
+  text-align: center;
+}
+
+.prediction-player__stars {
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.prediction-player__stars button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 1;
+}
+
+.prediction-player__stars button::before {
+  content: "\2605";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: currentColor;
+  font-size: 1rem;
+  line-height: 0;
+}
+
+.prediction-player__accuracy {
+  width: 100%;
+}
+
+.prediction-player__accuracy legend {
+  width: 100%;
+  text-align: center;
+}
+
+.prediction-player__accuracy label {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 207, 124, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+
+.prediction-player__accuracy input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #ffb22a;
+}
+
+.prediction-player__comments {
+  width: 100%;
+  text-align: left;
+}
+
+.prediction-player__feedback-actions {
+  box-sizing: border-box;
+  width: 100%;
+  justify-content: center;
+}
+
+.prediction-player__feedback-actions button {
+  min-width: 0;
+}
+
+@media (max-width: 680px) {
+  .prediction-player__feedback-overlay {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .prediction-player__feedback-sheet {
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(720px, calc(100dvh - 36px));
+    border-radius: 22px;
+    padding: 22px 16px calc(22px + env(safe-area-inset-bottom));
+  }
+
+  .prediction-player__stars {
+    gap: 8px;
+  }
+
+  .prediction-player__stars button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .prediction-player__feedback-actions {
+    flex-direction: column;
+  }
+}
+
 .post-reading-overlay {
   position: fixed;
   inset: 0;
@@ -2068,5 +2241,20 @@
 @keyframes predictionPulse {
   50% {
     transform: scale(1.06);
+  }
+}
+
+@keyframes predictionGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 22px rgba(255, 178, 42, 0.1),
+      inset 0 0 12px rgba(255, 178, 42, 0.05);
+  }
+
+  50% {
+    box-shadow:
+      0 0 42px rgba(255, 178, 42, 0.32),
+      inset 0 0 28px rgba(255, 178, 42, 0.16);
   }
 }

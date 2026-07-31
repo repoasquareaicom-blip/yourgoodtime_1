@@ -1,5 +1,11 @@
 import api from './api'
 
+export async function fetchActiveFutureProduct() {
+  const response = await api.get('/prediction-products/future/active')
+
+  return response.data?.product
+}
+
 export async function fetchFutureAccess({ predictionRequestId, requestUuid }) {
   const response = await api.get('/predictions/future-access', {
     params: {

@@ -152,17 +152,6 @@ function PredictionPlayer({
       return
     }
 
-    if (requireFeedbackOnFinish && !hasSubmittedFeedback) {
-      videoRef.current?.pause()
-      setState((current) => ({
-        ...current,
-        playerState: playerStates.COMPLETED,
-        feedbackOpen: true,
-        completedGroupIndexes: Array.from(new Set([...current.completedGroupIndexes, current.currentGroupIndex])),
-      }))
-      return
-    }
-
     if (requireFeedbackOnFinish && hasSubmittedFeedback) {
       onComplete?.()
       return
@@ -365,12 +354,19 @@ function PredictionPlayer({
             </div>
           ) : null}
 
-          {isCompleted && !requireFeedbackOnFinish ? (
+          {isCompleted ? (
             <div className="prediction-player__complete">
               <span className="prediction-player__complete-ring" aria-hidden="true" />
               <h2>{completionTitle}</h2>
-              <p>Thank you for experiencing your journey with Your Good Time.</p>
+              <p>
+                {hasSubmittedFeedback
+                  ? 'Thank you for sharing your feedback about this prediction.'
+                  : 'Would you like to rate this prediction before returning to your personal dashboard?'}
+              </p>
               <div className="prediction-player__actions">
+                {!hasSubmittedFeedback ? (
+                  <button type="button" onClick={openFeedback}>Rate This Prediction</button>
+                ) : null}
                 <button type="button" onClick={onComplete || onClose}>Back to Home</button>
               </div>
             </div>

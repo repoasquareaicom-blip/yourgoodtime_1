@@ -17,12 +17,12 @@ class PredictionTimelineGenerator
     /**
      * @return array{effective_year:int,from_year:int,to_year:int,year_sessions:array<int, PredictionYearSession>,configured_years:int,candidate_years:int,processed_years:int,excluded_age_count:int,minimum_supported_age:int,maximum_supported_age:int,status:string}
      */
-    public function generate(string $predictionType, CarbonInterface $predictionDate, ?CarbonInterface $birthDate): array
+    public function generate(string $predictionType, CarbonInterface $predictionDate, ?CarbonInterface $birthDate, ?int $futureStartYear = null, ?int $futureYearCount = null): array
     {
         $effectiveYear = (int) $predictionDate->format('Y');
         $configuredYears = $predictionType === 'past'
             ? $this->predictionConfig->pastYears()
-            : $this->predictionConfig->futureYears();
+            : ($futureYearCount ?? $this->predictionConfig->futureYears());
         $ageLimits = $this->predictionConfig->ageLimits($predictionType);
         $sessions = [];
 
@@ -45,15 +45,18 @@ class PredictionTimelineGenerator
         $currentAge = $this->ageResolver->calculateAge($birthDate, $predictionDate);
         $candidateRows = [];
 
+        $startFutureYear = $futureStartYear ?? ($effectiveYear + 1);
+
         for ($index = 0; $index < $configuredYears; $index++) {
+            $futureYear = $startFutureYear + $index;
             $candidateRows[] = [
                 'index' => $index,
                 'age' => $predictionType === 'past'
                     ? $currentAge - $index
-                    : $currentAge + 1 + $index,
+                    : $currentAge + ($futureYear - $effectiveYear),
                 'year' => $predictionType === 'past'
                     ? $effectiveYear - $index
-                    : $effectiveYear + 1 + $index,
+                    : $futureYear,
             ];
         }
 

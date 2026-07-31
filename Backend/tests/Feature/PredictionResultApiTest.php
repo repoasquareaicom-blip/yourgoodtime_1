@@ -262,6 +262,46 @@ class PredictionResultApiTest extends TestCase
             ->assertJsonPath('data.identity_video.video_id', 'stored-identity');
     }
 
+    public function test_future_stored_result_can_be_loaded_for_selected_entitlement_only(): void
+    {
+        $predictionRequest = $this->predictionRequest14();
+        $firstEntitlement = $this->activeFutureEntitlement($predictionRequest);
+        $secondEntitlement = $this->activeFutureEntitlementForYears($predictionRequest, 2032, 2036);
+
+        foreach ([[$firstEntitlement, 'FIRST_FUTURE'], [$secondEntitlement, 'SECOND_FUTURE']] as [$entitlement, $videoId]) {
+            PredictionResult::query()->create([
+                'prediction_request_id' => $predictionRequest->id,
+                'prediction_entitlement_id' => $entitlement->id,
+                'prediction_type' => 'future',
+                'identity_video_id' => 'future-identity',
+                'result_payload' => [
+                    'prediction_request_id' => $predictionRequest->id,
+                    'type' => 'future',
+                    'identity_video' => ['video_id' => 'future-identity'],
+                    'prediction_videos' => [
+                        ['system_year' => $entitlement->access_start_year, 'video_ids' => [$videoId]],
+                    ],
+                    'summary' => [],
+                    'warnings' => [],
+                ],
+                'summary_payload' => [],
+                'warnings_payload' => [],
+                'status' => 'completed',
+                'generated_at' => now(),
+            ]);
+        }
+
+        $this->getJson(sprintf(
+            '/api/predictions/%d/result?type=future&request_uuid=%s&entitlement_id=%d',
+            $predictionRequest->id,
+            $predictionRequest->request_uuid,
+            $secondEntitlement->id
+        ))
+            ->assertOk()
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', 'SECOND_FUTURE')
+            ->assertJsonMissingPath('data.result_ids');
+    }
+
     public function test_another_request_cannot_retrieve_stored_result(): void
     {
         $predictionRequest = $this->predictionRequest14();
@@ -458,6 +498,46 @@ class PredictionResultApiTest extends TestCase
             'prediction_type' => 'future',
             'access_start_year' => 2027,
             'access_end_year' => 2031,
+            'starts_at' => now(),
+            'expires_at' => now()->addYears(5),
+            'status' => 'ACTIVE',
+        ]);
+    }
+
+    private function activeFutureEntitlementForYears(PredictionRequest $predictionRequest, int $startYear, int $endYear): PredictionEntitlement
+    {
+        $product = PredictionProduct::query()->first()
+            ?? PredictionProduct::query()->create([
+                'code' => 'FUTURE_PREDICTION',
+                'name' => 'Future Prediction',
+                'prediction_type' => 'future',
+                'price_inclusive_tax_minor' => 60000,
+                'currency' => 'INR',
+                'tax_inclusive' => true,
+                'is_active' => true,
+            ]);
+
+        $transaction = PaymentTransaction::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'product_id' => $product->id,
+            'provider' => 'razorpay',
+            'currency' => 'INR',
+            'amount_minor' => 60000,
+            'tax_inclusive' => true,
+            'status' => 'CAPTURED',
+            'provider_order_id' => 'order_test_future_'.$predictionRequest->id.'_'.$startYear,
+            'provider_payment_id' => 'pay_test_future_'.$predictionRequest->id.'_'.$startYear,
+            'paid_at' => now(),
+            'verified_at' => now(),
+        ]);
+
+        return PredictionEntitlement::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'product_id' => $product->id,
+            'payment_transaction_id' => $transaction->id,
+            'prediction_type' => 'future',
+            'access_start_year' => $startYear,
+            'access_end_year' => $endYear,
             'starts_at' => now(),
             'expires_at' => now()->addYears(5),
             'status' => 'ACTIVE',

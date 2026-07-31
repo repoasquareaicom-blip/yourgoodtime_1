@@ -40,6 +40,15 @@
   transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
 }
 
+.auth-shell-card {
+  position: relative;
+  width: min(420px, 100%);
+}
+
+.auth-shell-card .auth-card {
+  width: 100%;
+}
+
 .auth-card::before {
   content: "";
   position: absolute;
@@ -418,11 +427,14 @@
 }
 
 .auth-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: space-between;
   gap: 10px;
   margin-top: 16px;
 }
+
 
 .auth-link {
   border: none;

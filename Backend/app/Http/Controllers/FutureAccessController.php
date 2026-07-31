@@ -33,23 +33,30 @@ class FutureAccessController extends Controller
             ], 403);
         }
 
+        $user = $request->user();
         $product = $accessService->activeProduct();
-        $entitlement = $accessService->activeEntitlement($predictionRequest);
-        $futureResult = $entitlement === null
-            ? null
-            : PredictionResult::query()
-                ->where('prediction_request_id', $predictionRequest->id)
-                ->where('prediction_type', 'future')
-                ->where('status', 'completed')
-                ->first();
+        $purchasedEntitlements = $accessService->purchasedEntitlements($user);
+        $purchasedBlocks = $purchasedEntitlements
+            ->map(fn ($entitlement) => $accessService->purchasedBlockPayload($entitlement))
+            ->values();
+        $nextPurchase = $accessService->nextPurchaseBlock($user, $predictionRequest);
+        $futureResult = PredictionResult::query()
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('prediction_type', 'future')
+            ->where('status', 'completed')
+            ->first();
+        $hasPurchasedFuture = $purchasedEntitlements->isNotEmpty();
 
         return response()->json([
             'success' => true,
-            'future_prediction_enabled' => $entitlement !== null,
+            'has_purchased_future' => $hasPurchasedFuture,
+            'purchased_blocks' => $purchasedBlocks,
+            'next_purchase' => $nextPurchase,
+            'future_prediction_enabled' => $hasPurchasedFuture,
             'future_result_ready' => $futureResult !== null,
             'future_result_id' => $futureResult?->id,
-            'can_purchase' => $entitlement === null && $product !== null,
-            'entitlement' => $accessService->entitlementPayload($entitlement),
+            'can_purchase' => $product !== null && (bool) $nextPurchase['can_purchase'],
+            'entitlement' => $accessService->entitlementPayload($purchasedEntitlements->last()),
             'product' => $accessService->productPayload($product),
         ]);
     }

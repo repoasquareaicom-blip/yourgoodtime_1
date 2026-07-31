@@ -2,6 +2,11 @@
   position: relative;
   z-index: 40;
   width: 100%;
+  transition: margin-bottom 180ms ease;
+}
+
+.place-autocomplete.is-open {
+  margin-bottom: min(334px, 48svh);
 }
 
 .place-autocomplete__field {
@@ -231,6 +236,10 @@
   .place-autocomplete__panel {
     max-height: 240px;
     border-radius: 17px;
+  }
+
+  .place-autocomplete.is-open {
+    margin-bottom: 250px;
   }
 
   .place-autocomplete__option {

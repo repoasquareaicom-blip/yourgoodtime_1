@@ -2,6 +2,16 @@
   min-height: 100svh;
 }
 
+.auth-route-loading {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  background: #fff4df;
+  color: #173466;
+  font-family: "Segoe UI", sans-serif;
+  font-weight: 900;
+}
+
 .page {
   min-height: 100svh;
   display: grid;

@@ -113,6 +113,212 @@
     0 12px 28px rgba(255, 126, 0, 0.34);
 }
 
+.home-hero-auth-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 58%;
+  z-index: 95;
+}
+
+.home-profile-trigger {
+  position: relative;
+  z-index: 96;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 238px;
+  border: 1px solid rgba(255, 185, 64, 0.46);
+  border-radius: 999px;
+  padding: 6px 10px 6px 6px;
+  background: rgba(255, 248, 232, 0.82);
+  color: #4d2c08;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 12px 28px rgba(124, 73, 10, 0.14);
+  backdrop-filter: blur(14px) saturate(1.06);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.home-profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffbf48, #ff7a00);
+  color: #fff8e8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 8px 18px rgba(255, 126, 0, 0.28);
+  font-size: 1.05rem;
+  font-weight: 950;
+}
+
+.home-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.home-profile-copy {
+  display: grid;
+  min-width: 0;
+  text-align: left;
+  line-height: 1.1;
+}
+
+.home-profile-copy span {
+  color: #8d570d;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.home-profile-copy strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #3b2207;
+  font-size: 0.96rem;
+  font-weight: 950;
+}
+
+.home-profile-caret {
+  color: #a14900;
+  font-size: 0.66rem;
+  font-weight: 900;
+  transition: transform 180ms ease;
+}
+
+.home-profile-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.home-profile-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 120;
+  display: grid;
+  width: 232px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 193, 87, 0.46);
+  border-radius: 18px;
+  padding: 7px;
+  background: rgba(255, 250, 239, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 22px 54px rgba(62, 30, 6, 0.24);
+  backdrop-filter: blur(18px) saturate(1.05);
+  animation: homeProfileMenuIn 160ms ease-out both;
+}
+
+.home-profile-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  background: rgba(18, 9, 4, 0.18);
+}
+
+.home-profile-menu button {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #432707;
+  padding: 12px 13px;
+  text-align: left;
+  font-size: 0.92rem;
+  font-weight: 850;
+}
+
+.home-profile-menu button:hover,
+.home-profile-menu button:focus-visible {
+  background: linear-gradient(135deg, rgba(255, 190, 76, 0.2), rgba(255, 122, 0, 0.12));
+  outline: none;
+}
+
+.home-profile-menu button.is-logout {
+  color: #a43e05;
+}
+
+.home-logout-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  box-sizing: border-box;
+  background: rgba(18, 9, 4, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.home-logout-dialog {
+  width: min(360px, 100%);
+  max-width: calc(100vw - 32px);
+  border: 1px solid rgba(255, 204, 112, 0.54);
+  border-radius: 22px;
+  padding: 24px;
+  background: linear-gradient(180deg, #fff8e8, #fff0ce);
+  color: #402407;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  animation: homeProfileMenuIn 180ms ease-out both;
+  outline: none;
+}
+
+.home-logout-dialog h2 {
+  margin: 0 0 8px;
+  color: #2f1b05;
+  font-size: 1.35rem;
+}
+
+.home-logout-dialog p {
+  margin: 0;
+  color: #7b4b0d;
+  line-height: 1.45;
+}
+
+.home-logout-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.home-logout-dialog-actions button {
+  border: 1px solid rgba(160, 94, 14, 0.2);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.64);
+  color: #5d3508;
+  font-weight: 900;
+}
+
+.home-logout-dialog-actions button.is-danger {
+  border-color: rgba(255, 122, 0, 0.52);
+  background: linear-gradient(135deg, #ffb22a, #ff7a00);
+  color: #fff;
+}
+
+@keyframes homeProfileMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .home-hero-title {
   padding: 14px 2px 10px;
   display: grid;
@@ -979,6 +1185,175 @@
   outline-offset: 2px;
 }
 
+.temple-remedy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 360;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(10, 18, 34, 0.68);
+  backdrop-filter: blur(12px);
+}
+
+.temple-remedy-panel {
+  position: relative;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 42px));
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(255, 207, 124, 0.44);
+  border-radius: 18px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 190, 72, 0.22), transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(255, 246, 231, 0.98));
+  color: #173466;
+  text-align: left;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
+}
+
+.temple-login-panel {
+  width: min(430px, calc(100vw - 32px));
+  justify-items: center;
+  text-align: center;
+}
+
+.temple-login-panel h2 {
+  padding-right: 0;
+}
+
+.temple-remedy-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(211, 176, 111, 0.56);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #173466;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.temple-remedy-kicker {
+  color: #d28013;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.temple-remedy-panel h2,
+.temple-remedy-panel p {
+  margin: 0;
+}
+
+.temple-remedy-panel h2 {
+  max-width: 420px;
+  padding-right: 34px;
+  color: #173466;
+  font-size: clamp(1.45rem, 4vw, 2rem);
+  line-height: 1.1;
+}
+
+.temple-remedy-panel > p {
+  color: #5c677b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.temple-remedy-panel label {
+  display: grid;
+  gap: 8px;
+  color: #173466;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.temple-remedy-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid rgba(213, 185, 128, 0.74);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #173466;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  outline: none;
+}
+
+.temple-remedy-panel textarea:focus {
+  border-color: rgba(241, 132, 0, 0.82);
+  box-shadow: 0 0 0 3px rgba(241, 132, 0, 0.14);
+}
+
+.temple-remedy-meta,
+.temple-remedy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.temple-remedy-meta {
+  color: #6f7890;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.temple-remedy-meta strong {
+  color: #d28013;
+}
+
+.temple-remedy-success,
+.temple-remedy-error {
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.temple-remedy-success {
+  background: rgba(65, 164, 83, 0.12);
+  color: #287338;
+}
+
+.temple-remedy-error {
+  background: rgba(202, 62, 42, 0.12);
+  color: #a53224;
+}
+
+.temple-remedy-actions button {
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 188, 82, 0.7);
+  background: linear-gradient(180deg, #ffba3c, #f58900);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.temple-remedy-actions button + button {
+  background: rgba(255, 255, 255, 0.72);
+  color: #173466;
+}
+
+.temple-remedy-actions button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .btn-shine {
   position: absolute;
   top: -55%;
@@ -1210,6 +1585,16 @@
     grid-column: 3;
     justify-self: end;
     padding: 10px 22px;
+  }
+
+  .home-hero-auth-actions {
+    grid-column: 3;
+    justify-self: end;
+    max-width: none;
+  }
+
+  .home-profile-trigger {
+    max-width: 260px;
   }
 
   .home-footer-nav {
@@ -1600,6 +1985,113 @@
   .home-social-panel button {
     font-size: 0.72rem;
     padding: 9px 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .home-hero-header {
+    gap: 8px;
+  }
+
+  .home-hero-brand {
+    min-width: 0;
+  }
+
+  .home-hero-brand-copy {
+    min-width: 0;
+  }
+
+  .home-hero-brand-copy h1,
+  .home-hero-brand-copy p {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .home-hero-auth-actions {
+    flex: 0 0 auto;
+    max-width: none;
+    min-width: 48px;
+  }
+
+  .home-profile-trigger {
+    grid-template-columns: 42px;
+    min-width: 48px;
+    min-height: 48px;
+    max-width: 48px;
+    padding: 3px;
+    border-radius: 999px;
+  }
+
+  .home-profile-avatar {
+    width: 42px;
+    height: 42px;
+  }
+
+  .home-profile-copy,
+  .home-profile-caret {
+    display: none;
+  }
+
+  .home-profile-menu.is-mobile-sheet {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 240;
+    width: auto;
+    max-height: min(460px, calc(100svh - 128px));
+    overflow-y: auto;
+    border-radius: 22px;
+    padding: 10px;
+    -webkit-overflow-scrolling: touch;
+    animation-name: homeProfileSheetIn;
+  }
+
+  .home-profile-menu.is-mobile-sheet button {
+    min-height: 48px;
+    padding: 14px 15px;
+    font-size: 1rem;
+  }
+
+  .home-logout-dialog {
+    width: min(380px, 100%);
+    padding: 22px;
+  }
+
+  .home-logout-dialog-actions {
+    gap: 12px;
+  }
+
+  .home-logout-dialog-actions button {
+    min-height: 46px;
+    flex: 1;
+  }
+}
+
+.home-hero-header,
+.daily-page .home-hero-header,
+.account-page .home-hero-header,
+.settings-page .home-hero-header,
+.video-library-page .home-hero-header {
+  z-index: 180;
+}
+
+.home-profile-menu {
+  z-index: 220;
+}
+
+@keyframes homeProfileSheetIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

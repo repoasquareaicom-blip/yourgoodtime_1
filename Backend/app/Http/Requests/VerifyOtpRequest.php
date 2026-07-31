@@ -17,6 +17,7 @@ class VerifyOtpRequest extends FormRequest
             'email' => ['required', 'email', 'max:254'],
             'otp' => ['required', 'regex:/^\d{6}$/'],
             'purpose' => ['required', 'string', 'in:login,signup,email_verification,password_reset'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ];
     }
 }

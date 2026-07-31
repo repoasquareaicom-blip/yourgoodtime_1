@@ -33,6 +33,17 @@ class OtpMailGatewayClient extends BaseService
             'email' => $this->otpMailService->maskEmail($email),
         ]);
 
+        if (app()->environment('local') && (bool) config('services.mail_gateway.use_local_mailer', true)) {
+            Log::info('Using local mailer for OTP delivery.', [
+                'email' => $this->otpMailService->maskEmail($email),
+                'purpose' => $purpose,
+            ]);
+
+            $this->otpMailService->send($email, $otp, $expiresMinutes, $purpose);
+
+            return;
+        }
+
         if ($url === '') {
             throw new MailGatewayException('Mail gateway URL is not configured.');
         }

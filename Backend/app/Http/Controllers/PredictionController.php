@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PredictionRequest;
 use App\Models\PredictionResult;
+use App\Models\PredictionEntitlement;
 use App\Services\AstrologyApiService;
 use App\Services\FuturePredictionAccessService;
 use App\Services\PredictionCacheService;
@@ -31,6 +32,7 @@ class PredictionController extends Controller
             'id' => ['required', 'integer'],
             'type' => ['required', 'string', 'in:past,future'],
             'request_uuid' => ['nullable', 'uuid'],
+            'entitlement_id' => ['nullable', 'integer'],
         ]);
 
         if ($validator->fails()) {
@@ -56,7 +58,7 @@ class PredictionController extends Controller
         }
 
         $futureEntitlement = $validated['type'] === 'future'
-            ? $futurePredictionAccessService->activeEntitlement($predictionRequest)
+            ? $this->futureEntitlementForGeneration($predictionRequest, $validated['entitlement_id'] ?? null, $request)
             : null;
 
         if ($validated['type'] === 'future' && $futureEntitlement === null) {
@@ -66,7 +68,7 @@ class PredictionController extends Controller
             ], 403);
         }
 
-        $storedResult = $this->completedStoredResult($predictionRequest, $validated['type']);
+        $storedResult = $this->completedStoredResult($predictionRequest, $validated['type'], $futureEntitlement);
 
         if ($storedResult !== null) {
             return $this->storedResultResponse($storedResult, 'Prediction result loaded successfully.');
@@ -75,7 +77,8 @@ class PredictionController extends Controller
         try {
             $timeline = $predictionEngineService->preparePredictionTimeline(
                 $predictionRequest->id,
-                $validated['type']
+                $validated['type'],
+                $futureEntitlement
             );
             $result = $predictionResponseBuilder->buildTimeline($timeline);
             $warnings = $this->predictionWarnings($result['prediction_videos'] ?? []);
@@ -95,7 +98,7 @@ class PredictionController extends Controller
 
             return $this->storedResultResponse($storedResult, 'Prediction result generated successfully.');
         } catch (Throwable $exception) {
-            $this->persistFailedResult($predictionRequest, $validated['type']);
+            $this->persistFailedResult($predictionRequest, $validated['type'], $futureEntitlement);
 
             Log::error('Prediction result generation failed.', [
                 'prediction_request_id' => $predictionRequest->id,
@@ -116,6 +119,7 @@ class PredictionController extends Controller
             'id' => ['required', 'integer'],
             'type' => ['required', 'string', 'in:past,future'],
             'request_uuid' => ['required', 'uuid'],
+            'entitlement_id' => ['nullable', 'integer'],
         ]);
 
         if ($validator->fails()) {
@@ -138,6 +142,29 @@ class PredictionController extends Controller
 
         if (! $this->requestUuidIsAuthorized($predictionRequest, $validated['request_uuid'])) {
             return $this->unauthorizedResultResponse();
+        }
+
+        if ($validated['type'] === 'future') {
+            if (isset($validated['entitlement_id'])) {
+                $entitlement = $this->futureEntitlementForGeneration($predictionRequest, (int) $validated['entitlement_id'], $request);
+
+                if ($entitlement === null) {
+                    return $this->unauthorizedResultResponse();
+                }
+
+                $storedResult = $this->completedStoredResult($predictionRequest, 'future', $entitlement);
+
+                if ($storedResult === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Stored prediction result not found.',
+                    ], 404);
+                }
+
+                return $this->storedResultResponse($storedResult, 'Prediction result loaded successfully.');
+            }
+
+            return $this->combinedFutureResultResponse($predictionRequest);
         }
 
         $storedResult = $this->completedStoredResult($predictionRequest, $validated['type']);
@@ -312,6 +339,7 @@ class PredictionController extends Controller
 
             return response()->json([
                 'success' => true,
+                'prediction_request_id' => $predictionRequest->id,
                 'request_uuid' => $predictionRequest->request_uuid,
                 'status' => $predictionRequest->status,
                 'message' => 'Past prediction request submitted successfully.',
@@ -373,8 +401,8 @@ class PredictionController extends Controller
     {
         return response()->json([
             'success' => false,
-            'code' => 'ALREADY_REGISTERED',
-            'message' => 'This email is already registered.',
+            'code' => 'EMAIL_ALREADY_REGISTERED',
+            'message' => 'This email is already registered. Please log in to continue.',
         ], 409);
     }
 
@@ -401,22 +429,115 @@ class PredictionController extends Controller
         )));
     }
 
-    private function completedStoredResult(PredictionRequest $predictionRequest, string $predictionType): ?PredictionResult
+    private function futureEntitlementForGeneration(PredictionRequest $predictionRequest, ?int $entitlementId = null, ?Request $request = null): ?PredictionEntitlement
     {
-        return PredictionResult::query()
+        if ($entitlementId !== null) {
+            $currentYear = (int) now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
+            $query = PredictionEntitlement::query()
+                ->whereKey($entitlementId)
+                ->where('prediction_request_id', $predictionRequest->id)
+                ->where('prediction_type', 'future')
+                ->where('status', 'ACTIVE')
+                ->where('access_end_year', '>', $currentYear);
+
+            if ($request?->user() !== null) {
+                $query->where('user_id', $request->user()->id);
+            }
+
+            return $query->first();
+        }
+
+        $baseQuery = PredictionEntitlement::query()
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('prediction_type', 'future')
+            ->where('status', 'ACTIVE')
+            ->orderBy('access_start_year');
+
+        $missingResult = (clone $baseQuery)
+            ->whereNull('generated_prediction_result_id')
+            ->first();
+
+        return $missingResult ?? (clone $baseQuery)->latest('access_end_year')->first();
+    }
+
+    private function combinedFutureResultResponse(PredictionRequest $predictionRequest): JsonResponse
+    {
+        $results = PredictionResult::query()
+            ->with('predictionRequest')
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('prediction_type', 'future')
+            ->where('status', 'completed')
+            ->whereNotNull('prediction_entitlement_id')
+            ->get()
+            ->sortBy(function (PredictionResult $result): int {
+                return (int) (PredictionEntitlement::query()->whereKey($result->prediction_entitlement_id)->value('access_start_year') ?? 0);
+            })
+            ->values();
+
+        if ($results->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Stored prediction result not found.',
+            ], 404);
+        }
+
+        $firstPayload = $results->first()->result_payload ?: [];
+        $predictionVideos = $results
+            ->flatMap(fn (PredictionResult $result) => $result->result_payload['prediction_videos'] ?? [])
+            ->sortBy(fn (array $group): int => (int) ($group['system_year_from'] ?? $group['system_year'] ?? 0))
+            ->values()
+            ->all();
+
+        $payload = [
+            'prediction_request_id' => $predictionRequest->id,
+            'type' => 'future',
+            'prediction_type' => 'future',
+            'identity_video' => $firstPayload['identity_video'] ?? null,
+            'prediction_videos' => $predictionVideos,
+            'summary' => [
+                'total_blocks' => $results->count(),
+                'grouped_result_count' => count($predictionVideos),
+            ],
+            'result_id' => $results->last()->id,
+            'result_ids' => $results->pluck('id')->all(),
+            'status' => 'completed',
+            'generated_at' => optional($results->last()->generated_at)->toJSON(),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Prediction result loaded successfully.',
+            'data' => $payload,
+        ]);
+    }
+
+    private function completedStoredResult(PredictionRequest $predictionRequest, string $predictionType, ?PredictionEntitlement $entitlement = null): ?PredictionResult
+    {
+        $query = PredictionResult::query()
             ->where('prediction_request_id', $predictionRequest->id)
             ->where('prediction_type', $predictionType)
-            ->where('status', 'completed')
-            ->first();
+            ->where('status', 'completed');
+
+        if ($predictionType === 'future' && $entitlement !== null) {
+            $query->where('prediction_entitlement_id', $entitlement->id);
+        }
+
+        return $query->first();
     }
 
     private function persistResult(PredictionRequest $predictionRequest, string $predictionType, array $payload, mixed $entitlement = null): PredictionResult
     {
+        $identity = [
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => $predictionType,
+        ];
+
+        if ($predictionType === 'future' && $entitlement !== null) {
+            $identity['prediction_entitlement_id'] = $entitlement->id;
+        }
+
         return PredictionResult::query()->updateOrCreate(
-            [
-                'prediction_request_id' => $predictionRequest->id,
-                'prediction_type' => $predictionType,
-            ],
+            $identity,
             [
                 'user_id' => $entitlement?->user_id,
                 'prediction_entitlement_id' => $entitlement?->id,
@@ -430,13 +551,19 @@ class PredictionController extends Controller
         );
     }
 
-    private function persistFailedResult(PredictionRequest $predictionRequest, string $predictionType): void
+    private function persistFailedResult(PredictionRequest $predictionRequest, string $predictionType, mixed $entitlement = null): void
     {
+        $identity = [
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => $predictionType,
+        ];
+
+        if ($predictionType === 'future' && $entitlement !== null) {
+            $identity['prediction_entitlement_id'] = $entitlement->id;
+        }
+
         PredictionResult::query()->updateOrCreate(
-            [
-                'prediction_request_id' => $predictionRequest->id,
-                'prediction_type' => $predictionType,
-            ],
+            $identity,
             [
                 'identity_video_id' => null,
                 'result_payload' => [],

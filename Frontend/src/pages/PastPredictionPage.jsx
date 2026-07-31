@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import ActionModal from '../components/common/ActionModal'
 import PastPredictionProcessing, { predictionStageSequence } from '../components/common/PastPredictionProcessing'
 import PredictionPlayer from '../components/common/PredictionPlayer'
-import PlaceAutocomplete from '../components/common/PlaceAutocomplete'
-import { logout as logoutUser, sendOtp, verifyOtp } from '../services/authService'
+import PredictionRegistrationForm from '../components/common/PredictionRegistrationForm'
+import { logout as logoutUser, sendOtp, validateOtp, verifyOtp } from '../services/authService'
 import { submitPastPrediction } from '../services/astrologyApi'
 import {
   buildPredictionPlaylist,
@@ -29,9 +29,10 @@ import templeImage from '../assets/temple-transparent.png'
 import './PastPredictionPage.css'
 
 const emptyOtp = ['', '', '', '', '', '']
-const resendSeconds = 30
+const resendSeconds = 180
 const otpSentDelay = 520
 const otpVerifiedDelay = 720
+const pendingPredictionActionKey = 'ygt-pending-prediction-action'
 const startupStates = {
   LOADING_SESSION: 'LOADING_SESSION',
   RETURNING_USER_PROMPT: 'RETURNING_USER_PROMPT',
@@ -86,6 +87,7 @@ function getErrorMessage(error, fallback) {
   const responseData = error?.response?.data || error?.responseBody || {}
   const messagesByCode = {
     ALREADY_REGISTERED: 'This email is already registered.',
+    EMAIL_ALREADY_REGISTERED: 'This email is already registered. Please log in to continue.',
     INVALID_OTP: 'The OTP you entered is invalid.',
     OTP_EXPIRED: 'The OTP has expired. Please request a new OTP.',
     OTP_ALREADY_USED: 'This OTP has already been used. Please request a new OTP.',
@@ -98,7 +100,30 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
-function PastPredictionPage({ forceModal = false, onClose }) {
+function loadPendingPredictionAction(expectedIntent) {
+  try {
+    const pendingAction = JSON.parse(window.sessionStorage.getItem(pendingPredictionActionKey) || 'null')
+    const expectedAction = expectedIntent === 'future' ? 'GET_FUTURE_PREDICTION' : 'GET_PAST_PREDICTION'
+
+    if (pendingAction?.action !== expectedAction || !pendingAction?.birth_details) {
+      return null
+    }
+
+    return pendingAction
+  } catch {
+    return null
+  }
+}
+
+function clearPendingPredictionAction() {
+  try {
+    window.sessionStorage.removeItem(pendingPredictionActionKey)
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'past' }) {
   const navigate = useNavigate()
   const location = useLocation()
   const otpRefs = useRef([])
@@ -109,15 +134,28 @@ function PastPredictionPage({ forceModal = false, onClose }) {
   const flowTimerRef = useRef(null)
   const predictionTimersRef = useRef([])
   const isModal = forceModal || Boolean(location.state?.backgroundLocation)
+  const normalizedPredictionIntent = predictionIntent === 'future' ? 'future' : 'past'
+  const isFutureIntent = normalizedPredictionIntent === 'future'
+  const pendingPredictionActionRef = useRef(loadPendingPredictionAction(normalizedPredictionIntent))
+  const pendingBirthDetails = pendingPredictionActionRef.current?.birth_details || {}
   const [authFlowStage, setAuthFlowStage] = useState('email')
-  const [fullName, setFullName] = useState('')
-  const [dateOfBirth, setDateOfBirth] = useState('')
-  const [timeOfBirth, setTimeOfBirth] = useState('')
-  const [placeOfBirth, setPlaceOfBirth] = useState('')
-  const [placeOfBirthDetails, setPlaceOfBirthDetails] = useState(null)
-  const [marriageStatus, setMarriageStatus] = useState('')
-  const [email, setEmail] = useState(getUser()?.email || '')
+  const [fullName, setFullName] = useState(pendingBirthDetails.full_name || '')
+  const [dateOfBirth, setDateOfBirth] = useState(pendingBirthDetails.date_of_birth || '')
+  const [timeOfBirth, setTimeOfBirth] = useState(pendingBirthDetails.time_of_birth || '')
+  const [placeOfBirth, setPlaceOfBirth] = useState(pendingBirthDetails.birth_place || pendingBirthDetails.place_of_birth || '')
+  const [placeOfBirthDetails, setPlaceOfBirthDetails] = useState(pendingBirthDetails.place_of_birth_details || (pendingBirthDetails.birth_place && pendingBirthDetails.latitude && pendingBirthDetails.longitude ? {
+    place_name: pendingBirthDetails.birth_place,
+    latitude: pendingBirthDetails.latitude,
+    longitude: pendingBirthDetails.longitude,
+    timezone: pendingBirthDetails.timezone,
+    country_code: pendingBirthDetails.country_code,
+    country: pendingBirthDetails.country,
+  } : null))
+  const [marriageStatus, setMarriageStatus] = useState(pendingBirthDetails.marriage_status || '')
+  const [email, setEmail] = useState(pendingBirthDetails.email || getUser()?.email || '')
   const [otp, setOtp] = useState(emptyOtp)
+  const [registrationPassword, setRegistrationPassword] = useState('')
+  const [registrationPasswordConfirmation, setRegistrationPasswordConfirmation] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -152,9 +190,10 @@ function PastPredictionPage({ forceModal = false, onClose }) {
   const isReturningUserPrompt = startupState === startupStates.RETURNING_USER_PROMPT
   const isLoadingExistingResult = startupState === startupStates.LOADING_EXISTING_RESULT
   const isEmailStage = startupState === startupStates.NEW_PREDICTION_FORM && (authFlowStage === 'email' || authFlowStage === 'sendingOtp' || authFlowStage === 'error')
-  const isOtpStage = authFlowStage === 'otpSent' || authFlowStage === 'verifyingOtp' || authFlowStage === 'otpVerified'
+  const isOtpStage = authFlowStage === 'otpSent' || authFlowStage === 'passwordSetup' || authFlowStage === 'verifyingOtp' || authFlowStage === 'otpVerified'
   const isPreparingPrediction = authFlowStage === 'preparingPrediction'
-  const isPredictionReady = authFlowStage === 'predictionReady'
+  const isPredictionReady = authFlowStage === 'predictionReady' && !isFutureIntent
+  const isExistingEmailError = error === 'This email is already registered. Please log in to continue.'
   const gender = ''
 
   useEffect(() => () => {
@@ -208,7 +247,6 @@ function PastPredictionPage({ forceModal = false, onClose }) {
           otpVerified: Boolean(status.otp_verified),
         }
 
-        setReturningSession(session)
         setPredictionRequestAccess({
           predictionRequestId: session.predictionRequestId,
           requestUuid: session.requestUuid,
@@ -216,6 +254,17 @@ function PastPredictionPage({ forceModal = false, onClose }) {
         setFullName(status.name || storedPrediction.fullName || '')
         setEmail('')
         setPreparationStatus(status.result_ready ? 'READY' : 'OTP_VERIFIED')
+
+        if (isFutureIntent) {
+          setStartupState(startupStates.READY)
+          loadFutureOffer({
+            predictionRequestId: session.predictionRequestId,
+            requestUuid: session.requestUuid,
+          })
+          return
+        }
+
+        setReturningSession(session)
         setStartupState(startupStates.RETURNING_USER_PROMPT)
       })
       .catch((sessionError) => {
@@ -226,7 +275,7 @@ function PastPredictionPage({ forceModal = false, onClose }) {
       })
 
     return () => controller.abort()
-  }, [])
+  }, [isFutureIntent])
 
   useEffect(() => {
     if (!isOtpStage || resendCountdown <= 0) return undefined
@@ -264,7 +313,7 @@ function PastPredictionPage({ forceModal = false, onClose }) {
       email,
       requestUuid,
       predictionRequestId,
-      predictionType: 'past',
+      predictionType: normalizedPredictionIntent,
       otpVerified: status === 'verified' || status === 'ready',
       resultReady: status === 'ready',
       status,
@@ -288,6 +337,8 @@ function PastPredictionPage({ forceModal = false, onClose }) {
     setFutureResult(null)
     setFuturePlaylist([])
     setOtp(emptyOtp)
+    setRegistrationPassword('')
+    setRegistrationPasswordConfirmation('')
     setResendCountdown(0)
     setError('')
     setMessage('')
@@ -417,6 +468,11 @@ function PastPredictionPage({ forceModal = false, onClose }) {
 
     latestPredictionPayloadRef.current = payload
 
+    if (isLoggedIn()) {
+      await submitPredictionPayload(payload)
+      return
+    }
+
     await sendPastPredictionOtp()
   }
 
@@ -465,6 +521,43 @@ function PastPredictionPage({ forceModal = false, onClose }) {
       return
     }
 
+    if (authFlowStage === 'otpSent') {
+      setIsVerifyingOtp(true)
+      setAuthFlowStage('verifyingOtp')
+      setError('')
+      setMessage('')
+
+      try {
+        await validateOtp({
+          email: email.trim(),
+          otp: otpValue,
+          purpose: 'signup',
+        })
+        setMessage('OTP verified. Create your password to continue.')
+        setAuthFlowStage('passwordSetup')
+      } catch (validateError) {
+        setAuthFlowStage('otpSent')
+        setOtp(emptyOtp)
+        setOtpShakeCount((count) => count + 1)
+        setError(getErrorMessage(validateError, 'Invalid or expired OTP. Please try again.'))
+        window.setTimeout(() => otpRefs.current[0]?.focus(), 80)
+      } finally {
+        setIsVerifyingOtp(false)
+      }
+
+      return
+    }
+
+    if (registrationPassword.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+
+    if (registrationPassword !== registrationPasswordConfirmation) {
+      setError('Passwords do not match.')
+      return
+    }
+
     setIsVerifyingOtp(true)
     setAuthFlowStage('verifyingOtp')
     setError('')
@@ -476,6 +569,8 @@ function PastPredictionPage({ forceModal = false, onClose }) {
         email: email.trim(),
         otp: otpValue,
         purpose: 'signup',
+        password: registrationPassword,
+        password_confirmation: registrationPasswordConfirmation,
       })
 
       if (response?.code !== 'REGISTRATION_COMPLETED' || !response?.prediction_request_id) {
@@ -496,15 +591,17 @@ function PastPredictionPage({ forceModal = false, onClose }) {
           savePredictionRequest(response.request_uuid, response.prediction_request_id, 'verified')
         }
 
-        preparePredictionResult({
+        continueAfterAstrologyReady({
           predictionRequestId: response.prediction_request_id,
           requestUuid: response.request_uuid,
         })
       }, otpVerifiedDelay)
     } catch (verifyError) {
       const responseCode = verifyError?.response?.data?.code
-      setAuthFlowStage(responseCode === 'ALREADY_REGISTERED' ? 'email' : 'otpSent')
+      setAuthFlowStage(responseCode === 'ALREADY_REGISTERED' || responseCode === 'EMAIL_ALREADY_REGISTERED' ? 'email' : 'otpSent')
       setOtp(emptyOtp)
+      setRegistrationPassword('')
+      setRegistrationPasswordConfirmation('')
       setOtpShakeCount((count) => count + 1)
       setError(getErrorMessage(verifyError, 'Invalid or expired OTP. Please try again.'))
       window.setTimeout(() => otpRefs.current[0]?.focus(), 80)
@@ -539,6 +636,28 @@ function PastPredictionPage({ forceModal = false, onClose }) {
     } finally {
       setIsSendingOtp(false)
     }
+  }
+
+  const handleExistingEmailLogin = () => {
+    const payload = latestPredictionPayloadRef.current || buildPredictionPayload()
+    if (payload) {
+      try {
+        window.sessionStorage.setItem(pendingPredictionActionKey, JSON.stringify({
+          action: isFutureIntent ? 'GET_FUTURE_PREDICTION' : 'GET_PAST_PREDICTION',
+          source: 'home',
+          requested_at: new Date().toISOString(),
+          birth_details: payload,
+        }))
+      } catch {
+        // The form still keeps the entered values in memory if storage is unavailable.
+      }
+    }
+
+    navigate('/login', {
+      state: {
+        redirectTo: isFutureIntent ? '/future' : '/past-prediction',
+      },
+    })
   }
 
   const handleResendOtp = () => {
@@ -662,8 +781,23 @@ function PastPredictionPage({ forceModal = false, onClose }) {
         runSimulatedPredictionStages(),
       ])
 
-      if (result?.request_uuid) {
+      if (result?.request_uuid && result?.prediction_request_id) {
         savePredictionRequest(result.request_uuid, result.prediction_request_id, 'ready')
+        clearPendingPredictionAction()
+      }
+
+      if (isFutureIntent && result?.request_uuid && result?.prediction_request_id) {
+        setPredictionRequestAccess({
+          predictionRequestId: result.prediction_request_id,
+          requestUuid: result.request_uuid,
+        })
+        setAuthFlowStage('predictionReady')
+        setStartupState(startupStates.READY)
+        await loadFutureOffer({
+          predictionRequestId: result.prediction_request_id,
+          requestUuid: result.request_uuid,
+        })
+        return
       }
 
       setPredictionStage('ready')
@@ -712,6 +846,20 @@ function PastPredictionPage({ forceModal = false, onClose }) {
     if (payload) {
       submitPredictionPayload(payload)
     }
+  }
+
+  const continueAfterAstrologyReady = ({ predictionRequestId, requestUuid }) => {
+    if (isFutureIntent) {
+      setPredictionRequestAccess({ predictionRequestId, requestUuid })
+      savePredictionRequest(requestUuid, predictionRequestId, 'ready')
+      clearPendingPredictionAction()
+      setStartupState(startupStates.READY)
+      setAuthFlowStage('predictionReady')
+      loadFutureOffer({ predictionRequestId, requestUuid })
+      return
+    }
+
+    preparePredictionResult({ predictionRequestId, requestUuid })
   }
 
   const handleBackToForm = () => {
@@ -788,15 +936,17 @@ function PastPredictionPage({ forceModal = false, onClose }) {
     loadFutureOffer()
   }
 
-  const loadFutureOffer = async () => {
-    if (!predictionRequestAccess) return
+  const loadFutureOffer = async (accessOverride = null) => {
+    const accessRequest = accessOverride || predictionRequestAccess
+    if (!accessRequest) return
 
     setIsPlayerOpen(false)
     setCheckoutError('')
     setCheckoutStatus('loading')
+    setPostReadingStage('futureOffer')
 
     try {
-      const access = await fetchFutureAccess(predictionRequestAccess)
+      const access = await fetchFutureAccess(accessRequest)
       setFutureAccess(access)
       setPostReadingStage(access?.future_prediction_enabled ? 'futureReadyConfirm' : 'futureOffer')
       setCheckoutStatus('idle')
@@ -910,6 +1060,26 @@ function PastPredictionPage({ forceModal = false, onClose }) {
       setCheckoutError('Payment could not be completed. No future access has been activated.')
     }
   }
+
+  useEffect(() => {
+    if (
+      startupState !== startupStates.NEW_PREDICTION_FORM
+      || !isLoggedIn()
+      || !pendingPredictionActionRef.current
+      || submissionInFlightRef.current
+      || isSubmittingPrediction
+    ) {
+      return
+    }
+
+    const payload = buildPredictionPayload()
+    if (!payload) return
+
+    pendingPredictionActionRef.current = null
+    submitPredictionPayload(payload)
+    // This effect intentionally consumes the one browser-flow pending action.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startupState, isSubmittingPrediction])
 
   const handleOtpChange = (index, value) => {
     const digit = value.replace(/\D/g, '').slice(-1)
@@ -1050,169 +1220,141 @@ function PastPredictionPage({ forceModal = false, onClose }) {
 
         {isEmailStage ? (
           <>
-            <h1>Get Past Prediction</h1>
+            <h1>{isFutureIntent ? 'Get Future Prediction' : 'Get Past Prediction'}</h1>
             {sessionMessage ? <p className="past-note" role="status">{sessionMessage}</p> : null}
-            <p>{authFlowStage === 'sendingOtp' ? 'Sending your secure OTP...' : 'Share your birth details so we can prepare your personalized past video.'}</p>
+            <p>{authFlowStage === 'sendingOtp' ? 'Sending your secure OTP...' : `Share your birth details so we can prepare your personalized ${isFutureIntent ? 'future checkout' : 'past video'}.`}</p>
             {renderAuthStatusVisual()}
 
-            <form className="past-form" onSubmit={handleBirthSubmit}>
-              <label>
-                Full name
-                <input
-                  type="text"
-                  value={fullName}
-                  disabled={isSendingOtp}
-                  onChange={(event) => {
-                    setFullName(toTitleCase(event.target.value))
-                    setFieldErrors((current) => ({ ...current, full_name: undefined }))
-                    setError('')
-                  }}
-                  placeholder="Full Name"
-                  autoComplete="name"
-                  required
-                />
-                {fieldErrors.full_name ? <span className="past-field-error">{fieldErrors.full_name}</span> : null}
-              </label>
-
-              <label>
-                Email ID
-                <input
-                  ref={emailInputRef}
-                  type="email"
-                  value={email}
-                  disabled={isSendingOtp}
-                  onChange={(event) => {
-                    setEmail(event.target.value)
-                    setFieldErrors((current) => ({ ...current, email: undefined }))
-                    setError('')
-                  }}
-                  placeholder="name@example.com"
-                  autoComplete="email"
-                  required
-                />
-                {fieldErrors.email ? <span className="past-field-error">{fieldErrors.email}</span> : null}
-              </label>
-
-              <div className="past-birth-row">
-                <label>
-                  Date of birth
-                  <input
-                    type="date"
-                    value={dateOfBirth}
-                    disabled={isSendingOtp}
-                    onChange={(event) => {
-                      setDateOfBirth(event.target.value)
-                      setFieldErrors((current) => ({ ...current, date_of_birth: undefined }))
-                      setError('')
-                    }}
-                    required
-                  />
-                  {fieldErrors.date_of_birth ? <span className="past-field-error">{fieldErrors.date_of_birth}</span> : null}
-                </label>
-
-                <label>
-                  Time of birth
-                  <span className="past-field-caption">hh:mm AM/PM</span>
-                  <input
-                    type="time"
-                    value={timeOfBirth}
-                    disabled={isSendingOtp}
-                    onChange={(event) => {
-                      setTimeOfBirth(event.target.value)
-                      setFieldErrors((current) => ({ ...current, time_of_birth: undefined }))
-                      setError('')
-                    }}
-                    required
-                  />
-                  {fieldErrors.time_of_birth ? <span className="past-field-error">{fieldErrors.time_of_birth}</span> : null}
-                </label>
-              </div>
-
-              <label>
-                Marriage status
-                <select
-                  value={marriageStatus}
-                  disabled={isSendingOtp}
-                  onChange={(event) => {
-                    setMarriageStatus(event.target.value)
-                    setFieldErrors((current) => ({ ...current, marriage_status: undefined }))
-                    setError('')
-                  }}
-                  required
-                >
-                  <option value="">Select status</option>
-                  <option value="unmarried">Unmarried</option>
-                  <option value="married">Married</option>
-                </select>
-                {fieldErrors.marriage_status ? <span className="past-field-error">{fieldErrors.marriage_status}</span> : null}
-              </label>
-
-              <label>
-                Place of birth
-                <PlaceAutocomplete
-                  value={placeOfBirth}
-                  onChange={handlePlaceChange}
-                  onSelect={handlePlaceSelect}
-                  disabled={isSendingOtp}
-                  required
-                />
-                {fieldErrors.place_of_birth || fieldErrors.birth_place ? (
-                  <span className="past-field-error">{fieldErrors.place_of_birth || fieldErrors.birth_place}</span>
-                ) : null}
-                {fieldErrors.latitude || fieldErrors.longitude ? (
-                  <span className="past-field-error">{fieldErrors.latitude || fieldErrors.longitude}</span>
-                ) : null}
-                {fieldErrors.timezone ? <span className="past-field-error">{fieldErrors.timezone}</span> : null}
-              </label>
-
-              {error ? <p className="past-error">{error}</p> : null}
-
-              <button type="submit" className="past-submit" disabled={isSubmittingPrediction || isSendingOtp}>
-                {isSendingOtp ? 'Sending OTP...' : isSubmittingPrediction ? 'Submitting...' : 'See My Past'}
-              </button>
-            </form>
+            <PredictionRegistrationForm
+              values={{
+                fullName,
+                email,
+                dateOfBirth,
+                timeOfBirth,
+                marriageStatus,
+                placeOfBirth,
+              }}
+              disabled={isSendingOtp}
+              isSubmitting={isSubmittingPrediction || isSendingOtp}
+              loadingLabel={isSendingOtp ? 'Sending OTP...' : 'Submitting...'}
+              submitLabel={isFutureIntent ? 'Continue to Future' : 'See My Past'}
+              error={error}
+              fieldErrors={fieldErrors}
+              emailInputRef={emailInputRef}
+              onSubmit={handleBirthSubmit}
+              onFieldChange={(field, value) => {
+                if (field === 'fullName') {
+                  setFullName(toTitleCase(value))
+                  setFieldErrors((current) => ({ ...current, full_name: undefined }))
+                }
+                if (field === 'email') {
+                  setEmail(value)
+                  setFieldErrors((current) => ({ ...current, email: undefined }))
+                }
+                if (field === 'dateOfBirth') {
+                  setDateOfBirth(value)
+                  setFieldErrors((current) => ({ ...current, date_of_birth: undefined }))
+                }
+                if (field === 'timeOfBirth') {
+                  setTimeOfBirth(value)
+                  setFieldErrors((current) => ({ ...current, time_of_birth: undefined }))
+                }
+                if (field === 'marriageStatus') {
+                  setMarriageStatus(value)
+                  setFieldErrors((current) => ({ ...current, marriage_status: undefined }))
+                }
+                setError('')
+              }}
+              onPlaceChange={handlePlaceChange}
+              onPlaceSelect={handlePlaceSelect}
+            >
+              {isExistingEmailError ? (
+                <button type="button" className="past-auth-link" onClick={handleExistingEmailLogin}>
+                  Login to continue
+                </button>
+              ) : null}
+            </PredictionRegistrationForm>
           </>
         ) : null}
 
         {isOtpStage ? (
           <>
-            <h1>{authFlowStage === 'otpVerified' ? 'Verified' : 'Enter OTP'}</h1>
+            <h1>{authFlowStage === 'passwordSetup' ? 'Create Password' : authFlowStage === 'otpVerified' ? 'Verified' : 'Enter OTP'}</h1>
             <p>
               {authFlowStage === 'verifyingOtp'
                 ? 'Verifying your OTP...'
                 : authFlowStage === 'otpVerified'
                   ? 'OTP verified successfully'
+                  : authFlowStage === 'passwordSetup'
+                    ? 'Set a password to create your account and continue your prediction.'
                   : `We sent a 6 digit OTP to ${email}.`}
             </p>
             {renderAuthStatusVisual()}
 
             <form className="past-form" onSubmit={handleOtpSubmit}>
-              <div className={`past-otp-boxes ${otpShakeCount > 0 ? 'is-shaking' : ''}`} key={`past-otp-${otpShakeCount}`}>
-                {otp.map((digit, index) => (
-                  <input
-                    // eslint-disable-next-line react/no-array-index-key
-                    key={index}
-                    ref={(element) => {
-                      otpRefs.current[index] = element
-                    }}
-                    type="text"
-                    inputMode="numeric"
-                    value={digit}
-                    disabled={isAuthLoading}
-                    onChange={(event) => handleOtpChange(index, event.target.value)}
-                    onKeyDown={(event) => handleOtpKeyDown(index, event)}
-                    onPaste={handleOtpPaste}
-                    aria-label={`OTP digit ${index + 1}`}
-                    autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                  />
-                ))}
-              </div>
+              {authFlowStage === 'passwordSetup' ? (
+                <>
+                  <label>
+                    Password
+                    <input
+                      type="password"
+                      value={registrationPassword}
+                      disabled={isAuthLoading}
+                      minLength={8}
+                      onChange={(event) => {
+                        setRegistrationPassword(event.target.value)
+                        setError('')
+                      }}
+                      placeholder="Minimum 8 characters"
+                      autoComplete="new-password"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Retype Password
+                    <input
+                      type="password"
+                      value={registrationPasswordConfirmation}
+                      disabled={isAuthLoading}
+                      minLength={8}
+                      onChange={(event) => {
+                        setRegistrationPasswordConfirmation(event.target.value)
+                        setError('')
+                      }}
+                      placeholder="Retype password"
+                      autoComplete="new-password"
+                      required
+                    />
+                  </label>
+                </>
+              ) : (
+                <div className={`past-otp-boxes ${otpShakeCount > 0 ? 'is-shaking' : ''}`} key={`past-otp-${otpShakeCount}`}>
+                  {otp.map((digit, index) => (
+                    <input
+                      // eslint-disable-next-line react/no-array-index-key
+                      key={index}
+                      ref={(element) => {
+                        otpRefs.current[index] = element
+                      }}
+                      type="text"
+                      inputMode="numeric"
+                      value={digit}
+                      disabled={isAuthLoading}
+                      onChange={(event) => handleOtpChange(index, event.target.value)}
+                      onKeyDown={(event) => handleOtpKeyDown(index, event)}
+                      onPaste={handleOtpPaste}
+                      aria-label={`OTP digit ${index + 1}`}
+                      autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                    />
+                  ))}
+                </div>
+              )}
 
               {error ? <p className="past-error">{error}</p> : null}
               {message ? <p className="past-note" role="status">{message}</p> : null}
 
               <button type="submit" className="past-submit" disabled={isAuthLoading || isSubmittingPrediction}>
-                {isVerifyingOtp ? 'Verifying OTP...' : isSubmittingPrediction ? 'Submitting...' : 'Verify OTP'}
+                {isVerifyingOtp ? (registrationPassword ? 'Creating Account...' : 'Verifying OTP...') : isSubmittingPrediction ? 'Submitting...' : authFlowStage === 'passwordSetup' ? 'Create Account' : 'Verify OTP'}
               </button>
             </form>
 
@@ -1220,7 +1362,7 @@ function PastPredictionPage({ forceModal = false, onClose }) {
               <button type="button" className="past-auth-link" disabled={isAuthLoading} onClick={handleChangeEmail}>
                 Change email
               </button>
-              <button type="button" className="past-auth-link" disabled={resendCountdown > 0 || isAuthLoading} onClick={handleResendOtp}>
+              <button type="button" className="past-auth-link" disabled={resendCountdown > 0 || isAuthLoading || authFlowStage === 'passwordSetup'} onClick={handleResendOtp}>
                 {resendCountdown > 0 ? `Resend OTP in ${resendCountdown}s` : 'Resend OTP'}
               </button>
             </div>

@@ -3,6 +3,7 @@
 namespace App\Services\Prediction;
 
 use App\Models\PredictionRequest;
+use App\Models\PredictionEntitlement;
 use App\Services\Prediction\Rules\Rule001NakshatraLagnam;
 use App\Services\Prediction\Rules\Rule002CurrentMahadasha;
 use Carbon\CarbonImmutable;
@@ -51,7 +52,7 @@ class PredictionEngineService
         return $session;
     }
 
-    public function preparePredictionTimeline(int $requestId, string $predictionType): PredictionTimeline
+    public function preparePredictionTimeline(int $requestId, string $predictionType, ?PredictionEntitlement $entitlement = null): PredictionTimeline
     {
         $trace = (new DeveloperTrace())->start();
 
@@ -67,7 +68,11 @@ class PredictionEngineService
         $trace->addMessage('PredictionContext created.');
 
         $predictionDate = $this->predictionDate($predictionRequest);
-        $timelineData = $this->timelineGenerator->generate($predictionType, $predictionDate, $context->getBirthDate());
+        $futureStartYear = $predictionType === 'future' ? $entitlement?->access_start_year : null;
+        $futureYearCount = $predictionType === 'future' && $entitlement !== null
+            ? max(1, (int) $entitlement->access_end_year - (int) $entitlement->access_start_year + 1)
+            : null;
+        $timelineData = $this->timelineGenerator->generate($predictionType, $predictionDate, $context->getBirthDate(), $futureStartYear, $futureYearCount);
 
         $introSession = $this->newSession($predictionRequest->id, $context, $trace, $predictionDate);
         $ruleResults = [];

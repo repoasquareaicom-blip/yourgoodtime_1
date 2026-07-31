@@ -9,6 +9,30 @@ use Illuminate\Support\Facades\Schema;
 
 class OtpVerificationService extends BaseService
 {
+    public function validate(string $email, string $otp, string $purpose): bool
+    {
+        $record = OtpRecord::query()
+            ->where('email', $this->normalizeEmail($email))
+            ->where('purpose', $purpose)
+            ->latest('created_at')
+            ->latest('id')
+            ->first();
+
+        if (! $record) {
+            return false;
+        }
+
+        if (! Hash::check($otp, $record->otp_hash)) {
+            return false;
+        }
+
+        if ($record->expires_at->isPast()) {
+            return false;
+        }
+
+        return ! ($record->used_at !== null || $this->isMarkedUsed($record));
+    }
+
     public function verify(string $email, string $otp, string $purpose): bool
     {
         return DB::transaction(function () use ($email, $otp, $purpose): bool {

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\OtpRecord;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -83,6 +84,59 @@ class SendOtpTest extends TestCase
         Http::assertSent(function ($request): bool {
             return $request['purpose'] === 'login';
         });
+    }
+
+    public function test_signup_otp_for_new_email_returns_registration_next_action(): void
+    {
+        config([
+            'services.mail_gateway.url' => 'https://api.yourgoodtime.in/api/internal/mail/send-otp',
+            'services.mail_gateway.key' => 'configured-test-key',
+        ]);
+
+        Http::fake([
+            'https://api.yourgoodtime.in/api/internal/mail/send-otp' => Http::response(['success' => true]),
+        ]);
+
+        $this->postJson('/api/auth/send-otp', [
+            'email' => 'new@example.com',
+            'purpose' => 'signup',
+            'name' => 'New User',
+        ])
+            ->assertOk()
+            ->assertJsonPath('next_action', 'VERIFY_REGISTRATION_OTP');
+
+        $this->assertDatabaseHas('otp_records', [
+            'email' => 'new@example.com',
+            'purpose' => 'signup',
+        ]);
+    }
+
+    public function test_signup_otp_for_existing_email_returns_registered_error_without_sending_otp(): void
+    {
+        config([
+            'services.mail_gateway.url' => 'https://api.yourgoodtime.in/api/internal/mail/send-otp',
+            'services.mail_gateway.key' => 'configured-test-key',
+        ]);
+        User::factory()->create(['email' => 'customer@example.com']);
+
+        Http::fake([
+            'https://api.yourgoodtime.in/api/internal/mail/send-otp' => Http::response(['success' => true]),
+        ]);
+
+        $this->postJson('/api/auth/send-otp', [
+            'email' => 'Customer@Example.com',
+            'purpose' => 'signup',
+        ])
+            ->assertStatus(409)
+            ->assertJson([
+                'success' => false,
+                'code' => 'EMAIL_ALREADY_REGISTERED',
+                'message' => 'This email is already registered. Please log in to continue.',
+            ]);
+
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseCount('otp_records', 0);
+        Http::assertNothingSent();
     }
 
     public function test_public_send_otp_validates_input(): void

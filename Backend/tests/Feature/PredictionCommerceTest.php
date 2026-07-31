@@ -8,6 +8,7 @@ use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
 use App\Models\PredictionResult;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -44,6 +45,21 @@ class PredictionCommerceTest extends TestCase
             ->assertJsonPath('product.currency', 'INR')
             ->assertJsonPath('product.tax_inclusive', true)
             ->assertJsonPath('product.future_years', 40)
+            ->assertJsonPath('product.duration_label', 'Next 40 Years');
+    }
+
+    public function test_active_future_product_lookup_returns_backend_controlled_offer(): void
+    {
+        config(['prediction.future_years' => 40]);
+        $this->futureProduct();
+
+        $this->getJson('/api/prediction-products/future/active')
+            ->assertOk()
+            ->assertJsonPath('product.product_id', 1)
+            ->assertJsonPath('product.title', 'Future Prediction')
+            ->assertJsonPath('product.description', 'Unlock future guidance.')
+            ->assertJsonPath('product.amount_minor', 60000)
+            ->assertJsonPath('product.currency', 'INR')
             ->assertJsonPath('product.duration_label', 'Next 40 Years');
     }
 
@@ -100,9 +116,148 @@ class PredictionCommerceTest extends TestCase
             'prediction_request_id' => $request->id,
             'user_id' => $user->id,
             'prediction_type' => 'future',
-            'purchased_years' => 40,
             'status' => 'ACTIVE',
         ]);
+    }
+
+    public function test_repeat_future_purchases_allocate_next_single_year_blocks(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 7, 29, 12, 0, 0, 'Asia/Kolkata'));
+        config(['prediction.future_years' => 1]);
+        $user = User::factory()->create(['email' => 'ravi@example.com']);
+        $request = $this->predictionRequest([
+            'email' => $user->email,
+            'date_of_birth' => '1974-01-01',
+        ]);
+        $product = $this->futureProduct();
+
+        foreach ([2027, 2028, 2029] as $index => $year) {
+            $order = $this->actingAs($user, 'sanctum')->postJson('/api/payments/future-prediction/order', [
+                'prediction_request_id' => $request->id,
+                'request_uuid' => $request->request_uuid,
+                'product_id' => $product->id,
+            ])
+                ->assertOk()
+                ->assertJsonPath('data.next_purchase.start_year', $year)
+                ->json('data.razorpay_order_id');
+
+            $this->actingAs($user, 'sanctum')->postJson('/api/payments/razorpay/verify', [
+                'razorpay_order_id' => $order,
+                'razorpay_payment_id' => 'pay_repeat_'.$index,
+                'razorpay_signature' => 'test_signature',
+            ])
+                ->assertOk()
+                ->assertJsonPath('purchased_block.start_year', $year)
+                ->assertJsonPath('purchased_block.end_year', $year)
+                ->assertJsonPath('purchased_block.start_age', 53 + $index);
+        }
+
+        $this->assertSame(1, User::query()->where('email', 'ravi@example.com')->count());
+        $this->assertSame([2027, 2028, 2029], PredictionEntitlement::query()->where('user_id', $user->id)->orderBy('access_start_year')->pluck('access_start_year')->all());
+        CarbonImmutable::setTestNow();
+    }
+
+    public function test_repeat_future_purchases_allocate_next_five_year_blocks(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 7, 29, 12, 0, 0, 'Asia/Kolkata'));
+        config(['prediction.future_years' => 5]);
+        $user = User::factory()->create(['email' => 'ravi@example.com']);
+        $request = $this->predictionRequest([
+            'email' => $user->email,
+            'date_of_birth' => '1976-01-01',
+        ]);
+        $product = $this->futureProduct();
+
+        foreach ([[2027, 2031], [2032, 2036]] as $index => [$start, $end]) {
+            $order = $this->actingAs($user, 'sanctum')->postJson('/api/payments/future-prediction/order', [
+                'prediction_request_id' => $request->id,
+                'request_uuid' => $request->request_uuid,
+                'product_id' => $product->id,
+            ])
+                ->assertOk()
+                ->assertJsonPath('data.next_purchase.start_year', $start)
+                ->assertJsonPath('data.next_purchase.end_year', $end)
+                ->json('data.razorpay_order_id');
+
+            $this->actingAs($user, 'sanctum')->postJson('/api/payments/razorpay/verify', [
+                'razorpay_order_id' => $order,
+                'razorpay_payment_id' => 'pay_five_'.$index,
+                'razorpay_signature' => 'test_signature',
+            ])->assertOk();
+        }
+
+        $this->assertDatabaseHas('prediction_entitlements', [
+            'user_id' => $user->id,
+            'access_start_year' => 2027,
+            'access_end_year' => 2031,
+            'start_age' => 51,
+            'end_age' => 55,
+        ]);
+        $this->assertDatabaseHas('prediction_entitlements', [
+            'user_id' => $user->id,
+            'access_start_year' => 2032,
+            'access_end_year' => 2036,
+            'start_age' => 56,
+            'end_age' => 60,
+        ]);
+        CarbonImmutable::setTestNow();
+    }
+
+    public function test_future_order_is_not_created_when_no_supported_years_remain(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 7, 29, 12, 0, 0, 'Asia/Kolkata'));
+        config(['prediction.future_years' => 1]);
+        $user = User::factory()->create(['email' => 'ravi@example.com']);
+        $request = $this->predictionRequest([
+            'email' => $user->email,
+            'date_of_birth' => '1965-01-01',
+        ]);
+        $product = $this->futureProduct();
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/payments/future-prediction/order', [
+            'prediction_request_id' => $request->id,
+            'request_uuid' => $request->request_uuid,
+            'product_id' => $product->id,
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('status', 'NO_NEW_FUTURE_YEARS_AVAILABLE');
+
+        $this->assertDatabaseCount('payment_transactions', 0);
+        CarbonImmutable::setTestNow();
+    }
+
+    public function test_repeated_payment_verification_is_idempotent(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 7, 29, 12, 0, 0, 'Asia/Kolkata'));
+        config(['prediction.future_years' => 1]);
+        $user = User::factory()->create(['email' => 'ravi@example.com']);
+        $request = $this->predictionRequest([
+            'email' => $user->email,
+            'date_of_birth' => '1974-01-01',
+        ]);
+        $product = $this->futureProduct();
+        $order = $this->actingAs($user, 'sanctum')->postJson('/api/payments/future-prediction/order', [
+            'prediction_request_id' => $request->id,
+            'request_uuid' => $request->request_uuid,
+            'product_id' => $product->id,
+        ])->json('data.razorpay_order_id');
+
+        $payload = [
+            'razorpay_order_id' => $order,
+            'razorpay_payment_id' => 'pay_idempotent',
+            'razorpay_signature' => 'test_signature',
+        ];
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/payments/razorpay/verify', $payload)->assertOk();
+        $this->actingAs($user, 'sanctum')->postJson('/api/payments/razorpay/verify', $payload)->assertOk();
+
+        $this->assertDatabaseCount('prediction_entitlements', 1);
+        $this->assertDatabaseHas('prediction_entitlements', [
+            'user_id' => $user->id,
+            'access_start_year' => 2027,
+            'access_end_year' => 2027,
+        ]);
+        CarbonImmutable::setTestNow();
     }
 
     public function test_future_order_requires_active_product_id(): void
@@ -147,26 +302,29 @@ class PredictionCommerceTest extends TestCase
         $this->assertDatabaseCount('prediction_entitlements', 0);
     }
 
-    public function test_active_entitlement_prevents_another_purchase_and_expired_allows_it(): void
+    public function test_active_entitlement_allows_next_future_period_purchase(): void
     {
+        config(['prediction.future_years' => 1]);
         $user = User::factory()->create(['email' => 'ravi@example.com']);
         $request = $this->predictionRequest(['email' => $user->email]);
         $product = $this->futureProduct();
-        $this->entitlement($request, $product, now()->addYear(), $user);
+        $this->entitlement($request, $product, now()->addYear(), $user, [
+            'access_start_year' => 2027,
+            'access_end_year' => 2027,
+            'start_age' => 54,
+            'end_age' => 54,
+            'purchased_years' => 1,
+            'allocated_year_count' => 1,
+        ]);
 
         $this->actingAs($user, 'sanctum')->postJson('/api/payments/future-prediction/order', [
             'prediction_request_id' => $request->id,
             'request_uuid' => $request->request_uuid,
             'product_id' => $product->id,
-        ])->assertStatus(409);
-
-        PredictionEntitlement::query()->update(['expires_at' => now()->subDay()]);
-
-        $this->actingAs($user, 'sanctum')->postJson('/api/payments/future-prediction/order', [
-            'prediction_request_id' => $request->id,
-            'request_uuid' => $request->request_uuid,
-            'product_id' => $product->id,
-        ])->assertOk();
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.next_purchase.start_year', 2028)
+            ->assertJsonPath('data.next_purchase.end_year', 2028);
     }
 
     public function test_hardcoded_payment_phone_number_is_not_in_production_source(): void
@@ -259,7 +417,7 @@ class PredictionCommerceTest extends TestCase
         ]);
         $this->assertDatabaseHas('prediction_entitlements', [
             'prediction_request_id' => $request->id,
-            'purchased_years' => 40,
+            'user_id' => $user->id,
         ]);
     }
 
@@ -456,10 +614,10 @@ class PredictionCommerceTest extends TestCase
         ]);
     }
 
-    private function entitlement(PredictionRequest $request, PredictionProduct $product, mixed $expiresAt, User $user): PredictionEntitlement
+    private function entitlement(PredictionRequest $request, PredictionProduct $product, mixed $expiresAt, User $user, array $overrides = []): PredictionEntitlement
     {
         $transaction = $this->transaction($request, $product, $user);
-        return PredictionEntitlement::query()->create([
+        return PredictionEntitlement::query()->create(array_merge([
             'prediction_request_id' => $request->id,
             'user_id' => $user->id,
             'product_id' => $product->id,
@@ -471,6 +629,6 @@ class PredictionCommerceTest extends TestCase
             'starts_at' => now(),
             'expires_at' => $expiresAt,
             'status' => 'ACTIVE',
-        ]);
+        ], $overrides));
     }
 }

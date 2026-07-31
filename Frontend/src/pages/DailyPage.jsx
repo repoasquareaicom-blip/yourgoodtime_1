@@ -1,4 +1,5 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import HeaderAuthActions from '../components/common/HeaderAuthActions'
 import ygtLogo from '../assets/yt-logo.png'
 import thumb2 from '../assets/videos/2.jpg'
 import thumb3 from '../assets/videos/3.jpg'
@@ -9,7 +10,6 @@ import './DailyPage.css'
 
 function DailyPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const featuredVideo = videoLibrary[0]
 
   return (
@@ -24,13 +24,7 @@ function DailyPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="home-hero-login"
-            onClick={() => navigate('/login?mode=login&redirect=/account', { state: { backgroundLocation: location } })}
-          >
-            Login
-          </button>
+          <HeaderAuthActions />
         </header>
 
         <section className="daily-content" aria-label="Daily content">

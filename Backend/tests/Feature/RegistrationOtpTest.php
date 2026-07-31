@@ -46,6 +46,7 @@ class RegistrationOtpTest extends TestCase
                 'success' => true,
                 'code' => 'OTP_SENT',
                 'message' => 'OTP sent successfully.',
+                'next_action' => 'VERIFY_REGISTRATION_OTP',
             ]);
 
         $record = OtpRecord::query()->firstOrFail();
@@ -55,6 +56,94 @@ class RegistrationOtpTest extends TestCase
         $this->assertSame('person@example.com', $record->pending_payload['email']);
         $this->assertSame('Test User', $record->pending_payload['full_name']);
         $this->assertNull($record->used_at);
+    }
+
+    public function test_generic_registration_otp_creates_user_without_prediction_request(): void
+    {
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', [
+            'email' => 'new@example.com',
+            'name' => 'New User',
+            'purpose' => 'signup',
+        ])->assertOk();
+
+        $record = OtpRecord::query()->firstOrFail();
+        $record->forceFill(['otp_hash' => Hash::make('123456')])->save();
+
+        $this->postJson('/api/auth/verify-otp', [
+            'email' => 'new@example.com',
+            'otp' => '123456',
+            'purpose' => 'signup',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('code', 'REGISTRATION_COMPLETED')
+            ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email']])
+            ->assertJsonMissingPath('prediction_request_id');
+
+        $this->assertDatabaseCount('prediction_requests', 0);
+        $this->assertDatabaseHas('users', [
+            'email' => 'new@example.com',
+            'name' => 'New User',
+        ]);
+    }
+
+    public function test_signup_otp_requires_password_after_otp_verification(): void
+    {
+        $this->createRegistrationOtp();
+
+        $this->postJson('/api/auth/verify-otp', [
+            'email' => 'person@example.com',
+            'otp' => '123456',
+            'purpose' => 'signup',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['password']);
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('prediction_requests', 0);
+    }
+
+    public function test_registration_otp_can_be_validated_before_password_without_being_used(): void
+    {
+        $record = $this->createRegistrationOtp();
+
+        $this->postJson('/api/auth/validate-otp', [
+            'email' => 'person@example.com',
+            'otp' => '123456',
+            'purpose' => 'signup',
+        ])
+            ->assertOk()
+            ->assertExactJson([
+                'success' => true,
+                'code' => 'OTP_VALID',
+                'message' => 'OTP verified successfully.',
+            ]);
+
+        $this->assertNull($record->refresh()->used_at);
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('prediction_requests', 0);
+    }
+
+    public function test_invalid_registration_otp_validation_does_not_open_password_step_or_consume_otp(): void
+    {
+        $record = $this->createRegistrationOtp();
+
+        $this->postJson('/api/auth/validate-otp', [
+            'email' => 'person@example.com',
+            'otp' => '222222',
+            'purpose' => 'signup',
+        ])
+            ->assertUnprocessable()
+            ->assertExactJson([
+                'success' => false,
+                'code' => 'INVALID_OTP',
+                'message' => 'Invalid or expired OTP.',
+            ]);
+
+        $this->assertNull($record->refresh()->used_at);
     }
 
     public function test_invalid_registration_otp_does_not_create_prediction_request(): void
@@ -111,6 +200,7 @@ class RegistrationOtpTest extends TestCase
             'name' => 'Test User',
             'is_active' => true,
         ]);
+        $this->assertTrue(Hash::check('secret123', User::query()->firstOrFail()->password));
         $this->assertNotNull($record->refresh()->used_at);
         $this->assertSame(
             $response->json('prediction_request_id'),
@@ -155,7 +245,7 @@ class RegistrationOtpTest extends TestCase
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('can_purchase', true)
-            ->assertJsonPath('product.duration_label', 'Next 40 Years');
+            ->assertJsonPath('product.duration_label', 'Next 1 Years');
 
         $this->assertSame(
             'person@example.com',
@@ -303,6 +393,8 @@ class RegistrationOtpTest extends TestCase
             'email' => 'person@example.com',
             'otp' => '123456',
             'purpose' => 'signup',
+            'password' => 'secret123',
+            'password_confirmation' => 'secret123',
         ], $overrides);
     }
 
@@ -365,8 +457,8 @@ class RegistrationOtpTest extends TestCase
     {
         return [
             'success' => false,
-            'code' => 'ALREADY_REGISTERED',
-            'message' => 'This email is already registered.',
+            'code' => 'EMAIL_ALREADY_REGISTERED',
+            'message' => 'This email is already registered. Please log in to continue.',
         ];
     }
 }
