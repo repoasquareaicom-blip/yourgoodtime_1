@@ -14,7 +14,10 @@ use App\Services\Prediction\PredictionEngineService;
 use App\Services\Prediction\PredictionTimelineGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class MyAccountPredictionHistoryTest extends TestCase
@@ -26,7 +29,12 @@ class MyAccountPredictionHistoryTest extends TestCase
         parent::setUp();
 
         CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 7, 29, 12, 0, 0, 'Asia/Kolkata'));
-        config(['prediction.future_years' => 5]);
+        File::deleteDirectory($this->predictionDataDirectory());
+        config([
+            'prediction.future_years' => 5,
+            'prediction.excel_path' => $this->predictionDataDirectory(),
+        ]);
+        $this->fakeFutureWorkbook(['2006-2010', '2011-2015']);
     }
 
     protected function tearDown(): void
@@ -110,6 +118,24 @@ class MyAccountPredictionHistoryTest extends TestCase
         $this->mock(PredictionEngineService::class, function ($mock): void {
             $mock->shouldNotReceive('preparePredictionTimeline');
             $mock->shouldNotReceive('preparePastPrediction');
+            $mock->shouldReceive('previewFutureYear')->andReturn([
+                'prediction' => ['status' => 'SUCCESS'],
+                'rule_data' => [
+                    'sequence_base_year' => 1998,
+                    'dasha_start_effective_year' => 2019,
+                    'dasha_end_effective_year' => 2039,
+                    'matched_values' => [
+                        'matched_year' => '2006-2010',
+                        'position' => 6,
+                        'video_ids' => ['FUTURE_001'],
+                    ],
+                    'excel_file' => 'FUTURE_41 TO 60.xlsx',
+                    'worksheet' => 'VENUS',
+                    'matched_row' => 4,
+                    'year_column' => 'C',
+                ],
+                'timeline' => null,
+            ]);
         });
         $this->mock(AstrologyApiService::class, function ($mock): void {
             $mock->shouldNotReceive('buildBirthPayload');
@@ -391,5 +417,36 @@ class MyAccountPredictionHistoryTest extends TestCase
             'purchased_at' => now(),
             'status' => 'ACTIVE',
         ]);
+    }
+
+    private function fakeFutureWorkbook(array $yearHeaders): void
+    {
+        $directory = $this->predictionDataDirectory().DIRECTORY_SEPARATOR.'future';
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        $row = ['MEENAM', '6'];
+        foreach ($yearHeaders as $index => $yearHeader) {
+            $row[] = $yearHeader;
+            $row[] = 'FUTURE_'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT);
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getActiveSheet()->setTitle('VENUS');
+        $spreadsheet->getActiveSheet()->fromArray([
+            ['VENUS DASA', 'POSITION'],
+            ['LAGNAM', ''],
+            ['MESHAM', ''],
+            $row,
+        ]);
+
+        (new Xlsx($spreadsheet))->save($directory.DIRECTORY_SEPARATOR.'FUTURE_41 TO 60.xlsx');
+    }
+
+    private function predictionDataDirectory(): string
+    {
+        return storage_path('framework/testing/my-account-prediction-data');
     }
 }

@@ -40,6 +40,13 @@
   color: rgba(255, 220, 158, 0.56);
 }
 
+.prediction-registration-form.prediction-registration-form input[type="date"]::-webkit-calendar-picker-indicator,
+.prediction-registration-form.prediction-registration-form input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(1) brightness(1.35);
+  opacity: 0.92;
+}
+
 .prediction-registration-form.prediction-registration-form input:focus,
 .prediction-registration-form.prediction-registration-form select:focus {
   border-color: #f3a524;
@@ -60,6 +67,14 @@
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.past-field-helper {
+  margin-top: -2px;
+  color: rgba(255, 230, 186, 0.76);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.3;
 }
 
 .past-birth-row {

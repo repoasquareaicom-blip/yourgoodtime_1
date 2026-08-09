@@ -104,7 +104,7 @@ class PredictionTimelinePrepareTest extends TestCase
             'prediction.debug_response' => true,
         ]);
         $this->fakeIntroWorkbook();
-        $this->fakeAgeWorkbook('future', 'FUTURE_18 TO 19.xlsx', 'SUN', 'MESHAM', 5, 2010, 'FUTURE_2027');
+        $this->fakeAgeWorkbook('future', 'FUTURE_18 TO 19.xlsx', 'SUN', 'MESHAM', 5, 2001, 'FUTURE_2027');
 
         $predictionRequest = $this->createPredictionRequest([
             'prediction_type' => 'future',

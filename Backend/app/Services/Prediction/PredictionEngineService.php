@@ -7,6 +7,7 @@ use App\Models\PredictionEntitlement;
 use App\Services\Prediction\Rules\Rule001NakshatraLagnam;
 use App\Services\Prediction\Rules\Rule002CurrentMahadasha;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Auth;
 use Throwable;
 
 class PredictionEngineService
@@ -72,7 +73,10 @@ class PredictionEngineService
         $futureYearCount = $predictionType === 'future' && $entitlement !== null
             ? max(1, (int) $entitlement->access_end_year - (int) $entitlement->access_start_year + 1)
             : null;
-        $timelineData = $this->timelineGenerator->generate($predictionType, $predictionDate, $context->getBirthDate(), $futureStartYear, $futureYearCount);
+        $excludedYears = $predictionType === 'past'
+            ? $this->purchasedFutureYearsForPast($predictionRequest)
+            : [];
+        $timelineData = $this->timelineGenerator->generate($predictionType, $predictionDate, $context->getBirthDate(), $futureStartYear, $futureYearCount, $excludedYears);
 
         $introSession = $this->newSession($predictionRequest->id, $context, $trace, $predictionDate);
         $ruleResults = [];
@@ -84,7 +88,7 @@ class PredictionEngineService
         $yearlyPredictions = [];
 
         foreach ($timelineData['year_sessions'] as $yearSession) {
-            $session = $this->newSession($predictionRequest->id, $context, $trace, $yearSession->targetDate);
+            $session = $this->newSession($predictionRequest->id, $context, $trace, $yearSession->targetDate, $yearSession->age);
             $result = $this->executeRule($session, $this->rule002);
             $ruleResults[] = $result;
             $this->logIfFailed($predictionRequest->id, $predictionType, $yearSession, $result);
@@ -113,6 +117,8 @@ class PredictionEngineService
             candidateYears: $timelineData['candidate_years'],
             processedYears: $timelineData['processed_years'],
             excludedAgeCount: $timelineData['excluded_age_count'],
+            excludedPurchasedCount: $timelineData['excluded_purchased_count'],
+            excludedPurchasedYears: $timelineData['excluded_purchased_years'],
             minimumSupportedAge: $timelineData['minimum_supported_age'],
             maximumSupportedAge: $timelineData['maximum_supported_age'],
             status: $timelineData['status'],
@@ -122,6 +128,27 @@ class PredictionEngineService
             ruleResults: $ruleResults,
             developerTrace: $trace
         );
+    }
+
+    /**
+     * @return array{prediction:array<string, mixed>|null, rule_data:array<string, mixed>, timeline:PredictionTimeline}
+     */
+    public function previewFutureYear(int $requestId, int $targetSystemYear): array
+    {
+        $entitlement = new PredictionEntitlement([
+            'prediction_type' => 'future',
+            'access_start_year' => $targetSystemYear,
+            'access_end_year' => $targetSystemYear,
+        ]);
+        $timeline = $this->preparePredictionTimeline($requestId, 'future', $entitlement);
+        $prediction = $timeline->yearlyPredictions[0] ?? null;
+        $ruleResult = $prediction['rule_results'][0] ?? null;
+
+        return [
+            'prediction' => is_array($prediction) ? $prediction : null,
+            'rule_data' => $ruleResult instanceof RuleResult ? $ruleResult->toArray() : [],
+            'timeline' => $timeline,
+        ];
     }
 
     private function buildContext(PredictionRequest $predictionRequest, array $astrologyPayload, ?string $predictionType = null): PredictionContext
@@ -242,7 +269,7 @@ class PredictionEngineService
             : CarbonImmutable::now();
     }
 
-    private function newSession(int $requestId, PredictionContext $context, DeveloperTrace $trace, CarbonImmutable $predictionDate): PredictionSession
+    private function newSession(int $requestId, PredictionContext $context, DeveloperTrace $trace, CarbonImmutable $predictionDate, ?int $targetAge = null): PredictionSession
     {
         return new PredictionSession(
             requestId: $requestId,
@@ -250,7 +277,8 @@ class PredictionEngineService
             playlistBuilder: new PlaylistBuilder(),
             developerTrace: $trace,
             predictionConfig: $this->predictionConfig,
-            currentDate: $predictionDate
+            currentDate: $predictionDate,
+            targetAge: $targetAge
         );
     }
 
@@ -288,6 +316,38 @@ class PredictionEngineService
         }
 
         $this->ruleLogService->recordFailure($requestId, $predictionType, $yearSession, $result);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function purchasedFutureYearsForPast(PredictionRequest $predictionRequest): array
+    {
+        $userId = Auth::id();
+
+        if ($userId === null && $predictionRequest->email !== null) {
+            $userId = \App\Models\User::query()->where('email', $predictionRequest->email)->value('id');
+        }
+
+        if ($userId === null) {
+            return [];
+        }
+
+        $years = [];
+        PredictionEntitlement::query()
+            ->where('user_id', $userId)
+            ->where('prediction_type', 'future')
+            ->whereIn('status', ['ACTIVE', 'EXPIRED', 'COMPLETED'])
+            ->whereNotNull('access_start_year')
+            ->whereNotNull('access_end_year')
+            ->get(['access_start_year', 'access_end_year'])
+            ->each(function (PredictionEntitlement $entitlement) use (&$years): void {
+                for ($year = (int) $entitlement->access_start_year; $year <= (int) $entitlement->access_end_year; $year++) {
+                    $years[] = $year;
+                }
+            });
+
+        return array_values(array_unique($years));
     }
 
     /**

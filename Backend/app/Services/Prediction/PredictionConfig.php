@@ -48,9 +48,19 @@ class PredictionConfig
         return (string) config('prediction.excel_path', storage_path('app/prediction-data'));
     }
 
-    public function dashaExcelSequenceStart(): int
+    public function dashaExcelSequenceStart(string $predictionType): int
     {
-        return (int) config('prediction.dasha_excel_sequence_start', 2007);
+        $type = strtolower(trim($predictionType));
+        $configured = config('prediction.dasha_excel_sequence_start', [
+            'past' => 2007,
+            'future' => 1998,
+        ]);
+
+        if (! is_array($configured) || ! array_key_exists($type, $configured)) {
+            throw new \InvalidArgumentException("Unsupported prediction sequence type: {$predictionType}");
+        }
+
+        return (int) $configured[$type];
     }
 
     public function predictionFile(string $key): string

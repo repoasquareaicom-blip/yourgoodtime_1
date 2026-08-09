@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\PredictionEntitlement;
+use App\Models\AstrologerAppointment;
 use App\Models\PredictionRequest;
 use App\Models\PredictionResult;
 use App\Models\TempleRemedyRequest;
+use App\Models\AppointmentPaymentMethod;
 use App\Models\User;
 use App\Services\FuturePredictionAccessService;
+use App\Services\AstrologerAppointmentService;
 use App\Services\Prediction\PredictionTimelineSummaryService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -18,7 +21,8 @@ class MyAccountPredictionController extends Controller
     public function index(
         Request $request,
         PredictionTimelineSummaryService $timelineSummaryService,
-        FuturePredictionAccessService $futureAccessService
+        FuturePredictionAccessService $futureAccessService,
+        AstrologerAppointmentService $appointmentService
     ): JsonResponse {
         $user = $request->user();
         $pastRequest = $this->latestCompletedPastRequest((string) $user->email);
@@ -31,6 +35,7 @@ class MyAccountPredictionController extends Controller
                 'past' => $this->pastPayload($pastRequest, $timelineSummaryService),
                 'future' => $this->futurePayload($user, $purchaseRequest, $futureAccessService),
                 'temple_remedies' => $this->templeRemedyPayload($user),
+                'appointments' => $this->appointmentPayload($user, $appointmentService),
             ],
         ]);
     }
@@ -200,26 +205,75 @@ class MyAccountPredictionController extends Controller
         ];
     }
 
+    private function rangeLabel(mixed $from, mixed $to): ?string
+    {
+        if ($from && $to && (string) $from !== (string) $to) {
+            return $from.'-'.$to;
+        }
+
+        return $from ? (string) $from : null;
+    }
+
+    private function appointmentPayload(User $user, AstrologerAppointmentService $appointmentService): array
+    {
+        $appointments = AstrologerAppointment::query()
+            ->with('questions')
+            ->where('user_id', $user->id)
+            ->latest()
+            ->limit(20)
+            ->get()
+            ->map(fn (AstrologerAppointment $appointment): array => $appointmentService->payload($appointment))
+            ->values();
+
+        return [
+            'config' => $appointmentService->configPayload(),
+            'items' => $appointments,
+            'groups' => [
+                'pending' => $appointments->filter(fn (array $item): bool => in_array($item['status'], ['open', 'pending', 'reviewing', 'slot_proposed', 'payment_pending'], true))->values(),
+                'upcoming' => $appointments->filter(fn (array $item): bool => in_array($item['status'], ['slot_fixed', 'booked', 'upcoming'], true))->values(),
+                'completed' => $appointments->filter(fn (array $item): bool => $item['status'] === 'completed')->values(),
+            ],
+        ];
+    }
+
     private function templeRemedyPayload(User $user): array
     {
         return TempleRemedyRequest::query()
             ->where('user_id', $user->id)
+            ->whereNotIn('status', ['PAYMENT_CANCELLED', 'CANCELLED'])
+            ->where(function ($query): void {
+                $query
+                    ->where('payment_method_code', '!=', AppointmentPaymentMethod::PAYMENT_GATEWAY)
+                    ->orWhere('payment_status', 'PAID')
+                    ->orWhere('status', 'COMPLETED');
+            })
             ->latest('submitted_at')
             ->latest('id')
             ->limit(10)
             ->get()
             ->map(function (TempleRemedyRequest $remedyRequest): array {
+                $hasRemedy = (bool) ($remedyRequest->remedy_url || $remedyRequest->remedy_file_path);
+                $canShowRemedy = $hasRemedy && $remedyRequest->status === 'COMPLETED';
+                $fileEndpoint = url('/api/temple-remedies/'.$remedyRequest->id.'/file');
+
                 return [
                     'id' => $remedyRequest->id,
                     'problem_text' => $remedyRequest->problem_text,
+                    'remedy_option' => [
+                        'code' => $remedyRequest->remedy_option_code,
+                        'title' => $remedyRequest->remedy_option_title,
+                    ],
+                    'contact_number' => $remedyRequest->contact_number,
+                    'alternate_contact_number' => $remedyRequest->alternate_contact_number,
+                    'preferred_language' => $remedyRequest->preferred_language,
+                    'payment_method' => $remedyRequest->payment_method_code,
                     'status' => $remedyRequest->status,
-                    'status_label' => match ($remedyRequest->status) {
-                        'RECEIVED' => 'Request received',
-                        'REVIEWING' => 'Under review',
-                        'PAYMENT_PENDING' => 'Payment pending',
-                        'PAID' => 'Payment completed',
-                        'PREPARING_REMEDY' => 'Preparing the remedy',
-                        'REMEDY_READY' => 'Remedy ready',
+                    'status_label' => $remedyRequest->payment_status === 'PAID' && $remedyRequest->status !== 'COMPLETED'
+                        ? 'Payment Received'
+                        : match ($remedyRequest->status) {
+                        'RECEIVED' => 'Received',
+                        'REVIEWING' => 'Reviewing',
+                        'PAYMENT_PENDING' => 'Payment Pending',
                         'COMPLETED' => 'Completed',
                         default => ucwords(strtolower(str_replace('_', ' ', $remedyRequest->status))),
                     },
@@ -227,15 +281,22 @@ class MyAccountPredictionController extends Controller
                     'amount_minor' => $remedyRequest->amount_minor,
                     'currency' => $remedyRequest->currency,
                     'payment_status' => $remedyRequest->payment_status,
+                    'can_pay' => $remedyRequest->payment_method_code === AppointmentPaymentMethod::PAYMENT_GATEWAY
+                        && $remedyRequest->status === 'PAYMENT_PENDING'
+                        && $remedyRequest->payment_status !== 'PAID',
                     'submitted_at' => $remedyRequest->submitted_at?->toJSON(),
                     'remedy' => [
-                        'available' => (bool) ($remedyRequest->remedy_url || $remedyRequest->remedy_file_path),
-                        'type' => $remedyRequest->remedy_type,
-                        'title' => $remedyRequest->remedy_title,
-                        'url' => $remedyRequest->remedy_url,
-                        'uploaded_at' => $remedyRequest->remedy_uploaded_at?->toJSON(),
+                        'available' => $canShowRemedy,
+                        'type' => $canShowRemedy ? $remedyRequest->remedy_type : null,
+                        'title' => $canShowRemedy ? $remedyRequest->remedy_title : null,
+                        'file_name' => $canShowRemedy ? $remedyRequest->remedy_file_name : null,
+                        'mime_type' => $canShowRemedy ? $remedyRequest->remedy_mime_type : null,
+                        'file_size' => $canShowRemedy ? $remedyRequest->remedy_file_size : null,
+                        'url' => $canShowRemedy ? $fileEndpoint : null,
+                        'download_url' => $canShowRemedy ? $fileEndpoint.'?download=1' : null,
+                        'uploaded_at' => $canShowRemedy ? $remedyRequest->remedy_uploaded_at?->toJSON() : null,
                     ],
-                    'admin_note' => $remedyRequest->admin_note,
+                    'admin_note' => $canShowRemedy ? $remedyRequest->admin_note : null,
                     'feedback' => [
                         'submitted' => $remedyRequest->feedback_submitted_at !== null,
                         'rating' => $remedyRequest->feedback_rating,

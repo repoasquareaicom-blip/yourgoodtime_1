@@ -14,7 +14,7 @@ class DashaSequenceYearResolver
     ) {
     }
 
-    public function resolve(CarbonInterface $predictionDate, string $dashaStartDate, string $dashaEndDate): DashaSequenceYearResult
+    public function resolve(CarbonInterface $predictionDate, string $dashaStartDate, string $dashaEndDate, string $predictionType = 'past'): DashaSequenceYearResult
     {
         $start = $this->parseDate($dashaStartDate);
         $end = $this->parseDate($dashaEndDate);
@@ -27,8 +27,8 @@ class DashaSequenceYearResolver
         $dashaStartEffectiveYear = $this->yearResolver->resolveExcelYear($start);
         $dashaEndEffectiveYear = $this->yearResolver->resolveExcelYear($end);
         $sequenceOffset = $predictionEffectiveYear - $dashaStartEffectiveYear;
-        $sequenceBaseYear = $this->predictionConfig->dashaExcelSequenceStart();
-        $isWithinPeriod = $predictionDate->greaterThanOrEqualTo($start) && $predictionDate->lessThanOrEqualTo($end);
+        $sequenceBaseYear = $this->predictionConfig->dashaExcelSequenceStart($predictionType);
+        $isWithinPeriod = $predictionDate->greaterThanOrEqualTo($start) && $predictionDate->lessThan($end);
 
         return new DashaSequenceYearResult(
             predictionDate: $predictionDate->toDateString(),
@@ -46,7 +46,7 @@ class DashaSequenceYearResolver
         );
     }
 
-    public function resolveForSystemYear(int $systemYear, string $dashaStartDate, string $dashaEndDate): DashaSequenceYearResult
+    public function resolveForSystemYear(int $systemYear, string $dashaStartDate, string $dashaEndDate, string $predictionType = 'past'): DashaSequenceYearResult
     {
         $start = $this->parseDate($dashaStartDate);
         $end = $this->parseDate($dashaEndDate);
@@ -58,8 +58,8 @@ class DashaSequenceYearResolver
         $dashaStartYear = (int) $start->format('Y');
         $dashaEndYear = (int) $end->format('Y');
         $sequenceOffset = $systemYear - $dashaStartYear;
-        $sequenceBaseYear = $this->predictionConfig->dashaExcelSequenceStart();
-        $isWithinPeriod = $systemYear >= $dashaStartYear && $systemYear <= $dashaEndYear;
+        $sequenceBaseYear = $this->predictionConfig->dashaExcelSequenceStart($predictionType);
+        $isWithinPeriod = $systemYear >= $dashaStartYear && $systemYear < $dashaEndYear;
 
         return new DashaSequenceYearResult(
             predictionDate: (string) $systemYear,

@@ -10,7 +10,9 @@ use App\Services\FuturePredictionAccessService;
 use App\Services\PredictionCacheService;
 use App\Services\Prediction\PredictionEngineService;
 use App\Services\Prediction\PredictionResponseBuilder;
+use App\Services\Prediction\PredictionTimelineSummaryService;
 use App\Services\PredictionRequestProcessor;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -26,7 +28,8 @@ class PredictionController extends Controller
         Request $request,
         PredictionEngineService $predictionEngineService,
         PredictionResponseBuilder $predictionResponseBuilder,
-        FuturePredictionAccessService $futurePredictionAccessService
+        FuturePredictionAccessService $futurePredictionAccessService,
+        PredictionTimelineSummaryService $timelineSummaryService
     ): JsonResponse {
         $validator = Validator::make($request->all(), [
             'id' => ['required', 'integer'],
@@ -70,7 +73,7 @@ class PredictionController extends Controller
 
         $storedResult = $this->completedStoredResult($predictionRequest, $validated['type'], $futureEntitlement);
 
-        if ($storedResult !== null) {
+        if ($storedResult !== null && $this->storedResultIsCurrent($storedResult, $predictionRequest, $validated['type'], $timelineSummaryService)) {
             return $this->storedResultResponse($storedResult, 'Prediction result loaded successfully.');
         }
 
@@ -90,6 +93,11 @@ class PredictionController extends Controller
                 'summary' => $result['summary'] ?? [],
                 'warnings' => $warnings,
             ];
+
+            if (! $this->resultPayloadHasPlayableVideo($payload)) {
+                throw new \RuntimeException('No matching prediction video is available for these birth details.');
+            }
+
             $storedResult = $this->persistResult($predictionRequest, $validated['type'], $payload, $futureEntitlement);
 
             if ($futureEntitlement !== null && $futureEntitlement->generated_prediction_result_id === null) {
@@ -106,9 +114,14 @@ class PredictionController extends Controller
                 'exception' => $exception,
             ]);
 
+            $isKnownGenerationIssue = $exception instanceof \RuntimeException;
+
             return response()->json([
                 'success' => false,
-                'message' => 'Unable to generate prediction result.',
+                'code' => $isKnownGenerationIssue ? 'NO_PLAYABLE_PREDICTION' : 'PREDICTION_GENERATION_FAILED',
+                'message' => $isKnownGenerationIssue
+                    ? $exception->getMessage()
+                    : 'Unable to generate prediction result.',
             ], 500);
         }
     }
@@ -522,7 +535,53 @@ class PredictionController extends Controller
             $query->where('prediction_entitlement_id', $entitlement->id);
         }
 
-        return $query->first();
+        $storedResult = $query->first();
+
+        if ($storedResult !== null && ! $this->resultPayloadHasPlayableVideo($storedResult->result_payload ?? [])) {
+            return null;
+        }
+
+        return $storedResult;
+    }
+
+    private function storedResultIsCurrent(
+        PredictionResult $predictionResult,
+        PredictionRequest $predictionRequest,
+        string $predictionType,
+        PredictionTimelineSummaryService $timelineSummaryService
+    ): bool {
+        if ($predictionType !== 'past') {
+            return true;
+        }
+
+        if (! filled(data_get($predictionResult->result_payload, 'identity_video.video_id'))) {
+            return false;
+        }
+
+        if ($predictionRequest->date_of_birth === null) {
+            return true;
+        }
+
+        $currentRange = $timelineSummaryService->pastRange(
+            CarbonImmutable::instance($predictionRequest->date_of_birth),
+            CarbonImmutable::now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))
+        );
+
+        if (! $currentRange['available'] || ! $currentRange['end_year']) {
+            return true;
+        }
+
+        $payload = $predictionResult->result_payload;
+        $storedEndYear = data_get($payload, 'summary.to_year')
+            ?? data_get($payload, 'prediction_window.to')
+            ?? data_get($payload, 'prediction_videos.0.system_year_to')
+            ?? data_get($payload, 'prediction_videos.0.system_year');
+
+        if (! is_numeric($storedEndYear)) {
+            return false;
+        }
+
+        return (int) $storedEndYear >= (int) $currentRange['end_year'];
     }
 
     private function persistResult(PredictionRequest $predictionRequest, string $predictionType, array $payload, mixed $entitlement = null): PredictionResult
@@ -539,7 +598,7 @@ class PredictionController extends Controller
         return PredictionResult::query()->updateOrCreate(
             $identity,
             [
-                'user_id' => $entitlement?->user_id,
+                'user_id' => $entitlement?->user_id ?? $this->userIdForPredictionRequest($predictionRequest),
                 'prediction_entitlement_id' => $entitlement?->id,
                 'identity_video_id' => data_get($payload, 'identity_video.video_id'),
                 'result_payload' => $payload,
@@ -566,6 +625,7 @@ class PredictionController extends Controller
             $identity,
             [
                 'identity_video_id' => null,
+                'user_id' => $entitlement?->user_id ?? $this->userIdForPredictionRequest($predictionRequest),
                 'result_payload' => [],
                 'summary_payload' => [],
                 'warnings_payload' => [],
@@ -573,6 +633,34 @@ class PredictionController extends Controller
                 'generated_at' => now(),
             ]
         );
+    }
+
+    private function resultPayloadHasPlayableVideo(array $payload): bool
+    {
+        if (filled(data_get($payload, 'identity_video.video_id'))) {
+            return true;
+        }
+
+        foreach ((array) data_get($payload, 'prediction_videos', []) as $videoGroup) {
+            $videoIds = data_get($videoGroup, 'video_ids', []);
+
+            if (is_array($videoIds) && count(array_filter($videoIds, fn (mixed $videoId): bool => filled($videoId))) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function userIdForPredictionRequest(PredictionRequest $predictionRequest): ?int
+    {
+        if (! filled($predictionRequest->email)) {
+            return null;
+        }
+
+        return \App\Models\User::query()
+            ->where('email', $predictionRequest->email)
+            ->value('id');
     }
 
     private function storedResultResponse(PredictionResult $predictionResult, string $message): JsonResponse

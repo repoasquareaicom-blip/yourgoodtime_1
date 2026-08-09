@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AstrologerAppointment;
+use App\Models\AppointmentPaymentMethod;
 use App\Models\PaymentTransaction;
 use App\Models\PredictionRequest;
+use App\Models\TempleRemedyRequest;
 use App\Services\FuturePredictionAccessService;
 use App\Services\RazorpayPaymentService;
+use App\Services\AstrologerAppointmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -64,6 +68,98 @@ class PaymentController extends Controller
         ]);
     }
 
+    public function createTempleRemedyOrder(Request $request, RazorpayPaymentService $paymentService): JsonResponse
+    {
+        $validated = $request->validate([
+            'temple_remedy_request_id' => ['required', 'integer', 'exists:temple_remedy_requests,id'],
+        ]);
+
+        $templeRemedy = TempleRemedyRequest::query()->findOrFail($validated['temple_remedy_request_id']);
+
+        if ($templeRemedy->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'You are not authorised to pay for this Temple Remedy request.'], 403);
+        }
+
+        if ($templeRemedy->status !== 'PAYMENT_PENDING') {
+            return response()->json(['success' => false, 'message' => 'This remedy is not awaiting payment.'], 409);
+        }
+
+        if (! $templeRemedy->amount_minor || $templeRemedy->amount_minor <= 0) {
+            return response()->json(['success' => false, 'message' => 'Unable to start payment. Please try again.'], 409);
+        }
+
+        if ($templeRemedy->payment_status === 'PAID') {
+            return response()->json(['success' => false, 'message' => 'Payment is already completed for this Temple Remedy request.'], 409);
+        }
+
+        $transaction = $paymentService->createTempleRemedyOrder($templeRemedy, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Temple Remedy payment order created successfully.',
+            'data' => [
+                'transaction_id' => $transaction->id,
+                'razorpay_order_id' => $transaction->provider_order_id,
+                'razorpay_key_id' => config('services.razorpay.key_id'),
+                'prefill' => $paymentService->checkoutPrefill($request->user()),
+                'remedy' => [
+                    'id' => $templeRemedy->id,
+                    'name' => 'Temple Remedy',
+                    'amount_minor' => $transaction->amount_minor,
+                    'currency' => $transaction->currency,
+                ],
+            ],
+        ]);
+    }
+
+    public function createAppointmentOrder(Request $request, RazorpayPaymentService $paymentService, AstrologerAppointmentService $appointmentService): JsonResponse
+    {
+        $validated = $request->validate([
+            'appointment_id' => ['required', 'integer', 'exists:astrologer_appointments,id'],
+        ]);
+
+        $appointment = AstrologerAppointment::query()->findOrFail($validated['appointment_id']);
+
+        if ($appointment->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'You are not authorised to pay for this appointment.'], 403);
+        }
+
+        if (in_array($appointment->status, ['completed', 'cancelled'], true)) {
+            return response()->json(['success' => false, 'message' => 'This appointment is not awaiting payment.'], 409);
+        }
+
+        if ($appointment->payment_status === 'PAID') {
+            return response()->json(['success' => false, 'message' => 'Payment is already completed for this appointment.'], 409);
+        }
+
+        if ($appointment->payment_status === 'FAILED') {
+            return response()->json(['success' => false, 'message' => 'Payment failed for this appointment. Please create a new appointment request.'], 409);
+        }
+
+        if ($appointmentService->appointmentPaymentMethod($appointment) !== AppointmentPaymentMethod::PAYMENT_GATEWAY) {
+            return response()->json(['success' => false, 'message' => 'This appointment is configured for QR / Online payment.'], 409);
+        }
+
+        $transaction = $paymentService->createAppointmentOrder($appointment, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Appointment payment order created successfully.',
+            'data' => [
+                'transaction_id' => $transaction->id,
+                'razorpay_order_id' => $transaction->provider_order_id,
+                'razorpay_key_id' => config('services.razorpay.key_id'),
+                'prefill' => $paymentService->checkoutPrefill($request->user()),
+                'appointment' => [
+                    'id' => $appointment->id,
+                    'appointment_number' => $appointment->appointment_number,
+                    'amount_minor' => $transaction->amount_minor,
+                    'currency' => $transaction->currency,
+                ],
+            ],
+        ]);
+    }
+
     public function verify(Request $request, RazorpayPaymentService $paymentService, FuturePredictionAccessService $accessService): JsonResponse
     {
         $validated = $request->validate([
@@ -82,7 +178,7 @@ class PaymentController extends Controller
         } catch (RuntimeException) {
             return response()->json([
                 'success' => false,
-                'message' => 'Payment could not be verified. No future access has been activated.',
+                'message' => 'Payment could not be verified. No paid access has been activated.',
             ], 422);
         }
 
@@ -97,6 +193,10 @@ class PaymentController extends Controller
             'future_prediction_enabled' => $entitlement !== null,
             'entitlement' => $accessService->entitlementPayload($entitlement),
             'purchased_block' => $entitlement ? $accessService->purchasedBlockPayload($entitlement) : null,
+            'temple_remedy_paid' => $transaction->temple_remedy_request_id !== null,
+            'temple_remedy_request_id' => $transaction->temple_remedy_request_id,
+            'appointment_paid' => $transaction->astrologer_appointment_id !== null,
+            'appointment_id' => $transaction->astrologer_appointment_id,
         ]);
     }
 

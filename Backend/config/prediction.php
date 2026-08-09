@@ -3,6 +3,7 @@
 return [
     'past_years' => 40,
 
+    // Safety window only. The Future purchase block itself is defined by the matched Excel year/range.
     'future_years' => 1,
 
     'age_limits' => [
@@ -24,7 +25,10 @@ return [
 
     'excel_path' => storage_path('app/prediction-data'),
 
-    'dasha_excel_sequence_start' => 2007,
+    'dasha_excel_sequence_start' => [
+        'past' => 2007,
+        'future' => 1998,
+    ],
 
     'files' => [
         'nakshatra_lagnam' => 'nakshatra_lagnam.xlsx',
@@ -56,9 +60,10 @@ return [
             'gemini' => 'MITHUNAM',
             'mithuna' => 'MITHUNAM',
             'mithunam' => 'MITHUNAM',
-            'cancer' => 'KADAKAM',
-            'kataka' => 'KADAKAM',
-            'kadakam' => 'KADAKAM',
+            'cancer' => 'KADAGAM',
+            'kataka' => 'KADAGAM',
+            'kadakam' => 'KADAGAM',
+            'kadagam' => 'KADAGAM',
             'leo' => 'SIMMAM',
             'simha' => 'SIMMAM',
             'simmam' => 'SIMMAM',
@@ -76,9 +81,10 @@ return [
             'capricorn' => 'MAKARAM',
             'makara' => 'MAKARAM',
             'makaram' => 'MAKARAM',
-            'aquarius' => 'KUMBHAM',
-            'kumbha' => 'KUMBHAM',
-            'kumbham' => 'KUMBHAM',
+            'aquarius' => 'KUMBAM',
+            'kumbha' => 'KUMBAM',
+            'kumbham' => 'KUMBAM',
+            'kumbam' => 'KUMBAM',
             'pisces' => 'MEENAM',
             'meena' => 'MEENAM',
             'meenam' => 'MEENAM',
@@ -87,6 +93,12 @@ return [
         'nakshatras' => [
             'ashwini' => 'Aswini',
             'kritika' => 'Krittika',
+            'purva phalguni' => 'Poorvaphalguni',
+            'poorva phalguni' => 'Poorvaphalguni',
+            'poorvaphalguni' => 'Poorvaphalguni',
+            'uttra phalguni' => 'Uttaraphalguni',
+            'uttara phalguni' => 'Uttaraphalguni',
+            'uttaraphalguni' => 'Uttaraphalguni',
             'moola' => 'Mool',
             'purva ashadha' => 'Purva Shadha',
             'purvashada' => 'Purva Shadha',

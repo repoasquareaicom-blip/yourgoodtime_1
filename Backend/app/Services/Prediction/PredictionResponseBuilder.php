@@ -52,7 +52,7 @@ class PredictionResponseBuilder
                 'from' => $timeline->fromYear,
                 'to' => $timeline->toYear,
             ],
-            'identity_video' => $this->identityVideo($timeline->introPlaylist),
+            'identity_video' => $this->identityVideo($timeline->introPlaylist, $timeline->ruleResults),
             'prediction_videos' => $predictionVideos,
             'intro_playlist' => $this->safeIntroPlaylist($timeline->introPlaylist),
             'yearly_predictions' => $yearlyPredictions,
@@ -115,7 +115,7 @@ class PredictionResponseBuilder
         }, $playlist);
     }
 
-    private function identityVideo(array $playlist): ?array
+    private function identityVideo(array $playlist, array $ruleResults = []): ?array
     {
         $item = $playlist[0] ?? null;
 
@@ -125,16 +125,24 @@ class PredictionResponseBuilder
 
         $source = $item['source'] ?? [];
         $matchedValues = $source['matched_values'] ?? [];
+        $ruleData = $this->firstRuleData($ruleResults, 'RULE-001');
 
         return [
             'video_id' => $item['video_id'] ?? null,
             'source' => [
-                'file' => config('prediction.files.nakshatra_lagnam', 'nakshatra_lagnam.xlsx'),
+                'file' => $ruleData['excel_file'] ?? config('prediction.files.nakshatra_lagnam', 'nakshatra_lagnam.xlsx'),
+                'sheet' => $ruleData['worksheet'] ?? $matchedValues['sheet'] ?? null,
                 'lagnam' => $matchedValues['lagnam'] ?? null,
                 'rasi' => $matchedValues['rasi'] ?? null,
                 'nakshatra' => $matchedValues['nakshatra'] ?? null,
+                'match_position' => $matchedValues['position'] ?? null,
+                'excel_row_number' => $ruleData['matched_row'] ?? $matchedValues['excel_row_number'] ?? null,
+                'excel_column' => $ruleData['matched_column'] ?? null,
+                'excel_cell' => $ruleData['matched_cell'] ?? null,
                 'video' => $item['video_id'] ?? null,
                 'lookup_values' => $source['identified_values'] ?? [],
+                'status' => $ruleData['status'] ?? null,
+                'warning' => ($ruleData['status'] ?? null) === 'SUCCESS' ? null : ($ruleData['remarks'] ?? null),
             ],
         ];
     }
@@ -209,6 +217,10 @@ class PredictionResponseBuilder
                 'lagnam' => $matchedValues['lagnam'] ?? null,
                 'rasi' => $matchedValues['rasi'] ?? null,
                 'position' => $matchedValues['position'] ?? null,
+                'excel_row_number' => $ruleData['matched_row'] ?? null,
+                'excel_year_column' => $ruleData['year_column'] ?? null,
+                'excel_video_column' => $ruleData['video_column'] ?? null,
+                'excel_cell' => $ruleData['matched_cell'] ?? null,
                 'matched_year' => $matchedValues['matched_year'] ?? null,
                 'video_ids' => $videoIds,
                 'status' => $prediction['status'] ?? null,
@@ -217,6 +229,22 @@ class PredictionResponseBuilder
         }
 
         return $results;
+    }
+
+    private function firstRuleData(array $ruleResults, string $ruleCode): array
+    {
+        foreach ($ruleResults as $ruleResult) {
+            $data = $ruleResult instanceof RuleResult ? $ruleResult->toArray() : (is_array($ruleResult) ? $ruleResult : []);
+
+            $normalizedStoredCode = str_replace('-', '', (string) ($data['rule_code'] ?? ''));
+            $normalizedRuleCode = str_replace('-', '', $ruleCode);
+
+            if ($normalizedStoredCode === $normalizedRuleCode) {
+                return $data;
+            }
+        }
+
+        return [];
     }
 
     private function groupPredictionVideos(array $predictionVideos): array
@@ -384,9 +412,13 @@ class PredictionResponseBuilder
             'candidate_years' => $timeline->candidateYears,
             'processed_years' => $timeline->processedYears,
             'excluded_age_count' => $timeline->excludedAgeCount,
+            'excluded_purchased_count' => $timeline->excludedPurchasedCount,
+            'excluded_purchased_years' => $timeline->excludedPurchasedYears,
             'minimum_supported_age' => $timeline->minimumSupportedAge,
             'maximum_supported_age' => $timeline->maximumSupportedAge,
             'status' => $timeline->status,
+            'from_year' => $timeline->fromYear,
+            'to_year' => $timeline->toYear,
             'total_years' => count($yearlyPredictions),
             'successful_years' => count(array_filter($yearlyPredictions, fn (array $item): bool => $item['status'] === 'SUCCESS')),
             'partial_years' => count(array_filter($yearlyPredictions, fn (array $item): bool => $item['status'] === 'PARTIAL')),

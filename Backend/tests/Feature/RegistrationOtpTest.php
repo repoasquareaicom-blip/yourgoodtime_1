@@ -7,9 +7,12 @@ use App\Models\PredictionRequest;
 use App\Models\PredictionProduct;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class RegistrationOtpTest extends TestCase
@@ -222,6 +225,7 @@ class RegistrationOtpTest extends TestCase
     public function test_registration_token_can_load_future_access_for_same_prediction(): void
     {
         $this->fakeAstrologyApi();
+        $this->fakeFutureWorkbook();
         $this->createRegistrationOtp();
 
         PredictionProduct::query()->create([
@@ -365,6 +369,7 @@ class RegistrationOtpTest extends TestCase
             ], 200),
             'https://json.astrologyapi.com/v1/planets' => Http::response([
                 ['name' => 'Sun', 'sign' => 'Aries'],
+                ['name' => 'Saturn', 'house' => 6],
             ], 200),
             'https://json.astrologyapi.com/v1/horo_chart/D1' => Http::response([
                 'chart' => 'D1',
@@ -374,9 +379,33 @@ class RegistrationOtpTest extends TestCase
                 'minor' => ['planet' => 'Mercury'],
             ], 200),
             'https://json.astrologyapi.com/v1/major_vdasha' => Http::response([
-                ['planet' => 'Saturn', 'start' => '2020-01-01'],
+                ['planet' => 'Saturn', 'start' => '2020-01-01', 'end' => '2039-12-31'],
             ], 200),
         ]);
+    }
+
+    private function fakeFutureWorkbook(): void
+    {
+        $base = storage_path('framework/testing/registration-prediction-data');
+        $directory = $base.DIRECTORY_SEPARATOR.'future';
+        File::deleteDirectory($base);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        config(['prediction.excel_path' => $base]);
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getActiveSheet()->setTitle('SANI');
+        $spreadsheet->getActiveSheet()->fromArray([
+            ['SANI DASA', 'POSITION'],
+            ['LAGNAM', ''],
+            ['SIMMAM', ''],
+            ['KADAKAM', '6', '2005', 'REG_FUTURE_001'],
+        ]);
+
+        (new Xlsx($spreadsheet))->save($directory.DIRECTORY_SEPARATOR.'FUTURE_37.xlsx');
     }
 
     private function registrationPayload(array $overrides = []): array

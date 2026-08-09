@@ -375,6 +375,27 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
     try {
       completeAuth(await loginWithPassword({ email: email.trim(), password }))
     } catch (loginError) {
+      if (loginError?.response?.data?.code === 'PASSWORD_NOT_SET') {
+        setMode('forgot')
+        setOtpPurpose('password_reset')
+        setAccountState('EXISTING_WITHOUT_PASSWORD')
+        setPassword('')
+        setPasswordConfirmation('')
+        setMessage('Verify the OTP sent to your email, then create your password.')
+        try {
+          await sendOtp({ email: email.trim(), purpose: 'password_reset' })
+          setOtp(emptyOtp)
+          setResendCountdown(resendSeconds)
+          setStep('otp')
+          setStatus('idle')
+          window.setTimeout(() => otpRefs.current[0]?.focus(), 80)
+        } catch (otpError) {
+          setStatus('error')
+          setError(getErrorMessage(otpError, 'Unable to send OTP. Please try again.'))
+        }
+        return
+      }
+
       setStatus('error')
       setError(getErrorMessage(loginError, 'Invalid email or password.'))
     }

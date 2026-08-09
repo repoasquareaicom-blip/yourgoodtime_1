@@ -7,11 +7,16 @@ use App\Models\PredictionEntitlement;
 use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
 use App\Models\User;
+use App\Services\Prediction\PredictionEngineService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 class FuturePredictionAccessService
 {
+    public function __construct(private readonly PredictionEngineService $predictionEngineService)
+    {
+    }
+
     public function activeProduct(): ?PredictionProduct
     {
         return PredictionProduct::query()
@@ -83,53 +88,59 @@ class FuturePredictionAccessService
         }
 
         $currentAge = (int) CarbonImmutable::instance($birthDate)->diffInYears($now);
-        $maxOwnedYear = PredictionEntitlement::query()
-            ->where('user_id', $user->id)
-            ->where('prediction_type', 'future')
-            ->where('status', 'ACTIVE')
-            ->max('access_end_year');
-
-        $startYear = max($currentYear + 1, ((int) $maxOwnedYear) + 1);
+        $ownedYears = $this->ownedFutureYears($user);
         $candidateRows = [];
-        for ($index = 0; $index < $configuredYears; $index++) {
-            $year = $startYear + $index;
-            $age = $currentAge + ($year - $currentYear);
+
+        $scanYears = max($configuredYears, $maximumAge - $currentAge);
+
+        for ($offset = 1; $offset <= $scanYears; $offset++) {
+            $year = $currentYear + $offset;
+            $age = $currentAge + $offset;
             $candidateRows[] = ['year' => $year, 'age' => $age];
+
+            if ($age < $minimumAge || $age > $maximumAge || in_array($year, $ownedYears, true)) {
+                continue;
+            }
+
+            $mappedBlock = $this->mappedFutureBlock($predictionRequest, $year, $currentYear, $currentAge, $minimumAge, $maximumAge, $ownedYears);
+
+            if (($mappedBlock['can_purchase'] ?? false) || ($mappedBlock['reason'] ?? null) === 'PARTIALLY_OWNED_FUTURE_RANGE_CONFLICT') {
+                return array_merge([
+                    'configured_years' => $configuredYears,
+                    'candidate_years' => count($candidateRows),
+                    'excluded_by_age_limit' => count(array_filter(
+                        $candidateRows,
+                        fn (array $row): bool => $row['age'] < $minimumAge || $row['age'] > $maximumAge
+                    )),
+                    'minimum_supported_age' => $minimumAge,
+                    'maximum_supported_age' => $maximumAge,
+                    'owned_future_years' => $ownedYears,
+                ], $mappedBlock);
+            }
         }
 
-        $validRows = array_values(array_filter(
+        if ($candidateRows === [] || count(array_filter(
             $candidateRows,
             fn (array $row): bool => $row['age'] >= $minimumAge && $row['age'] <= $maximumAge
-        ));
-
-        if ($validRows === []) {
+        )) === 0) {
             return array_merge($this->unavailableBlock($configuredYears, 'NO_NEW_FUTURE_YEARS_AVAILABLE', 'You already have all currently supported future predictions.'), [
                 'excluded_by_age_limit' => count($candidateRows),
                 'minimum_supported_age' => $minimumAge,
                 'maximum_supported_age' => $maximumAge,
+                'owned_future_years' => $ownedYears,
             ]);
         }
 
-        $first = $validRows[0];
-        $last = $validRows[array_key_last($validRows)];
-
-        return [
-            'can_purchase' => true,
-            'configured_years' => $configuredYears,
-            'available_years' => count($validRows),
-            'next_start_year' => $first['year'],
-            'next_end_year' => $last['year'],
-            'next_start_age' => $first['age'],
-            'next_end_age' => $last['age'],
-            'start_year' => $first['year'],
-            'end_year' => $last['year'],
-            'start_age' => $first['age'],
-            'end_age' => $last['age'],
-            'excluded_by_age_limit' => count($candidateRows) - count($validRows),
-            'minimum_supported_age' => $minimumAge,
-            'maximum_supported_age' => $maximumAge,
-            'reason' => null,
-        ];
+        return array_merge(
+            $this->unavailableBlock($configuredYears, 'NO_FUTURE_PREDICTION_MAPPING', 'Future Prediction is not currently available for the next supported period.'),
+            [
+                'status' => 'NO_FUTURE_PREDICTION_MAPPING',
+                'candidate_years' => count($candidateRows),
+                'minimum_supported_age' => $minimumAge,
+                'maximum_supported_age' => $maximumAge,
+                'owned_future_years' => $ownedYears,
+            ]
+        );
     }
 
     public function activate(PaymentTransaction $transaction): PredictionEntitlement
@@ -276,6 +287,145 @@ class FuturePredictionAccessService
             'reason' => $reason,
             'message' => $message,
         ];
+    }
+
+    /**
+     * @param array<int, int> $ownedYears
+     * @return array<string, mixed>
+     */
+    private function mappedFutureBlock(PredictionRequest $predictionRequest, int $targetYear, int $currentYear, int $currentAge, int $minimumAge, int $maximumAge, array $ownedYears): array
+    {
+        $preview = $this->predictionEngineService->previewFutureYear($predictionRequest->id, $targetYear);
+        $prediction = $preview['prediction'];
+        $ruleData = $preview['rule_data'];
+
+        if (($prediction['status'] ?? null) !== 'SUCCESS') {
+            return $this->unavailableBlock(1, 'NO_FUTURE_PREDICTION_MAPPING', 'Future Prediction is not currently available for the next supported period.');
+        }
+
+        $matchedRange = $this->matchedExcelRange((string) data_get($ruleData, 'matched_values.matched_year', ''));
+        $sequenceBase = (int) ($ruleData['sequence_base_year'] ?? data_get($ruleData, 'matched_values.sequence_base_year', 0));
+        $dashaStartYear = (int) ($ruleData['dasha_start_effective_year'] ?? 0);
+        $dashaEndYear = (int) ($ruleData['dasha_end_effective_year'] ?? PHP_INT_MAX);
+
+        if ($matchedRange === null || $sequenceBase === 0 || $dashaStartYear === 0) {
+            return $this->unavailableBlock(1, 'NO_FUTURE_PREDICTION_MAPPING', 'Future Prediction is not currently available for the next supported period.');
+        }
+
+        [$dummyFrom, $dummyTo, $matchedLabel] = $matchedRange;
+        $actualFrom = $dashaStartYear + ($dummyFrom - $sequenceBase);
+        $actualTo = $dashaStartYear + ($dummyTo - $sequenceBase);
+        $eligibleYears = [];
+
+        for ($year = $actualFrom; $year <= min($actualTo, $dashaEndYear); $year++) {
+            $age = $currentAge + ($year - $currentYear);
+            if ($year > $currentYear && $age >= $minimumAge && $age <= $maximumAge && ! in_array($year, $ownedYears, true)) {
+                $eligibleYears[] = $year;
+            }
+        }
+
+        if ($eligibleYears === []) {
+            return $this->unavailableBlock(1, 'NO_NEW_FUTURE_YEARS_AVAILABLE', 'You already have all currently supported future predictions.');
+        }
+
+        $first = min($eligibleYears);
+        $last = max($eligibleYears);
+        if (count($eligibleYears) !== ($last - $first + 1)) {
+            return array_merge($this->unavailableBlock(1, 'PARTIALLY_OWNED_FUTURE_RANGE_CONFLICT', 'The next Future prediction range overlaps previously purchased years in a non-contiguous way.'), [
+                'status' => 'PARTIALLY_OWNED_FUTURE_RANGE_CONFLICT',
+                'matched_excel_year' => $matchedLabel,
+                'eligible_years' => $eligibleYears,
+                'owned_future_years' => $ownedYears,
+            ]);
+        }
+
+        $startAge = $currentAge + ($first - $currentYear);
+        $endAge = $currentAge + ($last - $currentYear);
+
+        return [
+            'can_purchase' => true,
+            'available_years' => count($eligibleYears),
+            'next_start_year' => $first,
+            'next_end_year' => $last,
+            'next_start_age' => $startAge,
+            'next_end_age' => $endAge,
+            'start_year' => $first,
+            'end_year' => $last,
+            'start_system_year' => $first,
+            'end_system_year' => $last,
+            'start_age' => $startAge,
+            'end_age' => $endAge,
+            'reason' => null,
+            'status' => 'READY',
+            'matched_excel_year' => $matchedLabel,
+            'matched_excel_year_from' => $dummyFrom,
+            'matched_excel_year_to' => $dummyTo,
+            'sequence_base_year' => $sequenceBase,
+            'target_system_year' => $targetYear,
+            'target_age' => $currentAge + ($targetYear - $currentYear),
+            'dasha_start_year' => $dashaStartYear,
+            'dasha_end_year' => $dashaEndYear,
+            'actual_system_year_from' => $actualFrom,
+            'actual_system_year_to' => $actualTo,
+            'eligible_system_year_from' => $first,
+            'eligible_system_year_to' => $last,
+            'actual_age_from' => $currentAge + ($actualFrom - $currentYear),
+            'actual_age_to' => $currentAge + ($actualTo - $currentYear),
+            'eligible_age_from' => $startAge,
+            'eligible_age_to' => $endAge,
+            'excluded_purchased_years' => array_values(array_intersect(range($actualFrom, $actualTo), $ownedYears)),
+            'excel_file' => $ruleData['excel_file'] ?? null,
+            'sheet' => $ruleData['worksheet'] ?? null,
+            'position' => data_get($ruleData, 'matched_values.position'),
+            'excel_row_number' => $ruleData['matched_row'] ?? null,
+            'year_column' => $ruleData['year_column'] ?? null,
+            'video_id' => data_get($ruleData, 'matched_values.video_ids.0'),
+        ];
+    }
+
+    /**
+     * @return array{0:int,1:int,2:string}|null
+     */
+    private function matchedExcelRange(string $value): ?array
+    {
+        $label = preg_replace('/\s+/', '', trim($value));
+
+        if (! is_string($label) || $label === '') {
+            return null;
+        }
+
+        preg_match_all('/\d{4}/', $label, $matches);
+        $years = array_values(array_map('intval', $matches[0] ?? []));
+
+        if ($years === []) {
+            return null;
+        }
+
+        return [min($years), max($years), count($years) === 1 ? (string) $years[0] : min($years).'-'.max($years)];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function ownedFutureYears(User $user): array
+    {
+        $years = [];
+        PredictionEntitlement::query()
+            ->where('user_id', $user->id)
+            ->where('prediction_type', 'future')
+            ->whereIn('status', ['ACTIVE', 'EXPIRED', 'COMPLETED'])
+            ->whereNotNull('access_start_year')
+            ->whereNotNull('access_end_year')
+            ->get(['access_start_year', 'access_end_year'])
+            ->each(function (PredictionEntitlement $entitlement) use (&$years): void {
+                for ($year = (int) $entitlement->access_start_year; $year <= (int) $entitlement->access_end_year; $year++) {
+                    $years[] = $year;
+                }
+            });
+
+        sort($years);
+
+        return array_values(array_unique($years));
     }
 
     private function displayPrice(int $amountMinor, string $currency): string

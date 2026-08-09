@@ -61,12 +61,17 @@ class Rule001NakshatraLagnam implements BusinessRuleInterface
                     );
                 }
 
+                $matchedValues = array_merge($this->matchedValues($lookupValues), [
+                    'excel_row_number' => (int) $rowNumber,
+                    'sheet' => $worksheet,
+                ]);
+
                 $session->getPlaylistBuilder()->addVideo(
                     $videoId,
                     self::RULE_CODE,
                     self::RULE_NAME,
                     $lookupValues,
-                    $this->matchedValues($lookupValues)
+                    $matchedValues
                 );
 
                 return new RuleResult(
@@ -77,7 +82,7 @@ class Rule001NakshatraLagnam implements BusinessRuleInterface
                     excelFile: $excelFile,
                     worksheet: $worksheet,
                     lookupValues: $lookupValues,
-                    matchedValues: $this->matchedValues($lookupValues),
+                    matchedValues: $matchedValues,
                     matchedRow: (int) $rowNumber,
                     matchedColumn: $requiredColumns['video_id'],
                     matchedCell: $requiredColumns['video_id'].$rowNumber,

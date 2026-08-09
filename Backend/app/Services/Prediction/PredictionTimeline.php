@@ -21,6 +21,8 @@ class PredictionTimeline
         public readonly int $candidateYears,
         public readonly int $processedYears,
         public readonly int $excludedAgeCount,
+        public readonly int $excludedPurchasedCount,
+        public readonly array $excludedPurchasedYears,
         public readonly int $minimumSupportedAge,
         public readonly int $maximumSupportedAge,
         public readonly string $status,

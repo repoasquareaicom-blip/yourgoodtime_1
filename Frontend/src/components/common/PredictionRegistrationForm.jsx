@@ -105,6 +105,7 @@ function PredictionRegistrationForm({
           disabled={disabled}
           required
         />
+        <span className="past-field-helper">Not listed? Select the nearest main city.</span>
         {fieldErrors.place_of_birth || fieldErrors.birth_place ? (
           <span className="past-field-error">{fieldErrors.place_of_birth || fieldErrors.birth_place}</span>
         ) : null}

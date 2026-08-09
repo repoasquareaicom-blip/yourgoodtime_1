@@ -8,6 +8,8 @@ class PaymentTransaction extends Model
 {
     protected $fillable = [
         'prediction_request_id',
+        'temple_remedy_request_id',
+        'astrologer_appointment_id',
         'user_id',
         'product_id',
         'provider',

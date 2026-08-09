@@ -119,7 +119,24 @@ class AuthController extends Controller
 
         $user = $loginTokenService->findUserByEmail($validated['email']);
 
-        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email or password.',
+            ], 422);
+        }
+
+        if (empty($user->password)) {
+            return response()->json([
+                'success' => false,
+                'code' => 'PASSWORD_NOT_SET',
+                'message' => 'Password is not set for this account. Please verify OTP and create a password.',
+                'next_action' => 'VERIFY_PASSWORD_SETUP_OTP',
+                'account_state' => 'EXISTING_WITHOUT_PASSWORD',
+            ], 409);
+        }
+
+        if (! Hash::check($validated['password'], $user->password)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid email or password.',

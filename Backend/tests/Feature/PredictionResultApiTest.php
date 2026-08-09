@@ -231,6 +231,47 @@ class PredictionResultApiTest extends TestCase
             ->count());
     }
 
+    public function test_stale_past_result_is_regenerated_when_current_past_range_moves_forward(): void
+    {
+        $this->seedSuccessfulPredictionData();
+        $predictionRequest = $this->predictionRequest14();
+        $currentYear = (int) now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
+
+        PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => 'old-identity',
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'identity_video' => ['video_id' => 'old-identity'],
+                'prediction_videos' => [],
+                'summary' => ['from_year' => $currentYear - 2, 'to_year' => $currentYear - 1],
+                'warnings' => [],
+            ],
+            'summary_payload' => ['from_year' => $currentYear - 2, 'to_year' => $currentYear - 1],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now()->subYear(),
+        ]);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Prediction result generated successfully.')
+            ->assertJsonPath('data.identity_video.video_id', '34')
+            ->assertJsonPath('data.summary.to_year', $currentYear);
+
+        $this->assertDatabaseHas('prediction_results', [
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => '34',
+        ]);
+    }
+
     public function test_existing_result_is_returned_without_regenerating_engine(): void
     {
         $predictionRequest = $this->predictionRequest14();
@@ -430,7 +471,7 @@ class PredictionResultApiTest extends TestCase
     {
         $this->fakeNakshatraLagnamWorkbook();
         $this->createAgeWorkbook('past', '51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2014', ['6153']));
-        $this->createAgeWorkbook('future', 'FUTURE_51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2015', ['619']));
+        $this->createAgeWorkbook('future', 'FUTURE_51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2006', ['619']));
     }
 
     private function predictionRequest14(): PredictionRequest

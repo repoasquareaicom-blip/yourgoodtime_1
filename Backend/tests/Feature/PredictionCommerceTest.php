@@ -13,6 +13,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class PredictionCommerceTest extends TestCase
@@ -26,7 +28,10 @@ class PredictionCommerceTest extends TestCase
         config([
             'services.razorpay.key_id' => null,
             'services.razorpay.key_secret' => null,
+            'prediction.excel_path' => $this->predictionDataDirectory(),
         ]);
+        File::deleteDirectory($this->predictionDataDirectory());
+        $this->fakePredictionWorkbooks(['1998', '1999', '2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007']);
     }
 
     public function test_future_access_returns_configured_product_price(): void
@@ -157,10 +162,11 @@ class PredictionCommerceTest extends TestCase
         CarbonImmutable::setTestNow();
     }
 
-    public function test_repeat_future_purchases_allocate_next_five_year_blocks(): void
+    public function test_repeat_future_purchases_allocate_next_excel_mapped_multi_year_blocks(): void
     {
         CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 7, 29, 12, 0, 0, 'Asia/Kolkata'));
         config(['prediction.future_years' => 5]);
+        $this->fakePredictionWorkbooks(['1998-2002', '2003-2007']);
         $user = User::factory()->create(['email' => 'ravi@example.com']);
         $request = $this->predictionRequest([
             'email' => $user->email,
@@ -578,11 +584,81 @@ class PredictionCommerceTest extends TestCase
             'longitude' => 80.2707,
             'birth_payload' => [],
             'raw_astrology_response' => [],
-            'normalized_astrology_data' => [],
+            'normalized_astrology_data' => $this->normalizedData(),
             'submitted_at' => now(),
             'completed_at' => now(),
             'email' => 'ravi@example.com',
         ], $overrides));
+    }
+
+    private function normalizedData(): array
+    {
+        return [
+            'birth' => [
+                'date_of_birth' => '1973-12-16',
+                'time_of_birth' => '06:45',
+                'place_of_birth' => 'Chennai',
+                'latitude' => 13.0827,
+                'longitude' => 80.2707,
+            ],
+            'identity' => [
+                'lagnam' => 'Aries',
+                'rasi' => 'Pisces',
+                'nakshatra' => 'Swati',
+            ],
+            'dasha' => [
+                'current_major_lord' => 'Venus',
+                'current_minor_lord' => 'Moon',
+                'major' => [
+                    ['planet' => 'Venus', 'planet_id' => 5, 'start' => '1-1-2027 00:00', 'end' => '31-12-2036 23:59'],
+                ],
+            ],
+            'planets' => [
+                ['id' => 5, 'name' => 'Venus', 'house' => 6],
+            ],
+        ];
+    }
+
+    private function fakePredictionWorkbooks(array $yearHeaders): void
+    {
+        $base = $this->predictionDataDirectory();
+        $futureDirectory = $base.DIRECTORY_SEPARATOR.'future';
+
+        if (! is_dir($futureDirectory)) {
+            mkdir($futureDirectory, 0777, true);
+        }
+
+        if (! is_dir($base)) {
+            mkdir($base, 0777, true);
+        }
+
+        $intro = new Spreadsheet();
+        $intro->getActiveSheet()->fromArray([
+            ['Nakshatra', 'Rasi', 'Lagnam', 'VideoId'],
+            ['Swati', 'Pisces', 'Aries', 'INTRO_001'],
+        ]);
+        (new Xlsx($intro))->save($base.DIRECTORY_SEPARATOR.'nakshatra_lagnam.xlsx');
+
+        $row = ['MEENAM', '6'];
+        foreach ($yearHeaders as $index => $yearHeader) {
+            $row[] = $yearHeader;
+            $row[] = 'FUTURE_'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT);
+        }
+
+        $future = new Spreadsheet();
+        $future->getActiveSheet()->setTitle('VENUS');
+        $future->getActiveSheet()->fromArray([
+            ['VENUS DASA', 'POSITION'],
+            ['LAGNAM', ''],
+            ['MESHAM', ''],
+            $row,
+        ]);
+        (new Xlsx($future))->save($futureDirectory.DIRECTORY_SEPARATOR.'FUTURE_41 TO 60.xlsx');
+    }
+
+    private function predictionDataDirectory(): string
+    {
+        return storage_path('framework/testing/prediction-commerce-data');
     }
 
     private function futureProduct(array $overrides = []): PredictionProduct

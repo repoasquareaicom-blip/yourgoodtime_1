@@ -26,6 +26,7 @@ Backend/xvendor/
 Backend/.env
 Backend/.env.*
 !Backend/.env.example
+Backend/cred
 Backend/storage/*.key
 Backend/.phpunit.cache/
 Backend/.phpunit.result.cache

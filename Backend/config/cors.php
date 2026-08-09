@@ -2,12 +2,20 @@
 
 return [
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => [
+        'api/*',
+        'sanctum/csrf-cookie',
+    ],
 
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
         env('FRONTEND_URL', 'http://localhost:5173'),
+
+        'https://dev.yourgoodtime.in',
+        'https://yourgoodtime.in',
+        'https://www.yourgoodtime.in',
+
         'http://localhost:5173',
         'http://127.0.0.1:5173',
     ],

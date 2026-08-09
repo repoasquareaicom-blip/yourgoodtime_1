@@ -1,9 +1,6 @@
 export const languageOptions = [
   { code: 'ta', name: 'Tamil' },
   { code: 'en', name: 'English' },
-  { code: 'te', name: 'Telugu' },
-  { code: 'ml', name: 'Malayalam' },
-  { code: 'kn', name: 'Kannada' },
   { code: 'hi', name: 'Hindi' },
 ]
 

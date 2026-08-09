@@ -15,11 +15,17 @@ class PredictionTimelineGenerator
     }
 
     /**
-     * @return array{effective_year:int,from_year:int,to_year:int,year_sessions:array<int, PredictionYearSession>,configured_years:int,candidate_years:int,processed_years:int,excluded_age_count:int,minimum_supported_age:int,maximum_supported_age:int,status:string}
+     * @param array<int, int> $excludedYears
+     *
+     * @return array{effective_year:int,from_year:int,to_year:int,year_sessions:array<int, PredictionYearSession>,configured_years:int,candidate_years:int,processed_years:int,excluded_age_count:int,excluded_purchased_count:int,excluded_purchased_years:array<int, int>,minimum_supported_age:int,maximum_supported_age:int,status:string}
      */
-    public function generate(string $predictionType, CarbonInterface $predictionDate, ?CarbonInterface $birthDate, ?int $futureStartYear = null, ?int $futureYearCount = null): array
+    public function generate(string $predictionType, CarbonInterface $predictionDate, ?CarbonInterface $birthDate, ?int $futureStartYear = null, ?int $futureYearCount = null, array $excludedYears = []): array
     {
+        $businessYear = (int) CarbonImmutable::now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
         $effectiveYear = (int) $predictionDate->format('Y');
+        if ($predictionType === 'past') {
+            $effectiveYear = min($effectiveYear, $businessYear);
+        }
         $configuredYears = $predictionType === 'past'
             ? $this->predictionConfig->pastYears()
             : ($futureYearCount ?? $this->predictionConfig->futureYears());
@@ -36,6 +42,8 @@ class PredictionTimelineGenerator
                 'candidate_years' => 0,
                 'processed_years' => 0,
                 'excluded_age_count' => 0,
+                'excluded_purchased_count' => 0,
+                'excluded_purchased_years' => [],
                 'minimum_supported_age' => $ageLimits['minimum'],
                 'maximum_supported_age' => $ageLimits['maximum'],
                 'status' => 'NO_BIRTH_DATE',
@@ -64,6 +72,15 @@ class PredictionTimelineGenerator
             $candidateRows,
             fn (array $row): bool => $row['age'] >= $ageLimits['minimum'] && $row['age'] <= $ageLimits['maximum']
         ));
+        $excludedAgeCount = count($candidateRows) - count($supportedRows);
+        $excludedYears = array_values(array_unique(array_map('intval', $excludedYears)));
+        $excludedYearMap = array_flip($excludedYears);
+        $excludedPurchasedRows = $predictionType === 'past'
+            ? array_values(array_filter($supportedRows, fn (array $row): bool => isset($excludedYearMap[(int) $row['year']])))
+            : [];
+        if ($predictionType === 'past' && $excludedPurchasedRows !== []) {
+            $supportedRows = array_values(array_filter($supportedRows, fn (array $row): bool => ! isset($excludedYearMap[(int) $row['year']])));
+        }
         $years = array_column($supportedRows !== [] ? $supportedRows : $candidateRows, 'year');
         $fromYear = $years === [] ? $effectiveYear : min($years);
         $toYear = $years === [] ? $effectiveYear : max($years);
@@ -87,7 +104,9 @@ class PredictionTimelineGenerator
             'configured_years' => $configuredYears,
             'candidate_years' => count($candidateRows),
             'processed_years' => count($sessions),
-            'excluded_age_count' => count($candidateRows) - count($sessions),
+            'excluded_age_count' => $excludedAgeCount,
+            'excluded_purchased_count' => count($excludedPurchasedRows),
+            'excluded_purchased_years' => array_values(array_map(fn (array $row): int => (int) $row['year'], $excludedPurchasedRows)),
             'minimum_supported_age' => $ageLimits['minimum'],
             'maximum_supported_age' => $ageLimits['maximum'],
             'status' => $sessions === [] ? 'NO_SUPPORTED_AGES' : 'READY',

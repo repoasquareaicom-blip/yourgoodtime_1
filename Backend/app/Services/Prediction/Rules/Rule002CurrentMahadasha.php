@@ -53,7 +53,7 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
             return $this->result($startedAt, 'SKIPPED', $yearMetadata, null, $predictionPeriod, null, null, [], [], 'Birth date is unavailable.');
         }
 
-        $age = $systemYear - $birthYear;
+        $age = $session->getTargetAge() ?? $this->ageResolver->calculateAge($birthDate, $session->getPredictionDate());
         $dasha = $context->getMahadashaForSystemYear($systemYear);
         $this->logLookup('system year resolved', compact('age', 'systemYear', 'birthYear', 'predictionPeriod'));
 
@@ -62,11 +62,12 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
         }
 
         try {
-            $sequenceYear = $this->sequenceYearResolver->resolveForSystemYear($systemYear, $dasha->startDate, $dasha->endDate);
+            $sequenceYear = $this->sequenceYearResolver->resolveForSystemYear($systemYear, $dasha->startDate, $dasha->endDate, $predictionPeriod);
             $this->logLookup('excel sequence year resolved', [
                 'major_dasha' => $dasha->planet,
                 'dasha_start_year' => $sequenceYear->dashaStartEffectiveYear,
                 'system_year' => $systemYear,
+                'prediction_type' => $predictionPeriod,
                 'excel_sequence_year' => $sequenceYear->excelSequenceYear,
             ]);
         } catch (Throwable $exception) {
@@ -103,7 +104,7 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
         }
 
         $workbook = $this->workbookResolver->resolve($predictionPeriod, $age);
-        $matchedValues = $this->matchedValues($workbook, null, $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear);
+        $matchedValues = $this->matchedValues($workbook, null, $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear, $age);
         $this->logLookup('age workbook resolved', [
             'age' => $age,
             'workbook' => $workbook->fileName,
@@ -123,7 +124,7 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
                 return $this->result($startedAt, 'NO_MATCH', $yearMetadata, $age, $predictionPeriod, $workbook, null, $identifiedValues, $matchedValues, 'No matching Mahadasha worksheet found.', sequenceYear: $sequenceYear);
             }
 
-            $matchedValues = $this->matchedValues($workbook, $worksheet['worksheet'], $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear);
+            $matchedValues = $this->matchedValues($workbook, $worksheet['worksheet'], $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear, $age);
             $rowMatches = $this->matchingRows($worksheet['rows'], $context->getLagnam(), $context->getRasi(), $planetHousePosition);
             $this->logLookup('worksheet row lookup completed', [
                 'sheet' => $worksheet['worksheet'],
@@ -206,6 +207,7 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
             'age' => $age,
             'system_year' => $yearMetadata['calendar_year'],
             'prediction_period' => $predictionPeriod,
+            'prediction_type' => $predictionPeriod,
             'mahadasha' => $dasha->planet,
             'mahadasha_start_date' => $dasha->startDate,
             'mahadasha_end_date' => $dasha->endDate,
@@ -219,7 +221,7 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
         ];
     }
 
-    private function matchedValues(AgeWorkbookResult $workbook, ?string $worksheet, ?string $lagnam, ?string $rasi, ?int $position, DashaSequenceYearResult $sequenceYear): array
+    private function matchedValues(AgeWorkbookResult $workbook, ?string $worksheet, ?string $lagnam, ?string $rasi, ?int $position, DashaSequenceYearResult $sequenceYear, int $age): array
     {
         return [
             'workbook' => $workbook->fileName,
@@ -228,6 +230,10 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
             'rasi' => $this->nameMapper->excelValue($rasi, 'workbook_lagnams'),
             'position' => $position,
             'sequence_base_year' => $sequenceYear->sequenceBaseYear,
+            'target_system_year' => $sequenceYear->predictionEffectiveYear,
+            'target_age' => $age,
+            'dasha_start_year' => $sequenceYear->dashaStartEffectiveYear,
+            'calculated_excel_sequence_year' => $sequenceYear->excelSequenceYear,
             'sequence_offset' => $sequenceYear->sequenceOffset,
             'dasha_year_number' => $sequenceYear->dashaYearNumber,
             'excel_sequence_year' => $sequenceYear->excelSequenceYear,

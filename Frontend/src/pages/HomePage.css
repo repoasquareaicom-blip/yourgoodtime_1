@@ -39,7 +39,7 @@
 
 .home-hero-shell {
   min-height: 100svh;
-  padding: 86px 14px 110px;
+  padding: 86px 14px 0;
   box-sizing: border-box;
   overflow: visible;
 }
@@ -716,6 +716,31 @@
   gap: 8px;
 }
 
+.home-content-area {
+  width: 100%;
+  margin-top: 18px;
+  padding: 18px 0 18px;
+  box-sizing: border-box;
+  background: url('../assets/intro-bg.png') top center / cover no-repeat;
+}
+
+.home-content-panel {
+  width: calc(100% - 28px);
+  margin: 0 auto;
+  padding: 18px 14px 16px;
+  box-sizing: border-box;
+  display: grid;
+  gap: 0;
+  border: 1px solid rgba(217, 182, 118, 0.48);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(83, 51, 12, 0.14);
+}
+
+.home-content-panel > .home-quick-links {
+  margin-top: 0;
+}
+
 .home-content-footer {
   margin-top: 14px;
   display: grid;
@@ -1215,6 +1240,148 @@
   box-shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
 }
 
+.temple-remedy-panel.is-temple-flow {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(680px, calc(100dvh - 32px));
+  overflow: hidden;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+}
+
+.temple-remedy-step-body {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.temple-remedy-summary {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(20, 47, 91, 0.14);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.temple-remedy-summary div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.temple-remedy-summary span,
+.temple-remedy-option-head span {
+  color: #6f4a2a;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.temple-remedy-summary span {
+  border: 1px solid rgba(20, 47, 91, 0.12);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #fffdf8;
+}
+
+.temple-remedy-option-shell {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(20, 47, 91, 0.12);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.temple-remedy-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.temple-remedy-option-head strong {
+  color: #173466;
+  font-size: 0.86rem;
+}
+
+.temple-remedy-option-table {
+  max-height: 190px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-color: #f58900 #fff3dd;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.temple-remedy-option-table::-webkit-scrollbar {
+  width: 10px;
+}
+
+.temple-remedy-option-table::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #fff3dd;
+}
+
+.temple-remedy-option-table::-webkit-scrollbar-thumb {
+  border: 2px solid #fff3dd;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffba3c, #f58900);
+}
+
+.temple-remedy-option-table::-webkit-scrollbar-thumb:hover {
+  background: #d87800;
+}
+
+.temple-remedy-option-table .talk-question-row {
+  grid-template-columns: minmax(0, 1fr) 86px;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-wizard-steps {
+  min-width: 0;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-schedule-row,
+.temple-remedy-panel.is-temple-flow .talk-manual-proof-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.temple-remedy-panel.is-temple-flow .temple-remedy-proof-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-qr-payment {
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-review-card {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.temple-remedy-panel.is-temple-flow .talk-price {
+  margin-top: 0;
+  justify-items: center;
+  text-align: center;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-price strong {
+  font-size: 2rem;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-price span {
+  text-align: center;
+}
+
+.temple-remedy-panel.is-temple-flow .talk-price,
+.temple-remedy-panel.is-temple-flow .talk-qr-payment,
+.temple-remedy-panel.is-temple-flow .talk-review-card div {
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .temple-login-panel {
   width: min(430px, calc(100vw - 32px));
   justify-items: center;
@@ -1254,11 +1421,15 @@
 }
 
 .temple-remedy-panel h2 {
-  max-width: 420px;
+  max-width: calc(100% - 42px);
   padding-right: 34px;
   color: #173466;
-  font-size: clamp(1.45rem, 4vw, 2rem);
+  font-size: clamp(1.45rem, 3vw, 2rem);
   line-height: 1.1;
+}
+
+.temple-remedy-panel.is-temple-flow h2 {
+  white-space: nowrap;
 }
 
 .temple-remedy-panel > p {
@@ -1290,7 +1461,36 @@
   outline: none;
 }
 
-.temple-remedy-panel textarea:focus {
+.temple-remedy-panel.is-temple-flow textarea {
+  min-height: 68px;
+  max-height: 72px;
+  resize: none;
+}
+
+.temple-remedy-panel input,
+.temple-remedy-panel select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(213, 185, 128, 0.74);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #173466;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  outline: none;
+}
+
+.temple-remedy-panel input[type="file"] {
+  padding: 9px;
+  cursor: pointer;
+}
+
+.temple-remedy-panel textarea:focus,
+.temple-remedy-panel input:focus,
+.temple-remedy-panel select:focus {
   border-color: rgba(241, 132, 0, 0.82);
   box-shadow: 0 0 0 3px rgba(241, 132, 0, 0.14);
 }
@@ -1305,9 +1505,15 @@
 }
 
 .temple-remedy-meta {
+  min-height: 14px;
   color: #6f7890;
   font-size: 0.76rem;
   font-weight: 750;
+}
+
+.temple-remedy-actions {
+  align-self: end;
+  min-height: 44px;
 }
 
 .temple-remedy-meta strong {
@@ -1332,6 +1538,32 @@
   color: #a53224;
 }
 
+.temple-remedy-thanks {
+  max-width: 520px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(65, 164, 83, 0.22);
+  border-radius: 14px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.temple-remedy-thanks strong {
+  color: #173466;
+  font-size: 1.05rem;
+}
+
+.temple-remedy-thanks span {
+  width: fit-content;
+  border: 1px solid rgba(20, 47, 91, 0.12);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fffdf8;
+  color: #173466;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
 .temple-remedy-actions button {
   min-height: 42px;
   border-radius: 999px;
@@ -1344,14 +1576,64 @@
   cursor: pointer;
 }
 
-.temple-remedy-actions button + button {
+.temple-remedy-actions button.temple-remedy-secondary {
   background: rgba(255, 255, 255, 0.72);
   color: #173466;
+}
+
+.temple-remedy-actions button.temple-remedy-primary {
+  background: linear-gradient(180deg, #ffba3c, #f58900);
+  color: #ffffff;
 }
 
 .temple-remedy-actions button:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+@media (max-width: 640px) {
+  .temple-remedy-overlay {
+    place-items: start center;
+    padding: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .temple-remedy-panel.is-temple-flow {
+    width: min(100%, calc(100vw - 24px));
+    max-height: none;
+    overflow: visible;
+    padding: 18px;
+  }
+
+  .temple-remedy-summary div,
+  .temple-remedy-panel.is-temple-flow .talk-schedule-row,
+  .temple-remedy-panel.is-temple-flow .talk-manual-proof-grid,
+  .temple-remedy-panel.is-temple-flow .talk-qr-payment,
+  .temple-remedy-panel.is-temple-flow .talk-review-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .temple-remedy-option-table {
+    max-height: 320px;
+  }
+
+  .temple-remedy-option-table .talk-question-row {
+    grid-template-columns: minmax(0, 1fr) 76px;
+    gap: 6px;
+  }
+
+  .temple-remedy-option-table .talk-question-row > span {
+    display: none;
+  }
+
+  .temple-remedy-actions {
+    justify-content: stretch;
+  }
+
+  .temple-remedy-actions button {
+    flex: 1 1 140px;
+  }
 }
 
 .btn-shine {
@@ -1559,7 +1841,7 @@
   .home-hero-shell {
     width: 100%;
     margin: 0 auto;
-    padding: 116px clamp(28px, 4vw, 72px) 56px;
+    padding: 116px clamp(28px, 4vw, 72px) 0;
     box-sizing: border-box;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(420px, 0.72fr);
@@ -1739,9 +2021,25 @@
     min-height: 112px;
   }
 
+  .home-content-area {
+    grid-column: 1 / -1;
+    width: 100vw;
+    justify-self: center;
+    margin-top: 22px;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding: 28px 0 28px;
+  }
+
+  .home-content-panel {
+    width: min(1180px, calc(100% - 56px));
+    padding: 8px 28px 24px;
+    border-radius: 20px;
+  }
+
   .home-concept-sections {
     grid-column: 1 / -1;
-    width: min(1180px, 100%);
+    width: 100%;
     justify-self: center;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
@@ -1765,7 +2063,7 @@
 
   .home-process-section {
     grid-column: 1 / -1;
-    width: min(1180px, 100%);
+    width: 100%;
     justify-self: center;
     grid-template-columns: minmax(280px, 0.58fr) minmax(0, 1.42fr);
     gap: 42px;
@@ -1818,7 +2116,7 @@
 
   .home-info-section {
     grid-column: 1 / -1;
-    width: min(1180px, 100%);
+    width: 100%;
     justify-self: center;
     grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
     gap: 64px;
@@ -1843,7 +2141,7 @@
 
   .home-faq-section {
     grid-column: 1 / -1;
-    width: min(1180px, 100%);
+    width: 100%;
     justify-self: center;
     grid-template-columns: 280px minmax(0, 1fr);
     gap: 64px;
@@ -1856,7 +2154,7 @@
 
   .home-content-footer {
     grid-column: 1 / -1;
-    width: min(1180px, 100%);
+    width: 100%;
     justify-self: center;
     margin: 4px 0 0;
     transform: none;

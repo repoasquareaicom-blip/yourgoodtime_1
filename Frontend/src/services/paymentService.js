@@ -27,6 +27,22 @@ export async function createFuturePredictionOrder({ predictionRequestId, request
   return response.data?.data
 }
 
+export async function createTempleRemedyOrder(remedyId) {
+  const response = await api.post('/payments/temple-remedy/order', {
+    temple_remedy_request_id: remedyId,
+  })
+
+  return response.data?.data
+}
+
+export async function createAppointmentOrder(appointmentId) {
+  const response = await api.post('/payments/astrologer-appointment/order', {
+    appointment_id: appointmentId,
+  })
+
+  return response.data?.data
+}
+
 export async function verifyRazorpayPayment(payload) {
   const response = await api.post('/payments/razorpay/verify', payload)
 

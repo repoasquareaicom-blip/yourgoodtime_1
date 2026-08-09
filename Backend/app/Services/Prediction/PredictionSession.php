@@ -35,18 +35,22 @@ class PredictionSession
 
     private DeveloperTrace $developerTrace;
 
+    private ?int $targetAge;
+
     public function __construct(
         int $requestId,
         PredictionContext $predictionContext,
         PlaylistBuilder $playlistBuilder,
         DeveloperTrace $developerTrace,
         PredictionConfig $predictionConfig,
-        ?CarbonImmutable $currentDate = null
+        ?CarbonImmutable $currentDate = null,
+        ?int $targetAge = null
     ) {
         $this->requestId = $requestId;
         $this->predictionContext = $predictionContext;
         $this->playlistBuilder = $playlistBuilder;
         $this->developerTrace = $developerTrace;
+        $this->targetAge = $targetAge;
         $this->currentDate = $currentDate ?? CarbonImmutable::now();
         $this->currentYear = (int) $this->currentDate->format('Y');
         $this->pastYears = $predictionConfig->pastYears();
@@ -73,6 +77,11 @@ class PredictionSession
     public function getCurrentYear(): int
     {
         return $this->currentYear;
+    }
+
+    public function getTargetAge(): ?int
+    {
+        return $this->targetAge;
     }
 
     public function getPastYears(): int
@@ -145,6 +154,7 @@ class PredictionSession
             'past_end_year' => $this->pastEndYear,
             'future_start_year' => $this->futureStartYear,
             'future_end_year' => $this->futureEndYear,
+            'target_age' => $this->targetAge,
         ];
     }
 

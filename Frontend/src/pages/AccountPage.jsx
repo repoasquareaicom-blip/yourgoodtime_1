@@ -6,11 +6,13 @@ import HeaderAuthActions from '../components/common/HeaderAuthActions'
 import PrimaryNav from '../components/common/PrimaryNav'
 import PredictionPlayer from '../components/common/PredictionPlayer'
 import TempleRemedyModal from '../components/common/TempleRemedyModal'
+import TalkToAstrologerModal from '../components/common/TalkToAstrologerModal'
 import ygtLogo from '../assets/yt-logo.png'
 import { clearMyAccountPredictionCache, fetchMyAccountPredictions } from '../services/myAccountService'
+import { createAppointmentOrder, createTempleRemedyOrder, loadRazorpayScript, verifyRazorpayPayment } from '../services/paymentService'
 import { buildPredictionPlaylist, fetchPredictionResult, fetchStoredPredictionResult } from '../services/predictionResultService'
 import { clearPredictionSession, savePredictionSession } from '../services/predictionSessionService'
-import { submitTempleRemedyFeedback } from '../services/templeRemedyService'
+import { cancelTempleRemedyPayment, fetchTempleRemedyFile, submitTempleRemedyFeedback } from '../services/templeRemedyService'
 import './HomePage.css'
 import './AccountPage.css'
 
@@ -230,6 +232,7 @@ function PredictionCard({
   onAction,
   note,
   rangeButtons = [],
+  secondaryAction = null,
 }) {
   return (
     <div className={`account-prediction-item is-${tone}`}>
@@ -258,14 +261,26 @@ function PredictionCard({
         <button type="button" className="account-primary-btn" disabled={disabled} onClick={onAction}>
           {buttonLabel}
         </button>
+        {secondaryAction ? (
+          <button
+            type="button"
+            className="account-secondary-btn"
+            disabled={secondaryAction.disabled}
+            onClick={secondaryAction.onClick}
+          >
+            <span>{secondaryAction.label}</span>
+            {secondaryAction.years ? <strong>{secondaryAction.years}</strong> : null}
+          </button>
+        ) : null}
         {note ? <p className="account-card-note">{note}</p> : null}
       </article>
     </div>
   )
 }
 
-function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewRemedy }) {
+function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewRemedy, onSubmitFeedback, payingRemedyId }) {
   const items = Array.isArray(remedies) ? remedies : []
+  const hasActiveRemedy = items.some((item) => item.status !== 'COMPLETED')
 
   return (
     <section className="account-remedy-section" aria-label="Temple Remedy requests">
@@ -276,6 +291,18 @@ function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewReme
         </div>
       </div>
 
+      <article className="account-remedy-request-panel">
+        <div>
+          <span>Temple Remedy</span>
+          <strong>{hasActiveRemedy ? 'One active request is in progress' : 'You can request a new remedy'}</strong>
+        </div>
+        {!hasActiveRemedy ? (
+          <button type="button" onClick={onRequest}>{items.length ? 'Request Another Remedy' : 'Request Temple Remedy'}</button>
+        ) : (
+          <small>Request another remedy after the current request is completed.</small>
+        )}
+      </article>
+
       {isLoading && !items.length ? (
         <article className="account-remedy-card is-empty">
           <p>Loading your Temple Remedy requests...</p>
@@ -285,64 +312,59 @@ function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewReme
           {items.map((item) => {
             const amount = formatMoney(item.amount_minor, item.currency)
             const remedy = item.remedy || {}
-            const paymentText = item.payment_enabled
-              ? item.payment_status === 'PAID'
-                ? 'Payment completed'
-                : amount ? `Payment pending - ${amount}` : 'Payment pending'
-              : 'Not enabled yet'
-            const statusLabel = item.status_label || titleValue(item.status) || 'Request received'
-            const isRemedyReady = Boolean(remedy.available)
-            const guidanceText = isRemedyReady
-              ? 'Your remedy is ready. Please view it and share your feedback after seeing the guidance.'
-              : 'Our astrologer will read your problem carefully and provide the remedy soon.'
+            const selectedRemedyTitle = item.remedy_option?.title || titleValue(item.remedy_option?.code) || 'Temple Remedy'
+            const statusLabel = item.status === 'COMPLETED'
+              ? 'Completed'
+              : item.payment_status === 'PAID'
+                ? 'Payment Received'
+                : item.status_label || titleValue(item.status) || 'Request received'
+            const needsPayment = Boolean(item.can_pay)
+            const guidanceText = item.status === 'RECEIVED'
+              ? 'Your request has been received.'
+              : item.status === 'REVIEWING'
+                ? 'Your request is currently being reviewed.'
+                : item.status === 'PAYMENT_PENDING'
+                  ? item.payment_method === 'qr_online'
+                    ? 'Your QR payment reference is waiting for admin confirmation.'
+                    : item.payment_status === 'PAID'
+                      ? 'Payment received. Your remedy will appear here once it is completed.'
+                      : 'Complete the payment to send this request to admin.'
+                  : 'Your remedy is ready. View it securely and share feedback after seeing the guidance.'
 
             return (
-              <article className="account-remedy-card" key={item.id}>
-                <div className="account-remedy-head">
-                  <span className="account-remedy-id">Request #{item.id}</span>
-                  <time>{formatDateTime(item.submitted_at) || '-'}</time>
-                </div>
-
-                <p className="account-remedy-guidance">{guidanceText}</p>
-
-                <div className="account-remedy-badge-row" aria-label="Remedy status summary">
-                  <span>{statusLabel}</span>
-                  <span>{paymentText}</span>
-                  {item.feedback?.submitted ? <span>Feedback submitted</span> : null}
-                </div>
-
-                <div className="account-remedy-body">
-                  <div className="account-remedy-notes">
-                    <div className="account-remedy-problem-wrap">
-                      <div className="account-remedy-problem">
-                        <span>Your Problem</span>
-                        <p>{item.problem_text}</p>
-                      </div>
-                      <button type="button" className="account-remedy-inline-request" onClick={onRequest}>Request Another Remedy</button>
-                    </div>
+              <article className="account-remedy-history-card" key={item.id}>
+                <div className="account-remedy-history-main">
+                  <div className="account-remedy-history-head">
+                    <span className="account-remedy-id">Request #{item.id}</span>
+                    <span className="account-remedy-history-chip">{statusLabel}</span>
                   </div>
-
-                  {item.payment_enabled && item.payment_status !== 'PAID' || remedy.available ? (
-                    <div className="account-remedy-status-panel">
-                      {item.payment_enabled && item.payment_status !== 'PAID' ? (
-                        <button type="button" className="account-remedy-pay-btn" onClick={() => onPay?.(item)}>
-                          Proceed to Pay{amount ? ` ${amount}` : ''}
-                        </button>
-                      ) : null}
-
-                      {remedy.available ? (
-                        <div className="account-remedy-action-row">
-                          <button type="button" className="account-remedy-download" onClick={() => onViewRemedy?.(item)}>
-                            View / Play Remedy
-                          </button>
-                          {item.feedback?.submitted ? <span>Feedback submitted</span> : <span>Feedback pending after viewing</span>}
-                        </div>
-                      ) : null}
-                    </div>
+                  <small>{formatDateTime(item.submitted_at) || '-'}</small>
+                </div>
+                <div className="account-remedy-history-status">
+                  <strong>{selectedRemedyTitle}</strong>
+                  {item.status === 'PAYMENT_PENDING' && item.payment_status !== 'PAID' && amount ? <small>{amount}</small> : null}
+                  <p>{guidanceText}</p>
+                </div>
+                <div className="account-remedy-history-actions">
+                  {needsPayment ? (
+                    <button type="button" className="account-remedy-pay-btn" disabled={payingRemedyId === item.id} onClick={() => onPay?.(item)}>
+                      {payingRemedyId === item.id ? 'Opening Payment...' : `Pay Securely${amount ? ` - ${amount}` : ''}`}
+                    </button>
+                  ) : null}
+                  {remedy.available ? (
+                    <button type="button" className="account-remedy-download" onClick={() => onViewRemedy?.(item)}>
+                      View PDF
+                    </button>
+                  ) : null}
+                  {item.feedback?.submitted ? (
+                    <small>Feedback submitted</small>
+                  ) : remedy.available ? (
+                    <button type="button" className="account-remedy-feedback-link" onClick={() => onSubmitFeedback?.(item)}>
+                      Submit feedback
+                    </button>
                   ) : null}
                 </div>
-
-                {item.admin_note ? <p className="account-remedy-note">{item.admin_note}</p> : null}
+                {item.admin_note ? <p className="account-remedy-history-note">{item.admin_note}</p> : null}
               </article>
             )
           })}
@@ -350,14 +372,81 @@ function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewReme
       ) : (
         <article className="account-remedy-card is-empty">
           <p>No Temple Remedy request submitted yet.</p>
-          <button type="button" onClick={onRequest}>Request Temple Remedy</button>
         </article>
       )}
     </section>
   )
 }
 
-function TempleRemedyViewer({
+function AppointmentSection({ appointments, isLoading, onBook, onPay, payingAppointmentId }) {
+  const groups = appointments?.groups || {}
+  const pending = groups.pending || []
+  const upcoming = groups.upcoming || []
+  const completed = groups.completed || []
+  const allItems = [...pending, ...upcoming, ...completed]
+
+  return (
+    <section className="account-remedy-section account-appointment-section" aria-label="Talk to Astrologer appointments">
+      <div className="account-section-heading account-remedy-heading">
+        <div className="account-remedy-title-row">
+          <div className="account-card-icon"><Icon name="clock" /></div>
+          <h2>Talk to Astrologer</h2>
+        </div>
+      </div>
+
+      <article className="account-remedy-card is-empty">
+        <p>Book a private online consultation with our astrologer for personalised guidance.</p>
+        <button type="button" onClick={onBook}>Book Consultation</button>
+      </article>
+
+      {isLoading && !allItems.length ? (
+        <article className="account-remedy-card is-empty"><p>Loading your appointments...</p></article>
+      ) : null}
+
+      {allItems.length ? (
+        <div className="account-remedy-list">
+          {allItems.map((item) => {
+            const confirmed = formatDateTime(item.confirmed_start_at)
+            const preferred = [item.preferred_date, item.preferred_time].filter(Boolean).join(' ')
+            const amount = formatMoney(item.amount_minor, item.currency)
+
+            return (
+              <article className="account-remedy-card" key={item.id}>
+                <div className="account-remedy-head">
+                  <span className="account-remedy-id">{item.appointment_number}</span>
+                  <time>{formatDateTime(item.submitted_at) || '-'}</time>
+                </div>
+                <div className="account-remedy-badge-row">
+                  <span>{item.status_label}</span>
+                  <span>{item.questions_count} Questions</span>
+                  <span>{item.payment_status_label || item.payment_status}</span>
+                </div>
+                <div className="account-remedy-problem">
+                  <span>{confirmed ? 'Confirmed Slot' : 'Preferred Slot'}</span>
+                  <p>{confirmed || preferred || 'Our team will confirm the appointment slot.'}</p>
+                </div>
+                {item.can_pay ? (
+                  <div className="account-remedy-status-panel">
+                    <button type="button" className="account-remedy-pay-btn" disabled={payingAppointmentId === item.id} onClick={() => onPay(item)}>
+                      {payingAppointmentId === item.id ? 'Opening Payment...' : `Pay Now - ${amount}`}
+                    </button>
+                  </div>
+                ) : null}
+                {item.meeting_link && ['slot_fixed', 'booked', 'upcoming'].includes(item.status) ? (
+                  <div className="account-remedy-action-row">
+                    <a className="account-remedy-download" href={item.meeting_link} target="_blank" rel="noreferrer">Open Meeting Link</a>
+                  </div>
+                ) : null}
+              </article>
+            )
+          })}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function TempleRemedyFeedbackPrompt({
   remedyRequest,
   rating,
   comments,
@@ -370,31 +459,20 @@ function TempleRemedyViewer({
   onClose,
 }) {
   const remedy = remedyRequest?.remedy || {}
-  const remedyType = normalizedRemedyType(remedy.type, remedy.url)
 
   if (!remedyRequest) return null
 
   return (
-    <section className="account-remedy-viewer-overlay" role="dialog" aria-modal="true" aria-label="Temple Remedy viewer">
-      <div className="account-remedy-viewer">
-        <button type="button" className="account-remedy-viewer-close" onClick={onClose} aria-label="Close remedy viewer">x</button>
+    <section className="account-remedy-viewer-overlay" role="dialog" aria-modal="true" aria-label="Temple Remedy feedback">
+      <div className="account-remedy-feedback-modal">
+        <button type="button" className="account-remedy-viewer-close" onClick={onClose} aria-label="Close remedy feedback">x</button>
         <span className="account-kicker">Temple Remedy</span>
-        <h2>{remedy.title || `Remedy for Request #${remedyRequest.id}`}</h2>
-
-        <div className={`account-remedy-media is-${remedyType}`}>
-          {remedyType === 'video' ? (
-            <video src={remedy.url} controls playsInline />
-          ) : remedyType === 'image' ? (
-            <img src={remedy.url} alt={remedy.title || 'Temple Remedy'} />
-          ) : remedyType === 'pdf' ? (
-            <iframe src={remedy.url} title={remedy.title || 'Temple Remedy PDF'} />
-          ) : (
-            <a href={remedy.url} target="_blank" rel="noreferrer">Open Remedy File</a>
-          )}
-        </div>
+        <h2>How was your remedy?</h2>
+        <p className="account-remedy-feedback-intro">
+          You opened {remedy.title || `Temple Remedy Request #${remedyRequest.id}`}. Share a quick rating now, or choose later.
+        </p>
 
         <form className="account-remedy-feedback" onSubmit={onSubmit}>
-          <h3>{remedyRequest.feedback?.submitted ? 'Update your feedback' : 'Share feedback after seeing the remedy'}</h3>
           <div className="account-remedy-stars" aria-label="Remedy feedback rating">
             {[1, 2, 3, 4, 5].map((star) => (
               <button
@@ -418,10 +496,11 @@ function TempleRemedyViewer({
           {status ? <p className="account-remedy-feedback-status">{status}</p> : null}
           {error ? <p className="account-remedy-feedback-error">{error}</p> : null}
           <div className="account-remedy-viewer-actions">
+            <button type="button" className="is-quiet" onClick={onClose}>No</button>
+            <button type="button" className="is-secondary" onClick={onClose}>Later</button>
             <button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
             </button>
-            <a href={remedy.url} target="_blank" rel="noreferrer">Download / Open</a>
           </div>
         </form>
       </div>
@@ -439,13 +518,18 @@ function AccountPage() {
   const [player, setPlayer] = useState(null)
   const [futurePurchaseOpen, setFuturePurchaseOpen] = useState(false)
   const [isRemedyModalOpen, setIsRemedyModalOpen] = useState(false)
-  const [remedyViewer, setRemedyViewer] = useState(null)
+  const [isTalkToAstrologerOpen, setIsTalkToAstrologerOpen] = useState(false)
+  const [remedyFeedbackPrompt, setRemedyFeedbackPrompt] = useState(null)
   const [remedyFeedbackRating, setRemedyFeedbackRating] = useState(0)
   const [remedyFeedbackComments, setRemedyFeedbackComments] = useState('')
   const [remedyFeedbackStatus, setRemedyFeedbackStatus] = useState('')
   const [remedyFeedbackError, setRemedyFeedbackError] = useState('')
   const [isSubmittingRemedyFeedback, setIsSubmittingRemedyFeedback] = useState(false)
+  const [payingRemedyId, setPayingRemedyId] = useState(null)
+  const [payingAppointmentId, setPayingAppointmentId] = useState(null)
   const abortControllerRef = useRef(null)
+  const pendingRemedyFeedbackRef = useRef(null)
+  const openedRemedyUrlsRef = useRef([])
 
   const loadHistory = useCallback(async ({ force = false } = {}) => {
     abortControllerRef.current?.abort()
@@ -489,7 +573,6 @@ function AccountPage() {
 
   const futureRanges = useMemo(() => history?.future?.ranges || [], [history?.future?.ranges])
   const firstWatchableFuture = futureRanges.find((range) => accessFromWatch(range.watch)) || futureRanges[0]
-  const nextFuturePeriod = periodLabel(history?.future?.next_purchase?.start_year, history?.future?.next_purchase?.end_year)
   const identity = history?.identity
   const submittedDetails = identity?.submitted_details || {}
   const pastYears = yearParts(history?.past?.start_year, history?.past?.end_year)
@@ -499,7 +582,9 @@ function AccountPage() {
     return yearParts(futureRanges[0]?.start_year, futureRanges[futureRanges.length - 1]?.end_year)
   }, [futureRanges])
   const upcomingYears = yearParts(history?.future?.next_purchase?.start_year, history?.future?.next_purchase?.end_year)
+  const nextFutureYearsLabel = periodLabel(history?.future?.next_purchase?.start_year, history?.future?.next_purchase?.end_year)
   const templeRemedies = history?.temple_remedies || []
+  const appointments = history?.appointments || { groups: { pending: [], upcoming: [], completed: [] } }
   const astrologyRows = [
     { icon: 'planet', label: 'Rasi', value: displayValue(identity?.astrology?.rasi) },
     { icon: 'constellation', label: 'Nakshatra', value: displayValue(identity?.astrology?.nakshatra) },
@@ -594,18 +679,186 @@ function AccountPage() {
     }))
     : []
 
-  const openRemedyViewer = (remedyRequest) => {
-    setRemedyViewer(remedyRequest)
+  const showRemedyFeedbackPrompt = (remedyRequest) => {
+    if (!remedyRequest?.id || remedyRequest.feedback?.submitted) return
+
+    setRemedyFeedbackPrompt(remedyRequest)
     setRemedyFeedbackRating(Number(remedyRequest?.feedback?.rating) || 0)
     setRemedyFeedbackComments(remedyRequest?.feedback?.comments || '')
     setRemedyFeedbackStatus('')
     setRemedyFeedbackError('')
   }
 
+  useEffect(() => {
+    const handleFocus = () => {
+      const remedyRequest = pendingRemedyFeedbackRef.current
+      if (!remedyRequest) return
+
+      pendingRemedyFeedbackRef.current = null
+      window.setTimeout(() => showRemedyFeedbackPrompt(remedyRequest), 250)
+    }
+
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      openedRemedyUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+      openedRemedyUrlsRef.current = []
+    }
+  }, [])
+
+  const openRemedyViewer = async (remedyRequest) => {
+    if (!remedyRequest?.id) return
+
+    const pdfWindow = window.open('', '_blank')
+    if (!pdfWindow) {
+      setActionMessage('Please allow pop-ups to open the Temple Remedy PDF.')
+      return
+    }
+    pdfWindow.opener = null
+
+    try {
+      const blob = await fetchTempleRemedyFile(remedyRequest.id)
+      const pdfBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' })
+      const objectUrl = URL.createObjectURL(pdfBlob)
+      openedRemedyUrlsRef.current.push(objectUrl)
+      pdfWindow.location.href = objectUrl
+
+      if (!remedyRequest.feedback?.submitted) {
+        pendingRemedyFeedbackRef.current = remedyRequest
+      }
+    } catch {
+      pdfWindow.close()
+      setActionMessage('The requested Temple Remedy PDF is unavailable.')
+    }
+  }
+
+  const payTempleRemedy = async (remedyRequest) => {
+    if (!remedyRequest?.id || payingRemedyId) return
+
+    setPayingRemedyId(remedyRequest.id)
+    setActionMessage('Preparing secure Temple Remedy payment...')
+
+    try {
+      const checkout = await createTempleRemedyOrder(remedyRequest.id)
+      const razorpayLoaded = await loadRazorpayScript()
+
+      if (!razorpayLoaded || !window.Razorpay || !checkout?.razorpay_key_id) {
+        setActionMessage('Secure payment checkout is not configured in this environment.')
+        setPayingRemedyId(null)
+        return
+      }
+
+      const razorpay = new window.Razorpay({
+        key: checkout.razorpay_key_id,
+        amount: checkout.remedy?.amount_minor,
+        currency: checkout.remedy?.currency || remedyRequest.currency || 'INR',
+        name: 'Your Good Time',
+        description: `Temple Remedy Request #${remedyRequest.id}`,
+        order_id: checkout.razorpay_order_id,
+        prefill: checkout.prefill || {},
+        handler: async (response) => {
+          setActionMessage('Confirming Temple Remedy payment...')
+
+          try {
+            const verification = await verifyRazorpayPayment(response)
+            if (!verification.temple_remedy_paid) {
+              setActionMessage('Payment was verified, but the Temple Remedy request was not updated. Please contact support.')
+              return
+            }
+
+            setActionMessage('Payment completed. Your remedy will appear here once it is ready.')
+            await loadHistory({ force: true })
+          } catch (paymentError) {
+            setActionMessage(paymentError?.response?.data?.message || 'Payment could not be verified. Please try again.')
+          } finally {
+            setPayingRemedyId(null)
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            cancelTempleRemedyPayment(remedyRequest.id).catch(() => {})
+            setActionMessage('Payment was not completed. The pending request has been removed from My Account.')
+            setPayingRemedyId(null)
+            loadHistory({ force: true })
+          },
+        },
+        theme: {
+          color: '#ff9d2e',
+        },
+      })
+
+      razorpay.open()
+    } catch (paymentError) {
+      setActionMessage(paymentError?.response?.data?.message || 'Payment could not be started. Please try again.')
+      setPayingRemedyId(null)
+    }
+  }
+
+  const payAppointment = async (appointment) => {
+    if (!appointment?.id || payingAppointmentId) return
+
+    setPayingAppointmentId(appointment.id)
+    setActionMessage('Preparing secure appointment payment...')
+
+    try {
+      const checkout = await createAppointmentOrder(appointment.id)
+      const razorpayLoaded = await loadRazorpayScript()
+
+      if (!razorpayLoaded || !window.Razorpay || !checkout?.razorpay_key_id) {
+        setActionMessage('Secure payment checkout is not configured in this environment.')
+        setPayingAppointmentId(null)
+        return
+      }
+
+      const razorpay = new window.Razorpay({
+        key: checkout.razorpay_key_id,
+        amount: checkout.appointment?.amount_minor,
+        currency: checkout.appointment?.currency || appointment.currency || 'INR',
+        name: 'Your Good Time',
+        description: `Astrologer Consultation ${appointment.appointment_number}`,
+        order_id: checkout.razorpay_order_id,
+        prefill: checkout.prefill || {},
+        handler: async (response) => {
+          setActionMessage('Confirming appointment payment...')
+
+          try {
+            const verification = await verifyRazorpayPayment(response)
+            if (!verification.appointment_paid) {
+              setActionMessage('Payment was verified, but the appointment was not updated. Please contact support.')
+              return
+            }
+
+            setActionMessage('Payment completed. Your meeting details will appear here.')
+            await loadHistory({ force: true })
+          } catch (paymentError) {
+            setActionMessage(paymentError?.response?.data?.message || 'Payment could not be verified. Please try again.')
+          } finally {
+            setPayingAppointmentId(null)
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setActionMessage('Payment was not completed. You can try again whenever you are ready.')
+            setPayingAppointmentId(null)
+          },
+        },
+        theme: {
+          color: '#ff9d2e',
+        },
+      })
+
+      razorpay.open()
+    } catch (paymentError) {
+      setActionMessage(paymentError?.response?.data?.message || 'Payment could not be started. Please try again.')
+      setPayingAppointmentId(null)
+    }
+  }
+
   const submitRemedyFeedback = async (event) => {
     event.preventDefault()
 
-    if (!remedyViewer?.id) return
+    if (!remedyFeedbackPrompt?.id) return
 
     if (!remedyFeedbackRating) {
       setRemedyFeedbackError('Please choose a rating before submitting feedback.')
@@ -617,13 +870,17 @@ function AccountPage() {
     setRemedyFeedbackStatus('')
 
     try {
-      const response = await submitTempleRemedyFeedback(remedyViewer.id, {
+      const response = await submitTempleRemedyFeedback(remedyFeedbackPrompt.id, {
         rating: remedyFeedbackRating,
         comments: remedyFeedbackComments.trim() || null,
       })
       setRemedyFeedbackStatus(response?.message || 'Thank you for your Temple Remedy feedback.')
       await loadHistory({ force: true })
-      setRemedyViewer((current) => current ? { ...current, feedback: response?.data?.feedback || current.feedback } : current)
+      setRemedyFeedbackPrompt((current) => current ? { ...current, feedback: response?.data?.feedback || current.feedback } : current)
+      window.setTimeout(() => {
+        setRemedyFeedbackPrompt(null)
+        setActionMessage('Thank you for your Temple Remedy feedback.')
+      }, 450)
     } catch (feedbackError) {
       setRemedyFeedbackError(feedbackError?.response?.data?.message || 'We could not save your feedback right now.')
     } finally {
@@ -700,21 +957,33 @@ function AccountPage() {
                     ? null
                     : history?.future?.next_purchase?.message}
                   rangeButtons={futureRangeButtons}
+                  secondaryAction={history?.future?.purchased && history?.future?.next_purchase?.available
+                    ? {
+                        label: 'Unlock Next Future Prediction',
+                        years: nextFutureYearsLabel,
+                        disabled: isLoading,
+                        onClick: openFuturePurchase,
+                      }
+                    : null}
                 />
               </section>
-
-              {history?.future?.purchased && history?.future?.next_purchase?.available ? (
-                <button type="button" className="account-next-future-btn" onClick={openFuturePurchase}>
-                  Unlock Next Future Prediction
-                </button>
-              ) : null}
 
               <TempleRemedySection
                 remedies={templeRemedies}
                 isLoading={isLoading}
                 onRequest={() => setIsRemedyModalOpen(true)}
-                onPay={() => setActionMessage('Temple Remedy payment processing will be connected after the admin payment setup is completed.')}
+                onPay={payTempleRemedy}
                 onViewRemedy={openRemedyViewer}
+                onSubmitFeedback={showRemedyFeedbackPrompt}
+                payingRemedyId={payingRemedyId}
+              />
+
+              <AppointmentSection
+                appointments={appointments}
+                isLoading={isLoading}
+                onBook={() => setIsTalkToAstrologerOpen(true)}
+                onPay={payAppointment}
+                payingAppointmentId={payingAppointmentId}
               />
             </>
           )}
@@ -763,9 +1032,16 @@ function AccountPage() {
         />
       ) : null}
 
-      {remedyViewer ? (
-        <TempleRemedyViewer
-          remedyRequest={remedyViewer}
+      <TalkToAstrologerModal
+        open={isTalkToAstrologerOpen}
+        onClose={() => setIsTalkToAstrologerOpen(false)}
+        onRequireLogin={() => {}}
+        onSubmitted={() => loadHistory({ force: true })}
+      />
+
+      {remedyFeedbackPrompt ? (
+        <TempleRemedyFeedbackPrompt
+          remedyRequest={remedyFeedbackPrompt}
           rating={remedyFeedbackRating}
           comments={remedyFeedbackComments}
           error={remedyFeedbackError}
@@ -774,7 +1050,7 @@ function AccountPage() {
           onRatingChange={setRemedyFeedbackRating}
           onCommentsChange={setRemedyFeedbackComments}
           onSubmit={submitRemedyFeedback}
-          onClose={() => setRemedyViewer(null)}
+          onClose={() => setRemedyFeedbackPrompt(null)}
         />
       ) : null}
     </main>

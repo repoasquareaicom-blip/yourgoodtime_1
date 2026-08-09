@@ -85,6 +85,10 @@ function formatDateValue(mixed $value): ?string
         }
     }
 
+    if (preg_match('/\d/', $text) !== 1 || preg_match('/[-\/T:]/', $text) !== 1) {
+        return null;
+    }
+
     try {
         $date = new DateTimeImmutable($text);
 
@@ -109,6 +113,23 @@ function valueText(mixed $value): string
     }
 
     return formatDateValue($value) ?? (string) $value;
+}
+
+function appKeyForSignature(array $env): string
+{
+    return (string) ($env['APP_KEY'] ?? '');
+}
+
+function validEmbeddedSignature(int $id, bool $embedded, int $expires, ?string $signature, array $env): bool
+{
+    if (! $embedded || $id < 1 || $expires < time() || ! is_string($signature) || $signature === '') {
+        return false;
+    }
+
+    $payload = implode('|', [$id, 1, $expires]);
+    $expected = hash_hmac('sha256', $payload, appKeyForSignature($env));
+
+    return hash_equals($expected, $signature);
 }
 
 function decodeJson(mixed $json): array
@@ -182,6 +203,102 @@ function normalizeRows(mixed $value): array
     return array_values(array_filter($value, 'is_array'));
 }
 
+function planetIdNameMap(): array
+{
+    return [
+        0 => 'Sun',
+        1 => 'Moon',
+        2 => 'Mars',
+        3 => 'Mercury',
+        4 => 'Jupiter',
+        5 => 'Venus',
+        6 => 'Saturn',
+        7 => 'Rahu',
+        8 => 'Ketu',
+    ];
+}
+
+function planetNameFromId(mixed $planetId): ?string
+{
+    if ($planetId === null || $planetId === '') {
+        return null;
+    }
+
+    $map = planetIdNameMap();
+    $id = (int) $planetId;
+
+    return array_key_exists($id, $map) ? $map[$id] : null;
+}
+
+function rowValueByKeys(array $row, array $keys): mixed
+{
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row)) {
+            return $row[$key];
+        }
+    }
+
+    $normalizedKeys = array_map('strtolower', $keys);
+    foreach ($row as $key => $value) {
+        if (in_array(strtolower((string) $key), $normalizedKeys, true)) {
+            return $value;
+        }
+    }
+
+    return null;
+}
+
+function displayRowValue(array $row, string|int $column): mixed
+{
+    $columnKey = strtolower((string) $column);
+
+    if (in_array($columnKey, ['name', 'planet'], true)) {
+        $planetName = planetNameFromId(rowValueByKeys($row, ['planet_id', 'id']));
+
+        if ($planetName !== null) {
+            return $planetName;
+        }
+    }
+
+    return rowValueByKeys($row, [(string) $column]);
+}
+
+function normalizePlanetDisplayRows(array $rows): array
+{
+    foreach ($rows as $index => $row) {
+        if (! is_array($row)) {
+            continue;
+        }
+
+        $planetId = rowValueByKeys($row, ['planet_id', 'id']);
+        $planetName = planetNameFromId($planetId);
+
+        if ($planetName !== null) {
+            $rows[$index]['name'] = $planetName;
+        }
+    }
+
+    return $rows;
+}
+
+function normalizeDashaMajorDisplayRows(array $rows): array
+{
+    foreach ($rows as $index => $row) {
+        if (! is_array($row)) {
+            continue;
+        }
+
+        $planetId = rowValueByKeys($row, ['planet_id', 'id']);
+        $planetName = planetNameFromId($planetId);
+
+        if ($planetName !== null) {
+            $rows[$index]['planet'] = $planetName;
+        }
+    }
+
+    return $rows;
+}
+
 function renderDefinitionTable(array $data): void
 {
     echo '<div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0"><tbody>';
@@ -210,7 +327,7 @@ function renderCompactDefinitionGrid(array $data, int $columns = 4): void
         default => 'col-md-6 col-xl-3',
     };
 
-    echo '<div class="row g-2">';
+    echo '<div class="row g-2 compact-definition-grid">';
     foreach ($data as $key => $value) {
         echo '<div class="'.$columnClass.'">';
         echo '<div class="border rounded bg-white p-2 h-100">';
@@ -254,7 +371,7 @@ function renderRowsTable(array $rows, ?array $preferredColumns = null): void
         echo '<tr>';
         foreach ($columns as $column) {
             echo '<td>';
-            $value = $row[$column] ?? null;
+            $value = displayRowValue($row, $column);
             if (is_array($value)) {
                 echo '<code>'.h(valueText($value)).'</code>';
             } else {
@@ -355,10 +472,14 @@ $password = $dbConfig['password'] ?? ($env['DB_PASSWORD'] ?? '');
 $charset = $dbConfig['charset'] ?: 'utf8mb4';
 
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$embedded = filter_input(INPUT_GET, 'embedded', FILTER_VALIDATE_BOOLEAN);
+$expires = filter_input(INPUT_GET, 'expires', FILTER_VALIDATE_INT) ?: 0;
+$signature = filter_input(INPUT_GET, 'signature');
+$requiresSignedLink = (($env['APP_ENV'] ?? 'production') !== 'local') || (bool) $embedded;
 $record = null;
 $error = null;
 
-if ($id) {
+if ($id && (! $requiresSignedLink || validEmbeddedSignature((int) $id, true, (int) $expires, $signature, $env))) {
     try {
         $dsn = $driver === 'sqlite'
             ? 'sqlite:'.$database
@@ -375,6 +496,9 @@ if ($id) {
     } catch (Throwable $exception) {
         $error = $exception->getMessage();
     }
+} elseif ($id && $requiresSignedLink) {
+    http_response_code(403);
+    $error = 'This prediction viewer link is invalid or expired.';
 }
 
 $normalized = decodeJson($record['normalized_astrology_data'] ?? null);
@@ -415,9 +539,51 @@ $dashaMajor = is_array($normalizedValue['dasha']['major'] ?? null) ? $normalized
         .json-bool { color: #fca5a5; }
         .section-card { border: 0; box-shadow: 0 10px 30px rgba(15, 23, 42, .08); }
         th { white-space: nowrap; }
+        .embedded-view { background: #fffdf8; }
+        .embedded-view .page-shell { max-width: none; }
+        .embedded-view main.page-shell { padding: 10px !important; }
+        .embedded-view .section-card { margin-bottom: 12px !important; }
+        .embedded-view .navbar,
+        .embedded-view .lookup-form { display: none !important; }
+        .embedded-view .card-header { padding: .55rem .75rem; }
+        .embedded-view .card-body { padding: .65rem; }
+        .embedded-view .normalized-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: .75rem;
+        }
+        .embedded-view .normalized-grid > [class*="col-"] {
+            width: auto;
+            max-width: none;
+            padding: 0;
+        }
+        .embedded-view .compact-definition-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: .5rem;
+        }
+        .embedded-view .compact-definition-grid > [class*="col-"] {
+            width: auto;
+            max-width: none;
+            padding: 0;
+        }
+        .embedded-view .table-responsive {
+            max-height: 420px;
+            overflow: auto;
+        }
+        .embedded-view table {
+            font-size: .78rem;
+        }
+        .embedded-view th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #fff8ec;
+        }
     </style>
 </head>
-<body>
+<body class="<?= $embedded ? 'embedded-view' : '' ?>">
+    <?php if (! $embedded): ?>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-nav">
         <div class="container-fluid page-shell">
             <a class="navbar-brand fw-semibold" href="#">
@@ -432,9 +598,11 @@ $dashaMajor = is_array($normalizedValue['dasha']['major'] ?? null) ? $normalized
             </div>
         </div>
     </nav>
+    <?php endif; ?>
 
     <main class="container-fluid page-shell py-4">
-        <form class="card section-card mb-4" method="get">
+        <?php if (! $embedded): ?>
+        <form class="card section-card mb-4 lookup-form" method="get">
             <div class="card-body d-flex flex-wrap align-items-end gap-3">
                 <div>
                     <label class="form-label fw-semibold" for="id">Prediction Request ID</label>
@@ -446,6 +614,7 @@ $dashaMajor = is_array($normalizedValue['dasha']['major'] ?? null) ? $normalized
                 <span class="text-muted">Example: <code>?id=14</code></span>
             </div>
         </form>
+        <?php endif; ?>
 
         <?php if (! $id): ?>
             <div class="alert alert-info">Enter an id or open <code>view-prediction-response.php?id=14</code>.</div>
@@ -464,7 +633,7 @@ $dashaMajor = is_array($normalizedValue['dasha']['major'] ?? null) ? $normalized
                     <?php elseif ($normalizedValue === []): ?>
                         <p class="text-muted mb-0">No normalized astrology data.</p>
                     <?php else: ?>
-                        <div class="row g-3">
+                        <div class="row g-3 normalized-grid">
                             <div id="birth" class="col-12">
                                 <div class="card border-0 shadow-sm">
                                     <div class="card-header bg-light fw-semibold">Birth</div>
@@ -496,7 +665,7 @@ $dashaMajor = is_array($normalizedValue['dasha']['major'] ?? null) ? $normalized
                                 <div class="card border-0 shadow-sm">
                                     <div class="card-header bg-light fw-semibold">Planets Table</div>
                                     <div class="card-body">
-                                        <?php renderRowsTable(normalizeRows($planets)); ?>
+                                        <?php renderRowsTable(normalizePlanetDisplayRows(normalizeRows($planets))); ?>
                                     </div>
                                 </div>
                             </div>
@@ -505,7 +674,7 @@ $dashaMajor = is_array($normalizedValue['dasha']['major'] ?? null) ? $normalized
                                 <div class="card border-0 shadow-sm">
                                     <div class="card-header bg-light fw-semibold">Dasha Major Table</div>
                                     <div class="card-body">
-                                        <?php renderRowsTable(normalizeRows($dashaMajor)); ?>
+                                        <?php renderRowsTable(normalizeDashaMajorDisplayRows(normalizeRows($dashaMajor))); ?>
                                     </div>
                                 </div>
                             </div>

@@ -143,7 +143,7 @@ class PredictionContext
                 continue;
             }
 
-            if ($predictionDate->greaterThanOrEqualTo($startDate) && $predictionDate->lessThanOrEqualTo($endDate)) {
+            if ($predictionDate->greaterThanOrEqualTo($startDate) && $predictionDate->lessThan($endDate)) {
                 return new DashaPeriod(
                     planet: $planet,
                     planetId: isset($period['planet_id']) ? (int) $period['planet_id'] : null,
@@ -166,7 +166,7 @@ class PredictionContext
             return null;
         }
 
-        return $predictionDate->greaterThanOrEqualTo($startDate) && $predictionDate->lessThanOrEqualTo($endDate)
+        return $predictionDate->greaterThanOrEqualTo($startDate) && $predictionDate->lessThan($endDate)
             ? $current
             : null;
     }
@@ -188,7 +188,7 @@ class PredictionContext
                 continue;
             }
 
-            if ($systemYear >= (int) $startDate->format('Y') && $systemYear <= (int) $endDate->format('Y')) {
+            if ($systemYear >= (int) $startDate->format('Y') && $systemYear < (int) $endDate->format('Y')) {
                 return new DashaPeriod(
                     planet: $planet,
                     planetId: isset($period['planet_id']) ? (int) $period['planet_id'] : null,

@@ -45,12 +45,12 @@ function AdminLoginPage() {
 
         <form className="admin-login-form" onSubmit={submit}>
           <label>
-            Admin email
+            Admin username
             <input
-              type="email"
+              type="text"
               value={form.email}
               onChange={(event) => updateField('email', event.target.value)}
-              autoComplete="email"
+              autoComplete="username"
               required
             />
           </label>

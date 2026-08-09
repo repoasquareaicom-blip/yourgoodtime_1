@@ -173,6 +173,8 @@ class PredictionResponseGroupingTest extends TestCase
             candidateYears: count($yearlyPredictions),
             processedYears: count($yearlyPredictions),
             excludedAgeCount: 0,
+            excludedPurchasedCount: 0,
+            excludedPurchasedYears: [],
             minimumSupportedAge: $predictionType === 'past' ? 16 : 22,
             maximumSupportedAge: 60,
             status: 'READY',

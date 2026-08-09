@@ -47,6 +47,14 @@ return [
         'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
     ],
 
+    'google_calendar' => [
+        'calendar_id' => env('GOOGLE_CALENDAR_ID'),
+        'service_account_json' => env('GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON'),
+        'service_account_path' => env('GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH'),
+        'delegated_user' => env('GOOGLE_CALENDAR_DELEGATED_USER'),
+        'timezone' => env('GOOGLE_CALENDAR_TIMEZONE', 'Asia/Kolkata'),
+    ],
+
     'prediction_billing' => [
         'business_timezone' => env('PREDICTION_BUSINESS_TIMEZONE', 'Asia/Kolkata'),
     ],

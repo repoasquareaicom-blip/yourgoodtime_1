@@ -220,7 +220,7 @@
   }
 
   .language-panel {
-    width: min(100%, 380px);
+    width: min(100%, 520px);
     padding: 22px 18px 20px;
     gap: 11px;
   }
@@ -243,6 +243,7 @@
   }
 
   .language-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 

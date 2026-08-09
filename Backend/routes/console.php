@@ -4,6 +4,9 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use App\Models\AdminUser;
+use App\Models\AstrologerAppointment;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -36,3 +39,39 @@ Artisan::command('ygt:admin {email} {--name=} {--password=}', function (string $
 
     return 0;
 })->purpose('Create or promote a Your Good Time admin user');
+
+Artisan::command('appointments:send-reminders', function (): int {
+    $now = now('Asia/Kolkata');
+    $windows = [
+        ['field' => 'reminder_24h_sent_at', 'hours' => 24, 'label' => '24 hours'],
+        ['field' => 'reminder_1h_sent_at', 'hours' => 1, 'label' => '1 hour'],
+    ];
+
+    foreach ($windows as $window) {
+        AstrologerAppointment::query()
+            ->with('user')
+            ->whereIn('status', ['booked', 'upcoming'])
+            ->whereNull($window['field'])
+            ->whereBetween('confirmed_start_at', [$now->toDateTimeString(), $now->copy()->addHours($window['hours'])->toDateTimeString()])
+            ->chunkById(50, function ($appointments) use ($window): void {
+                foreach ($appointments as $appointment) {
+                    Mail::raw(
+                        "Reminder: your consultation {$appointment->appointment_number} starts in {$window['label']}.\nMeeting: ".($appointment->meeting_link ?: 'Meeting details will be shared soon.'),
+                        fn ($message) => $message->to($appointment->user?->email)->subject('Consultation reminder')
+                    );
+                    $appointment->forceFill([$window['field'] => now()])->save();
+                    $appointment->activities()->create([
+                        'event_type' => 'reminder_sent',
+                        'title' => "Reminder sent for {$window['label']} before appointment.",
+                        'payload' => ['window' => $window['label']],
+                    ]);
+                }
+            });
+    }
+
+    $this->info('Appointment reminders processed.');
+
+    return 0;
+})->purpose('Send astrologer appointment reminder emails');
+
+Schedule::command('appointments:send-reminders')->everyFifteenMinutes();

@@ -3,6 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\PredictionRequest;
+use App\Models\PaymentTransaction;
+use App\Models\PredictionEntitlement;
+use App\Models\PredictionProduct;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
@@ -60,7 +64,8 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonPath('playlist_items.0.video_id', '34')
             ->assertJsonPath('rules.0.lookup_values.lagnam', 'Aries')
             ->assertJsonPath('rules.0.lookup_values.rasi', 'Pisces')
-            ->assertJsonPath('rules.0.lookup_values.nakshatra', 'Purva Bhadrapad');
+            ->assertJsonPath('rules.0.lookup_values.nakshatra', 'Purva Bhadrapad')
+            ->assertJsonPath('rules.0.matched_row', 2);
     }
 
     public function test_prediction_video_is_matched_by_lagnam_rasi_position_and_single_sequence_year(): void
@@ -79,6 +84,7 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonPath('prediction_videos.0.age', 52)
             ->assertJsonPath('prediction_videos.0.system_year', 2026)
             ->assertJsonPath('prediction_videos.0.excel_sequence_year', 2014)
+            ->assertJsonPath('prediction_videos.0.excel_row_number', 5)
             ->assertJsonPath('prediction_videos.0.matched_year', '2014')
             ->assertJsonPath('prediction_videos.0.video_ids.0', 'PRED_2014')
             ->assertJsonPath('rule_results.1.matched_values.rasi', 'MEENAM');
@@ -266,6 +272,7 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonPath('summary.excluded_age_count', 3)
             ->assertJsonPath('summary.status', 'NO_SUPPORTED_AGES')
             ->assertJsonPath('identity_video.video_id', 'INTRO_001')
+            ->assertJsonPath('identity_video.source.excel_row_number', 2)
             ->assertJsonCount(0, 'yearly_predictions')
             ->assertJsonCount(0, 'prediction_videos');
 
@@ -308,11 +315,11 @@ class PredictionEnginePrepareTest extends TestCase
         $this->assertNotSame(1973 + $past->yearSessions[0]->age, $past->yearSessions[0]->targetYear);
     }
 
-    public function test_dasha_change_resets_excel_sequence_year_to_2007(): void
+    public function test_future_dasha_change_resets_excel_sequence_year_to_1998(): void
     {
         config(['prediction.debug_response' => true, 'prediction.future_years' => 1]);
         $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
-        $this->createAgeWorkbook('future', 'FUTURE_51 TO 60.xlsx', 'SUN', $this->hierarchyRows('2007', ['SUN_RESET']));
+        $this->createAgeWorkbook('future', 'FUTURE_51 TO 60.xlsx', 'SUN', $this->hierarchyRows('1998', ['SUN_RESET']));
 
         $request = $this->requestForAgeTimeline([
             'normalized_astrology_data' => $this->normalizedData('Aries', 'Pisces', 'Swati', 'Venus', 6, [
@@ -330,8 +337,170 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonPath('prediction_videos.0.age', 53)
             ->assertJsonPath('prediction_videos.0.system_year', 2027)
             ->assertJsonPath('prediction_videos.0.major_dasha', 'Sun')
-            ->assertJsonPath('prediction_videos.0.excel_sequence_year', 2007)
+            ->assertJsonPath('prediction_videos.0.excel_sequence_year', 1998)
+            ->assertJsonPath('prediction_videos.0.excel_row_number', 5)
             ->assertJsonPath('prediction_videos.0.video_ids.0', 'SUN_RESET');
+    }
+
+    public function test_mahadasha_system_year_selection_treats_end_year_as_exclusive(): void
+    {
+        $majorDasha = [
+            ['planet' => 'Mercury', 'planet_id' => 3, 'start' => '8-7-2009 18:21', 'end' => '8-7-2019 18:21'],
+            ['planet' => 'Venus', 'planet_id' => 5, 'start' => '8-7-2019 18:21', 'end' => '8-7-2035 18:21'],
+        ];
+        $context = (new \App\Services\Prediction\PredictionContext())->setDasha(['major' => $majorDasha]);
+
+        foreach ([2009, 2010, 2018] as $year) {
+            $this->assertSame('Mercury', $context->getMahadashaForSystemYear($year)?->planet);
+        }
+
+        foreach ([2019, 2020, 2034] as $year) {
+            $this->assertSame('Venus', $context->getMahadashaForSystemYear($year)?->planet);
+        }
+
+        $this->assertSame($majorDasha, $context->getDasha()['major']);
+
+        $resolver = app(\App\Services\Prediction\DashaSequenceYearResolver::class);
+        $this->assertFalse($resolver->resolveForSystemYear(2019, '8-7-2009 18:21', '8-7-2019 18:21')->isWithinPeriod);
+        $this->assertTrue($resolver->resolveForSystemYear(2019, '8-7-2019 18:21', '8-7-2035 18:21')->isWithinPeriod);
+
+        foreach ([2009, 2010, 2018, 2019, 2020, 2034] as $year) {
+            $matches = collect($majorDasha)
+                ->filter(fn (array $period): bool => $resolver->resolveForSystemYear($year, $period['start'], $period['end'])->isWithinPeriod)
+                ->count();
+
+            $this->assertSame(1, $matches);
+        }
+    }
+
+    public function test_past_boundary_year_uses_next_dasha_for_excel_lookup(): void
+    {
+        config(['prediction.debug_response' => true, 'prediction.past_years' => 1]);
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('past', '41 TO 50.xlsx', 'VENUS', $this->hierarchyRows('2007', ['PAST_BOUNDARY_VENUS']));
+
+        $request = $this->requestForAgeTimeline([
+            'date_of_birth' => '1973-12-16',
+            'completed_at' => CarbonImmutable::parse('2019-07-25 10:00:00'),
+            'submitted_at' => CarbonImmutable::parse('2019-07-25 09:00:00'),
+            'normalized_astrology_data' => $this->normalizedData('Aries', 'Pisces', 'Swati', 'Venus', 6, [
+                ['planet' => 'Mercury', 'planet_id' => 3, 'start' => '8-7-2009 18:21', 'end' => '8-7-2019 18:21'],
+                ['planet' => 'Venus', 'planet_id' => 5, 'start' => '8-7-2019 18:21', 'end' => '8-7-2035 18:21'],
+            ]),
+        ]);
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'prediction_request_id' => $request->id,
+            'prediction_type' => 'past',
+        ])
+            ->assertOk()
+            ->assertJsonPath('prediction_videos.0.system_year', 2019)
+            ->assertJsonPath('prediction_videos.0.major_dasha', 'Venus')
+            ->assertJsonPath('prediction_videos.0.dasha_start_year', 2019)
+            ->assertJsonPath('prediction_videos.0.dasha_end_year', 2035)
+            ->assertJsonPath('prediction_videos.0.excel_sequence_year', 2007)
+            ->assertJsonPath('prediction_videos.0.video_ids.0', 'PAST_BOUNDARY_VENUS');
+    }
+
+    public function test_future_boundary_year_uses_next_dasha_for_excel_lookup(): void
+    {
+        config(['prediction.debug_response' => true, 'prediction.future_years' => 1]);
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('future', 'FUTURE_41 TO 50.xlsx', 'VENUS', $this->hierarchyRows('1998', ['FUTURE_BOUNDARY_VENUS']));
+
+        $request = $this->requestForAgeTimeline([
+            'date_of_birth' => '1973-12-16',
+            'completed_at' => CarbonImmutable::parse('2018-07-25 10:00:00'),
+            'submitted_at' => CarbonImmutable::parse('2018-07-25 09:00:00'),
+            'normalized_astrology_data' => $this->normalizedData('Aries', 'Pisces', 'Swati', 'Venus', 6, [
+                ['planet' => 'Mercury', 'planet_id' => 3, 'start' => '8-7-2009 18:21', 'end' => '8-7-2019 18:21'],
+                ['planet' => 'Venus', 'planet_id' => 5, 'start' => '8-7-2019 18:21', 'end' => '8-7-2035 18:21'],
+            ]),
+        ]);
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'prediction_request_id' => $request->id,
+            'prediction_type' => 'future',
+        ])
+            ->assertOk()
+            ->assertJsonPath('prediction_videos.0.system_year', 2019)
+            ->assertJsonPath('prediction_videos.0.major_dasha', 'Venus')
+            ->assertJsonPath('prediction_videos.0.dasha_start_year', 2019)
+            ->assertJsonPath('prediction_videos.0.dasha_end_year', 2035)
+            ->assertJsonPath('prediction_videos.0.excel_sequence_year', 1998)
+            ->assertJsonPath('prediction_videos.0.video_ids.0', 'FUTURE_BOUNDARY_VENUS');
+    }
+
+    public function test_sequence_base_years_are_prediction_type_specific(): void
+    {
+        $resolver = app(\App\Services\Prediction\DashaSequenceYearResolver::class);
+
+        $past = $resolver->resolveForSystemYear(2027, '1-1-2027 00:00', '31-12-2031 23:59', 'past');
+        $future = $resolver->resolveForSystemYear(2027, '1-1-2027 00:00', '31-12-2031 23:59', 'future');
+
+        $this->assertSame(2007, $past->excelSequenceYear);
+        $this->assertSame(1998, $future->excelSequenceYear);
+        $this->expectException(\InvalidArgumentException::class);
+        app(\App\Services\Prediction\PredictionConfig::class)->dashaExcelSequenceStart('identity');
+    }
+
+    public function test_past_generation_excludes_purchased_future_years_and_splits_ranges(): void
+    {
+        config(['prediction.past_years' => 3]);
+        $user = User::factory()->create(['email' => 'ravi@example.com']);
+        $request = $this->requestForAgeTimeline(['email' => $user->email]);
+        $product = PredictionProduct::query()->create([
+            'code' => 'FUTURE_PREDICTION',
+            'name' => 'Future Prediction',
+            'description' => 'Unlock future guidance.',
+            'prediction_type' => 'future',
+            'price_inclusive_tax_minor' => 60000,
+            'currency' => 'INR',
+            'tax_inclusive' => true,
+            'is_active' => true,
+        ]);
+        $transaction = PaymentTransaction::query()->create([
+            'prediction_request_id' => $request->id,
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'provider' => 'razorpay',
+            'currency' => 'INR',
+            'amount_minor' => 60000,
+            'tax_inclusive' => true,
+            'status' => 'CAPTURED',
+            'provider_order_id' => 'order_test_exclusion',
+        ]);
+        PredictionEntitlement::query()->create([
+            'prediction_request_id' => $request->id,
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'payment_transaction_id' => $transaction->id,
+            'prediction_type' => 'future',
+            'purchased_years' => 1,
+            'access_start_year' => 2025,
+            'access_end_year' => 2025,
+            'start_age' => 51,
+            'end_age' => 51,
+            'allocated_year_count' => 1,
+            'starts_at' => now(),
+            'expires_at' => now()->subDay(),
+            'status' => 'EXPIRED',
+        ]);
+
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('past', '51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2012-2014', ['RANGE_2024_2026']));
+
+        $this->actingAs($user);
+        $timeline = app(\App\Services\Prediction\PredictionEngineService::class)
+            ->preparePredictionTimeline($request->id, 'past');
+        $response = app(\App\Services\Prediction\PredictionResponseBuilder::class)->buildTimeline($timeline);
+
+        $this->assertSame([2026, 2024], array_map(fn ($session): int => $session->targetYear, $timeline->yearSessions));
+        $this->assertSame(1, $response['summary']['excluded_purchased_count']);
+        $this->assertSame([2025], $response['summary']['excluded_purchased_years']);
+        $this->assertCount(2, $response['prediction_videos']);
+        $this->assertSame('2024', $response['prediction_videos'][0]['system_year_label']);
+        $this->assertSame('2026', $response['prediction_videos'][1]['system_year_label']);
     }
 
     public function test_missing_workbook_returns_structured_warning(): void

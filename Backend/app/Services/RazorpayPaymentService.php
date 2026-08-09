@@ -4,8 +4,11 @@ namespace App\Services;
 
 use App\Models\PaymentEvent;
 use App\Models\PaymentTransaction;
+use App\Models\AppointmentPaymentMethod;
+use App\Models\AstrologerAppointment;
 use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
+use App\Models\TempleRemedyRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -37,8 +40,111 @@ class RazorpayPaymentService
                 ],
             ]);
 
-            $providerOrderId = $this->createProviderOrder($transaction, $product);
+            $providerOrderId = $this->createProviderOrder($transaction, 'ygt_future_'.$transaction->id, [
+                'prediction_request_id' => (string) $transaction->prediction_request_id,
+                'product_code' => $product->code,
+            ]);
             $transaction->forceFill(['provider_order_id' => $providerOrderId])->save();
+
+            return $transaction;
+        });
+    }
+
+    public function createTempleRemedyOrder(TempleRemedyRequest $templeRemedy, User $user): PaymentTransaction
+    {
+        return DB::transaction(function () use ($templeRemedy, $user): PaymentTransaction {
+            $lockedRemedy = TempleRemedyRequest::query()
+                ->whereKey($templeRemedy->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedRemedy->status !== 'PAYMENT_PENDING') {
+                throw new RuntimeException('This remedy is not awaiting payment.');
+            }
+
+            if ($lockedRemedy->payment_status === 'PAID') {
+                throw new RuntimeException('Temple Remedy payment is already completed.');
+            }
+
+            $transaction = PaymentTransaction::query()->create([
+                'temple_remedy_request_id' => $lockedRemedy->id,
+                'user_id' => $user->id,
+                'provider' => 'razorpay',
+                'currency' => $lockedRemedy->currency ?: 'INR',
+                'amount_minor' => (int) $lockedRemedy->amount_minor,
+                'tax_inclusive' => true,
+                'status' => 'PENDING',
+                'metadata' => [
+                    'payment_for' => 'temple_remedy',
+                    'temple_remedy_request_id' => $lockedRemedy->id,
+                ],
+            ]);
+
+            $providerOrderId = $this->createProviderOrder($transaction, 'ygt_remedy_'.$transaction->id, [
+                'temple_remedy_request_id' => (string) $lockedRemedy->id,
+                'payment_for' => 'temple_remedy',
+            ]);
+            $transaction->forceFill(['provider_order_id' => $providerOrderId])->save();
+
+            $lockedRemedy->forceFill([
+                'payment_status' => 'PENDING',
+                'status' => 'PAYMENT_PENDING',
+                'payment_enabled_at' => $lockedRemedy->payment_enabled_at ?? now(),
+            ])->save();
+
+            return $transaction;
+        });
+    }
+
+    public function createAppointmentOrder(AstrologerAppointment $appointment, User $user): PaymentTransaction
+    {
+        return DB::transaction(function () use ($appointment, $user): PaymentTransaction {
+            $lockedAppointment = AstrologerAppointment::query()
+                ->whereKey($appointment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (in_array($lockedAppointment->status, ['completed', 'cancelled'], true)) {
+                throw new RuntimeException('This appointment is not awaiting payment.');
+            }
+
+            if ($lockedAppointment->payment_status === 'PAID') {
+                throw new RuntimeException('Appointment payment is already completed.');
+            }
+
+            if ($lockedAppointment->payment_status === 'FAILED') {
+                throw new RuntimeException('Payment failed for this appointment. Please create a new appointment request.');
+            }
+
+            if (app(AstrologerAppointmentService::class)->appointmentPaymentMethod($lockedAppointment) !== AppointmentPaymentMethod::PAYMENT_GATEWAY) {
+                throw new RuntimeException('This appointment is configured for QR / Online payment.');
+            }
+
+            $transaction = PaymentTransaction::query()->create([
+                'astrologer_appointment_id' => $lockedAppointment->id,
+                'user_id' => $user->id,
+                'provider' => 'razorpay',
+                'currency' => $lockedAppointment->currency ?: 'INR',
+                'amount_minor' => (int) $lockedAppointment->amount_minor,
+                'tax_inclusive' => $lockedAppointment->tax_inclusive,
+                'status' => 'PENDING',
+                'metadata' => [
+                    'payment_for' => 'astrologer_appointment',
+                    'appointment_id' => $lockedAppointment->id,
+                    'appointment_number' => $lockedAppointment->appointment_number,
+                ],
+            ]);
+
+            $providerOrderId = $this->createProviderOrder($transaction, 'ygt_appt_'.$transaction->id, [
+                'appointment_id' => (string) $lockedAppointment->id,
+                'payment_for' => 'astrologer_appointment',
+            ]);
+            $transaction->forceFill(['provider_order_id' => $providerOrderId])->save();
+
+            $lockedAppointment->forceFill([
+                'payment_status' => 'PENDING',
+                'payment_transaction_id' => $transaction->id,
+            ])->save();
 
             return $transaction;
         });
@@ -47,6 +153,15 @@ class RazorpayPaymentService
     public function verifyCheckout(string $orderId, string $paymentId, string $signature, User $user): PaymentTransaction
     {
         if (! $this->validPaymentSignature($orderId, $paymentId, $signature)) {
+            $failedTransaction = PaymentTransaction::query()
+                ->where('provider_order_id', $orderId)
+                ->where('user_id', $user->id)
+                ->first();
+
+            if ($failedTransaction) {
+                $this->markTransactionFailed($failedTransaction, 'invalid_signature', 'Invalid Razorpay signature.');
+            }
+
             $this->recordEvent(null, 'checkout.verification_failed', [
                 'razorpay_order_id' => $orderId,
                 'razorpay_payment_id' => $paymentId,
@@ -91,7 +206,7 @@ class RazorpayPaymentService
                 'razorpay_payment_id' => $paymentId,
             ], true, 'PROCESSED');
 
-            $this->accessService->activate($transaction);
+            $this->activatePaidResource($transaction);
 
             return $transaction->refresh();
         });
@@ -150,15 +265,15 @@ class RazorpayPaymentService
                         $this->updateUserContactFromPayment($user, $paymentEntity, $transaction);
                     }
                 }
-                $this->accessService->activate($transaction);
+                $this->activatePaidResource($transaction);
             }
 
             if ($transaction && $eventType === 'payment.failed') {
-                $transaction->forceFill([
-                    'status' => 'FAILED',
-                    'failure_code' => data_get($payload, 'payload.payment.entity.error_code'),
-                    'failure_description' => data_get($payload, 'payload.payment.entity.error_description'),
-                ])->save();
+                $this->markTransactionFailed(
+                    $transaction,
+                    data_get($payload, 'payload.payment.entity.error_code'),
+                    data_get($payload, 'payload.payment.entity.error_description')
+                );
             }
 
             $event->forceFill([
@@ -208,7 +323,7 @@ class RazorpayPaymentService
         return hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature);
     }
 
-    private function createProviderOrder(PaymentTransaction $transaction, PredictionProduct $product): string
+    private function createProviderOrder(PaymentTransaction $transaction, string $receipt, array $notes): string
     {
         $keyId = config('services.razorpay.key_id');
         $keySecret = config('services.razorpay.key_secret');
@@ -222,11 +337,8 @@ class RazorpayPaymentService
             ->post('https://api.razorpay.com/v1/orders', [
                 'amount' => $transaction->amount_minor,
                 'currency' => $transaction->currency,
-                'receipt' => 'ygt_future_'.$transaction->id,
-                'notes' => [
-                    'prediction_request_id' => (string) $transaction->prediction_request_id,
-                    'product_code' => $product->code,
-                ],
+                'receipt' => $receipt,
+                'notes' => $notes,
             ])
             ->throw()
             ->json();
@@ -262,6 +374,61 @@ class RazorpayPaymentService
             'payment_email' => data_get($paymentEntity, 'email', $transaction->payment_email),
             'metadata' => $metadata,
         ]);
+    }
+
+    private function activatePaidResource(PaymentTransaction $transaction): void
+    {
+        if ($transaction->temple_remedy_request_id) {
+            $remedy = TempleRemedyRequest::query()
+                ->whereKey($transaction->temple_remedy_request_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($remedy) {
+                $hasRemedy = (bool) ($remedy->remedy_url || $remedy->remedy_file_path);
+                $remedy->forceFill([
+                    'payment_status' => 'PAID',
+                    'paid_at' => $remedy->paid_at ?? now(),
+                    'status' => $hasRemedy ? 'COMPLETED' : $remedy->status,
+                    'completed_at' => $hasRemedy ? ($remedy->completed_at ?? now()) : $remedy->completed_at,
+                    'completion_method' => $hasRemedy ? ($remedy->completion_method ?? 'payment') : $remedy->completion_method,
+                ])->save();
+            }
+
+            return;
+        }
+
+        if ($transaction->astrologer_appointment_id) {
+            $appointment = AstrologerAppointment::query()
+                ->whereKey($transaction->astrologer_appointment_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($appointment && $appointment->payment_status !== 'PAID') {
+                app(AstrologerAppointmentService::class)->markPaid($appointment);
+            }
+
+            return;
+        }
+
+        $this->accessService->activate($transaction);
+    }
+
+    private function markTransactionFailed(PaymentTransaction $transaction, ?string $failureCode, ?string $failureDescription): void
+    {
+        $transaction->forceFill([
+            'status' => 'FAILED',
+            'failure_code' => $failureCode,
+            'failure_description' => $failureDescription,
+        ])->save();
+
+        if ($transaction->astrologer_appointment_id) {
+            $appointment = AstrologerAppointment::query()->find($transaction->astrologer_appointment_id);
+
+            if ($appointment) {
+                app(AstrologerAppointmentService::class)->markPaymentFailed($appointment, $failureCode, $failureDescription);
+            }
+        }
     }
 
     private function updateUserContactFromPayment(User $user, array $paymentEntity, PaymentTransaction $transaction): void

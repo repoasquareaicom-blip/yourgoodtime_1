@@ -425,7 +425,10 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
 
       if (prepareError.name === 'AbortError' || prepareError.code === 'ERR_CANCELED') return
 
-      setProcessingError('We could not prepare your prediction right now. Your verification is complete, so you can safely try again.')
+      setProcessingError(getErrorMessage(
+        prepareError,
+        'We could not prepare your prediction right now. Your verification is complete, so you can safely try again.',
+      ))
       setPreparationStatus('ERROR')
       setPredictionStage('error')
       setAuthFlowStage('preparingPrediction')

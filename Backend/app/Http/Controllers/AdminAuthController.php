@@ -12,18 +12,19 @@ class AdminAuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => ['required', 'email', 'max:254'],
+            'email' => ['required', 'string', 'max:254'],
             'password' => ['required', 'string'],
         ]);
+        $login = strtolower(trim($validated['email']));
 
         $admin = AdminUser::query()
-            ->where('email', strtolower(trim($validated['email'])))
+            ->where('email', $login)
             ->first();
 
         if (! $admin || ! Hash::check($validated['password'], $admin->password)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid admin email or password.',
+                'message' => 'Invalid admin username or password.',
             ], 422);
         }
 

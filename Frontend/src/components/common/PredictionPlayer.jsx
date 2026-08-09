@@ -37,6 +37,19 @@ function navLabel(group) {
   return group?.type === 'IDENTITY' ? 'My Identity' : group?.systemYearLabel || group?.title || 'Prediction'
 }
 
+function videoProgressLabel(group, currentVideoIndex) {
+  if (group?.type === 'IDENTITY') {
+    return 'Identity Reading'
+  }
+
+  const totalVideos = group?.videos.length || 0
+  const ids = Array.isArray(group?.videoIds) && group.videoIds.length > 1
+    ? ` (${group.videoIds.join(', ')})`
+    : ''
+
+  return `Video ${currentVideoIndex + 1} of ${totalVideos}${ids}`
+}
+
 function PredictionPlayer({
   playlist,
   onClose,
@@ -332,7 +345,7 @@ function PredictionPlayer({
                 }}
               />
               <div className="prediction-player__caption">
-                <strong>{currentGroup?.type === 'IDENTITY' ? 'Identity Reading' : `Video ${state.currentVideoIndex + 1} of ${currentGroup?.videos.length}`}</strong>
+                <strong>{videoProgressLabel(currentGroup, state.currentVideoIndex)}</strong>
                 <span>{currentVideo?.videoId ? `Video ID ${currentVideo.videoId}` : ''}</span>
               </div>
               {needsTapToContinue ? (

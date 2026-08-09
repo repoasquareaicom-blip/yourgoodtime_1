@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -11,6 +12,61 @@ use Tests\TestCase;
 class AuthProfileTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_user_can_login_with_password(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'login@example.com',
+            'password' => Hash::make('secret123'),
+        ]);
+
+        $this->postJson('/api/auth/login', [
+            'email' => ' Login@Example.com ',
+            'password' => 'secret123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('user.id', $user->id)
+            ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email']]);
+    }
+
+    public function test_user_login_rejects_wrong_password(): void
+    {
+        User::factory()->create([
+            'email' => 'login@example.com',
+            'password' => Hash::make('secret123'),
+        ]);
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'login@example.com',
+            'password' => 'wrong-password',
+        ])
+            ->assertUnprocessable()
+            ->assertExactJson([
+                'success' => false,
+                'message' => 'Invalid email or password.',
+            ]);
+    }
+
+    public function test_user_login_guides_accounts_without_password_to_otp_setup(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'login@example.com',
+        ]);
+        DB::table('users')->where('id', $user->id)->update(['password' => '']);
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'login@example.com',
+            'password' => 'secret123',
+        ])
+            ->assertStatus(409)
+            ->assertJson([
+                'success' => false,
+                'code' => 'PASSWORD_NOT_SET',
+                'next_action' => 'VERIFY_PASSWORD_SETUP_OTP',
+                'account_state' => 'EXISTING_WITHOUT_PASSWORD',
+            ]);
+    }
 
     public function test_profile_requires_authentication(): void
     {

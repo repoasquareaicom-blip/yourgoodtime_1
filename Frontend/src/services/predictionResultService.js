@@ -67,6 +67,30 @@ export function resolvePredictionVideoUrl(videoId, type = 'PREDICTION') {
   return localVideoFallbacks[fallbackIndex]
 }
 
+function normalizePredictionVideoIds(group) {
+  const rawVideoIds = group?.video_ids
+
+  let videoIds = []
+
+  if (Array.isArray(rawVideoIds)) {
+    videoIds = rawVideoIds
+  } else if (rawVideoIds && typeof rawVideoIds === 'object') {
+    videoIds = Object.values(rawVideoIds)
+  } else if (typeof rawVideoIds === 'string' || typeof rawVideoIds === 'number') {
+    videoIds = String(rawVideoIds).split(/[\s,]+/)
+  }
+
+  if (!videoIds.length && group?.video_id) {
+    videoIds = [group.video_id]
+  }
+
+  return Array.from(new Set(
+    videoIds
+      .map((videoId) => String(videoId).trim())
+      .filter(Boolean)
+  ))
+}
+
 export function buildPredictionPlaylist(result, predictionType = 'past') {
   const identityVideoId = result?.identity_video?.video_id
   const groups = []
@@ -93,9 +117,7 @@ export function buildPredictionPlaylist(result, predictionType = 'past') {
   )
 
   sortedPredictionGroups.forEach((group) => {
-    const videoIds = Array.isArray(group.video_ids)
-      ? group.video_ids.map((videoId) => String(videoId)).filter(Boolean)
-      : []
+    const videoIds = normalizePredictionVideoIds(group)
 
     if (!videoIds.length) return
 
