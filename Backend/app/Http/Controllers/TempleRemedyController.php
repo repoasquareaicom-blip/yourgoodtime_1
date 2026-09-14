@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AdminUser;
 use App\Models\AppointmentPaymentMethod;
+use App\Models\PaymentMethodSetting;
 use App\Models\PredictionRequest;
 use App\Models\PredictionProduct;
 use App\Models\TempleRemedyRequest;
@@ -64,15 +65,24 @@ class TempleRemedyController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $activePaymentMethodCodes = $this->activePaymentMethodCodes();
+
+        if (! $activePaymentMethodCodes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment options are currently unavailable. Please try again later.',
+                'errors' => ['payment_method' => ['Payment options are currently unavailable. Please try again later.']],
+            ], 422);
+        }
+
         $validated = $request->validate([
             'remedy_option_code' => ['required', 'string', 'max:80'],
             'problem_text' => ['nullable', 'string', 'max:3000'],
             'contact_number' => ['required', 'string', 'max:32', 'regex:/^[0-9+()\\-\\s]{7,32}$/'],
             'alternate_contact_number' => ['nullable', 'string', 'max:32', 'regex:/^[0-9+()\\-\\s]{7,32}$/'],
             'preferred_language' => ['required', 'in:ta,en'],
-            'payment_method' => ['required', 'in:payment_gateway,qr_online'],
-            'payment_reference' => ['nullable', 'string', 'max:500'],
-            'payment_screenshot' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'payment_method' => ['required', 'in:'.implode(',', $activePaymentMethodCodes)],
+            'payment_screenshot' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
         $option = collect($this->remedyOptions())->firstWhere('code', $validated['remedy_option_code']);
@@ -118,7 +128,6 @@ class TempleRemedyController extends Controller
         $manualPayment = null;
         if ($validated['payment_method'] === AppointmentPaymentMethod::QR_ONLINE) {
             $manualPayment = array_filter([
-                'reference' => $validated['payment_reference'] ?? null,
                 'uploaded_at' => now()->toJSON(),
                 'review_status' => 'waiting_admin_confirmation',
             ]);
@@ -413,10 +422,36 @@ class TempleRemedyController extends Controller
 
     private function paymentMethods(): array
     {
-        return [
-            ['code' => AppointmentPaymentMethod::PAYMENT_GATEWAY, 'name' => 'Payment Gateway', 'instructions' => 'Pay securely through Razorpay.'],
-            ['code' => AppointmentPaymentMethod::QR_ONLINE, 'name' => 'QR Code', 'instructions' => 'Scan the QR code, then upload the payment screenshot or enter the reference.'],
-        ];
+        $setting = $this->paymentMethodSetting();
+
+        return array_values(array_filter([
+            $setting->payment_gateway_enabled ? [
+                'code' => AppointmentPaymentMethod::PAYMENT_GATEWAY,
+                'name' => 'Pay Online',
+                'subtitle' => 'Existing Payment Gateway',
+                'instructions' => 'Pay securely through Razorpay.',
+            ] : null,
+            $setting->gpay_qr_enabled && $setting->qr_image_path ? [
+                'code' => AppointmentPaymentMethod::QR_ONLINE,
+                'name' => 'Pay via GPay QR',
+                'subtitle' => 'Scan QR and submit proof',
+                'instructions' => 'Scan the QR code, complete payment, then upload the payment screenshot.',
+                'qr_image_url' => $setting->qrImageUrl(),
+            ] : null,
+        ]));
+    }
+
+    private function activePaymentMethodCodes(): array
+    {
+        return collect($this->paymentMethods())->pluck('code')->values()->all();
+    }
+
+    private function paymentMethodSetting(): PaymentMethodSetting
+    {
+        return PaymentMethodSetting::query()->firstOrCreate(
+            ['service_type' => PaymentMethodSetting::TEMPLE_REMEDY],
+            ['payment_gateway_enabled' => true, 'gpay_qr_enabled' => false]
+        );
     }
 
     private function sendThankYouMail(string $email, ?string $name, TempleRemedyRequest $remedyRequest): void

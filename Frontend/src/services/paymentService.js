@@ -17,6 +17,29 @@ export async function fetchFutureAccess({ predictionRequestId, requestUuid }) {
   return response.data
 }
 
+export async function fetchFuturePaymentSettings() {
+  const response = await api.get('/payment-method-settings/future-video')
+
+  return response.data?.data || {
+    service_type: 'FUTURE_VIDEO',
+    payment_gateway_enabled: true,
+    gpay_qr_enabled: false,
+    qr_image_url: null,
+  }
+}
+
+export async function fetchFutureQrPaymentStatus({ predictionRequestId, requestUuid, productId }) {
+  const response = await api.get('/payments/future-prediction/manual-qr/status', {
+    params: {
+      prediction_request_id: predictionRequestId,
+      request_uuid: requestUuid,
+      product_id: productId,
+    },
+  })
+
+  return response.data?.data || null
+}
+
 export async function createFuturePredictionOrder({ predictionRequestId, requestUuid, productId }) {
   const response = await api.post('/payments/future-prediction/order', {
     prediction_request_id: predictionRequestId,
@@ -25,6 +48,18 @@ export async function createFuturePredictionOrder({ predictionRequestId, request
   })
 
   return response.data?.data
+}
+
+export async function submitFutureQrPayment({ predictionRequestId, requestUuid, productId, paymentProof }) {
+  const payload = new FormData()
+  payload.append('prediction_request_id', predictionRequestId)
+  payload.append('request_uuid', requestUuid)
+  payload.append('product_id', productId)
+  payload.append('payment_proof', paymentProof)
+
+  const response = await api.post('/payments/future-prediction/manual-qr', payload)
+
+  return response.data
 }
 
 export async function createTempleRemedyOrder(remedyId) {

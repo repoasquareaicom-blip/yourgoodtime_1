@@ -9,6 +9,8 @@ use App\Models\PredictionFeedback;
 use App\Models\PredictionResult;
 use App\Models\TempleRemedyRequest;
 use App\Models\User;
+use App\Services\Prediction\PredictionEngineService;
+use App\Services\Prediction\PredictionResponseBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -270,6 +272,99 @@ class AdminDashboardController extends Controller
                 'identity_video' => $this->identityVideoRows($result),
                 'prediction_data' => $this->predictionDataRows($result),
                 'videos' => $this->predictionVideoRows($result),
+            ],
+        ]);
+    }
+
+    public function regeneratePastPrediction(
+        Request $request,
+        PredictionRequest $predictionRequest,
+        PredictionEngineService $predictionEngineService,
+        PredictionResponseBuilder $predictionResponseBuilder
+    ): JsonResponse {
+        if ($predictionRequest->prediction_type !== 'past') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only past prediction requests can be regenerated from this action.',
+            ], 422);
+        }
+
+        $existingResult = PredictionResult::query()
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('prediction_type', 'past')
+            ->latest('id')
+            ->first();
+
+        try {
+            $timeline = $predictionEngineService->preparePredictionTimeline($predictionRequest->id, 'past');
+            $result = $predictionResponseBuilder->buildTimeline($timeline);
+            $warnings = collect($result['prediction_videos'] ?? [])
+                ->pluck('warning')
+                ->filter()
+                ->values()
+                ->all();
+            $payload = [
+                'prediction_request_id' => $result['prediction_request_id'] ?? $predictionRequest->id,
+                'type' => $result['prediction_type'] ?? 'past',
+                'identity_video' => $result['identity_video'] ?? null,
+                'prediction_videos' => $result['prediction_videos'] ?? [],
+                'summary' => $result['summary'] ?? [],
+                'warnings' => $warnings,
+            ];
+
+            if ($payload['prediction_videos'] === []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Past prediction regeneration did not produce any prediction videos.',
+                ], 422);
+            }
+
+            $savedResult = PredictionResult::query()->updateOrCreate(
+                [
+                    'prediction_request_id' => $predictionRequest->id,
+                    'prediction_type' => 'past',
+                ],
+                [
+                    'user_id' => $existingResult?->user_id ?? $this->userIdForEmail($predictionRequest->email),
+                    'prediction_entitlement_id' => null,
+                    'identity_video_id' => data_get($payload, 'identity_video.video_id'),
+                    'result_payload' => $payload,
+                    'summary_payload' => $payload['summary'] ?? [],
+                    'warnings_payload' => $payload['warnings'] ?? [],
+                    'status' => 'completed',
+                    'generated_at' => now(),
+                ]
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('Admin past prediction regeneration failed.', [
+                'prediction_request_id' => $predictionRequest->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to regenerate past prediction result.',
+            ], 422);
+        }
+
+        $predictionRequest->loadMissing('results');
+        $feedback = $this->feedbackForResult($savedResult);
+        $period = $this->predictionPeriod($predictionRequest, $savedResult, null);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Past prediction regenerated successfully.',
+            'data' => [
+                'request' => $this->predictionRequestPayload($predictionRequest),
+                'result' => $this->predictionResultPayload($savedResult),
+                'entitlement' => null,
+                'period' => $period,
+                'rating' => $this->feedbackPayload($feedback),
+                'last_visited_at' => $feedback?->submitted_at?->toJSON(),
+                'viewer_url' => $this->predictionResponseViewerUrl($predictionRequest),
+                'identity_video' => $this->identityVideoRows($savedResult),
+                'prediction_data' => $this->predictionDataRows($savedResult),
+                'videos' => $this->predictionVideoRows($savedResult),
             ],
         ]);
     }
@@ -787,11 +882,11 @@ class AdminDashboardController extends Controller
             ->sortBy(fn (array $video): int => (int) ($video['age'] ?? $video['system_year'] ?? 999999))
             ->values()
             ->map(fn (array $video): array => [
-                'age' => $video['age_label']
-                    ?? $this->rangeLabel($video['age_from'] ?? null, $video['age_to'] ?? null)
+                'age' => $this->rangeLabel($video['age_from'] ?? null, $video['age_to'] ?? null)
+                    ?? $video['age_label']
                     ?? $video['age'] ?? null,
-                'system_year' => $video['system_year_label']
-                    ?? $this->rangeLabel($video['system_year_from'] ?? null, $video['system_year_to'] ?? null)
+                'system_year' => $this->rangeLabel($video['system_year_from'] ?? null, $video['system_year_to'] ?? null)
+                    ?? $video['system_year_label']
                     ?? $video['system_year'] ?? null,
                 'system_year_range' => $this->rangeLabel($video['system_year_from'] ?? null, $video['system_year_to'] ?? null),
                 'dasha' => $video['major_dasha'] ?? 'Not recorded',
@@ -877,6 +972,17 @@ class AdminDashboardController extends Controller
         }
 
         return $from ? (string) $from : null;
+    }
+
+    private function userIdForEmail(?string $email): ?int
+    {
+        if ($email === null || trim($email) === '') {
+            return null;
+        }
+
+        return User::query()
+            ->where('email', strtolower(trim($email)))
+            ->value('id');
     }
 
     private function identityPayload(PredictionRequest $request): array

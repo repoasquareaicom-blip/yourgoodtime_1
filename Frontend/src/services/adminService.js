@@ -28,6 +28,12 @@ export async function fetchAdminPredictionRequestDetails(requestId, params = {})
   return response.data?.data
 }
 
+export async function regenerateAdminPastPrediction(requestId) {
+  const response = await adminApi.post(`/admin/prediction-requests/${requestId}/regenerate-past`)
+
+  return response.data
+}
+
 export async function fetchAdminFeedback() {
   const response = await adminApi.get('/admin/feedback')
 
@@ -171,6 +177,152 @@ export async function fetchAdminTempleRemedyManualPaymentFile(remedyId) {
   const response = await adminApi.get(`/admin/temple-remedies/${remedyId}/manual-payment-file`, {
     responseType: 'blob',
   })
+
+  return response.data
+}
+
+export async function fetchAdminChatbotFaqs() {
+  const response = await adminApi.get('/admin/chatbot/faqs')
+
+  return {
+    data: response.data?.data || [],
+    topics: response.data?.topics || [],
+    intents: response.data?.intents || [],
+  }
+}
+
+export async function createAdminChatbotFaq(payload) {
+  const response = await adminApi.post('/admin/chatbot/faqs', payload)
+
+  return response.data
+}
+
+export async function updateAdminChatbotFaq(faqId, payload) {
+  const response = await adminApi.put(`/admin/chatbot/faqs/${faqId}`, payload)
+
+  return response.data
+}
+
+export async function deactivateAdminChatbotFaq(faqId) {
+  const response = await adminApi.delete(`/admin/chatbot/faqs/${faqId}`)
+
+  return response.data
+}
+
+export async function fetchAdminChatbotTopics() {
+  const response = await adminApi.get('/admin/chatbot/topics')
+
+  return response.data?.data || []
+}
+
+export async function createAdminChatbotTopic(payload) {
+  const response = await adminApi.post('/admin/chatbot/topics', payload)
+
+  return response.data
+}
+
+export async function updateAdminChatbotTopic(topicId, payload) {
+  const response = await adminApi.put(`/admin/chatbot/topics/${topicId}`, payload)
+
+  return response.data
+}
+
+export async function deactivateAdminChatbotTopic(topicId) {
+  const response = await adminApi.delete(`/admin/chatbot/topics/${topicId}`)
+
+  return response.data
+}
+
+export async function fetchAdminChatbotIntents() {
+  const response = await adminApi.get('/admin/chatbot/intents')
+
+  return response.data?.data || []
+}
+
+export async function createAdminChatbotIntent(payload) {
+  const response = await adminApi.post('/admin/chatbot/intents', payload)
+
+  return response.data
+}
+
+export async function updateAdminChatbotIntent(intentId, payload) {
+  const response = await adminApi.put(`/admin/chatbot/intents/${intentId}`, payload)
+
+  return response.data
+}
+
+export async function deactivateAdminChatbotIntent(intentId) {
+  const response = await adminApi.delete(`/admin/chatbot/intents/${intentId}`)
+
+  return response.data
+}
+
+export async function fetchAdminChatbotSettings() {
+  const response = await adminApi.get('/admin/chatbot/settings')
+
+  return {
+    data: response.data?.data || {},
+    cacheCount: response.data?.cache_count || 0,
+  }
+}
+
+export async function fetchAdminPaymentMethodSettings() {
+  const response = await adminApi.get('/admin/payment-method-settings')
+
+  return response.data?.data || []
+}
+
+export async function updateAdminPaymentMethodSetting(serviceType, payload) {
+  const response = await adminApi.post(`/admin/payment-method-settings/${serviceType}`, payload)
+
+  return response.data
+}
+
+export async function fetchAdminFutureVideoManualPayments(status = 'PENDING', search = '') {
+  const response = await adminApi.get('/admin/future-video-manual-payments', {
+    params: { status, search },
+  })
+
+  return {
+    data: response.data?.data || [],
+    counts: response.data?.counts || { PENDING: 0, VERIFIED: 0, REJECTED: 0, ALL: 0 },
+  }
+}
+
+export async function fetchAdminFutureVideoManualPaymentProof(paymentId) {
+  const response = await adminApi.get(`/admin/future-video-manual-payments/${paymentId}/proof`, {
+    responseType: 'blob',
+  })
+
+  return response.data
+}
+
+export async function verifyAdminFutureVideoManualPayment(paymentId) {
+  const response = await adminApi.post(`/admin/future-video-manual-payments/${paymentId}/verify`)
+
+  return response.data
+}
+
+export async function rejectAdminFutureVideoManualPayment(paymentId, rejectionReason = '') {
+  const response = await adminApi.post(`/admin/future-video-manual-payments/${paymentId}/reject`, {
+    rejection_reason: rejectionReason,
+  })
+
+  return response.data
+}
+
+export async function updateAdminChatbotSettings(payload) {
+  const response = await adminApi.put('/admin/chatbot/settings', payload)
+
+  return {
+    data: response.data?.data || {},
+    cacheCount: response.data?.cache_count || 0,
+    message: response.data?.message,
+  }
+}
+
+export async function clearAdminChatbotOpenAiCache() {
+  const response = await adminApi.delete('/admin/chatbot/openai-cache')
 
   return response.data
 }

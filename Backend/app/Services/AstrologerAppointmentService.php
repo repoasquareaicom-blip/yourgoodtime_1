@@ -10,6 +10,7 @@ use App\Models\AstrologerAppointment;
 use App\Models\AstrologerAppointmentActivity;
 use App\Models\AstrologerAppointmentSlotBlock;
 use App\Models\AstrologerConsultationQuestion;
+use App\Models\PaymentMethodSetting;
 use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
 use App\Models\User;
@@ -460,7 +461,6 @@ class AstrologerAppointmentService
         return [
             'original_name' => data_get($manualPayment, 'original_name'),
             'mime_type' => data_get($manualPayment, 'mime_type'),
-            'reference' => data_get($manualPayment, 'reference'),
             'uploaded_at' => data_get($manualPayment, 'uploaded_at'),
             'review_status' => data_get($manualPayment, 'review_status'),
             'file_url' => $includeAdmin ? url('/api/admin/appointments/'.$appointment->id.'/manual-payment-file') : null,
@@ -517,17 +517,24 @@ class AstrologerAppointmentService
     private function paymentMethodsPayload(): array
     {
         $this->ensureDefaultPaymentMethods();
+        $setting = $this->paymentMethodSetting();
 
         return AppointmentPaymentMethod::query()
             ->where('is_active', true)
+            ->whereIn('code', array_filter([
+                $setting->payment_gateway_enabled ? AppointmentPaymentMethod::PAYMENT_GATEWAY : null,
+                $setting->gpay_qr_enabled && $setting->qr_image_path ? AppointmentPaymentMethod::QR_ONLINE : null,
+            ]))
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
             ->map(fn (AppointmentPaymentMethod $method): array => [
                 'id' => $method->id,
                 'code' => $method->code,
-                'name' => $method->name,
-                'instructions' => $method->instructions,
+                'name' => $method->code === AppointmentPaymentMethod::QR_ONLINE ? 'Pay via GPay QR' : 'Pay Online',
+                'subtitle' => $method->code === AppointmentPaymentMethod::QR_ONLINE ? 'Scan QR and submit proof' : 'Existing Payment Gateway',
+                'instructions' => $method->code === AppointmentPaymentMethod::QR_ONLINE ? 'Scan the QR code, complete payment, then upload the payment screenshot.' : 'Pay securely through Razorpay.',
+                'qr_image_url' => $method->code === AppointmentPaymentMethod::QR_ONLINE ? $setting->qrImageUrl() : null,
             ])
             ->values()
             ->all();
@@ -553,6 +560,14 @@ class AstrologerAppointmentService
             ->firstWhere('code', AppointmentPaymentMethod::QR_ONLINE);
 
         return is_array($method) ? ($method['instructions'] ?? null) : null;
+    }
+
+    private function paymentMethodSetting(): PaymentMethodSetting
+    {
+        return PaymentMethodSetting::query()->firstOrCreate(
+            ['service_type' => PaymentMethodSetting::TALK_TO_ASTROLOGER],
+            ['payment_gateway_enabled' => true, 'gpay_qr_enabled' => false]
+        );
     }
 
     private function appointmentLanguagesPayload(): array
@@ -601,7 +616,7 @@ class AstrologerAppointmentService
 
         foreach ([
             [AppointmentPaymentMethod::PAYMENT_GATEWAY, 'Payment Gateway', 1, 'Pay securely through Razorpay.'],
-            [AppointmentPaymentMethod::QR_ONLINE, 'Pay through QR / Online', 2, 'Pay through QR, GPay, or online transfer, then upload the payment reference/proof.'],
+            [AppointmentPaymentMethod::QR_ONLINE, 'Pay through QR / Online', 2, 'Pay through QR, GPay, or online transfer, then upload the payment proof.'],
         ] as [$code, $name, $sortOrder, $instructions]) {
             AppointmentPaymentMethod::query()->create([
                 'code' => $code,

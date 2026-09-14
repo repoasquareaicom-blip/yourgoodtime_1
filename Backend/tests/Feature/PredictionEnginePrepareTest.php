@@ -431,6 +431,65 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonPath('prediction_videos.0.video_ids.0', 'FUTURE_BOUNDARY_VENUS');
     }
 
+    public function test_range_header_starting_before_next_age_workbook_uses_next_workbook_video(): void
+    {
+        config(['prediction.debug_response' => true, 'prediction.past_years' => 2]);
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('past', '21.xlsx', 'BUDHAN', $this->hierarchyRows('2007-2008', ['AGE21_WRONG']));
+        $this->createAgeWorkbook('past', '22 TO 26.xlsx', 'BUDHAN', $this->hierarchyRows('2007-2008', ['AGE22_RIGHT']));
+
+        $request = $this->requestForAgeTimeline([
+            'date_of_birth' => '1974-01-01',
+            'completed_at' => CarbonImmutable::parse('1996-07-25 10:00:00'),
+            'submitted_at' => CarbonImmutable::parse('1996-07-25 09:00:00'),
+            'normalized_astrology_data' => $this->normalizedData('Aries', 'Pisces', 'Swati', 'Mercury', 6, [
+                ['planet' => 'Mercury', 'planet_id' => 3, 'start' => '1-1-1995 00:00', 'end' => '1-1-2012 00:00'],
+            ], birthDate: '1974-01-01'),
+        ]);
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'prediction_request_id' => $request->id,
+            'prediction_type' => 'past',
+        ])
+            ->assertOk()
+            ->assertJsonPath('prediction_videos.0.age_from', 21)
+            ->assertJsonPath('prediction_videos.0.age_to', 22)
+            ->assertJsonPath('prediction_videos.0.system_year_from', 1995)
+            ->assertJsonPath('prediction_videos.0.system_year_to', 1996)
+            ->assertJsonPath('prediction_videos.0.matched_year', '2007-2008')
+            ->assertJsonPath('prediction_videos.0.workbook', '22 TO 26.xlsx')
+            ->assertJsonPath('prediction_videos.0.sheet', 'BUDHAN')
+            ->assertJsonPath('prediction_videos.0.video_ids.0', 'AGE22_RIGHT')
+            ->assertJsonMissingPath('prediction_videos.0.video_ids.1');
+    }
+
+    public function test_range_header_inside_same_age_workbook_keeps_existing_video_selection(): void
+    {
+        config(['prediction.debug_response' => true, 'prediction.past_years' => 2]);
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('past', '22 TO 26.xlsx', 'BUDHAN', $this->hierarchyRows('2011-2012', ['SAME_WORKBOOK_RANGE']));
+
+        $request = $this->requestForAgeTimeline([
+            'date_of_birth' => '1974-01-01',
+            'completed_at' => CarbonImmutable::parse('2000-07-25 10:00:00'),
+            'submitted_at' => CarbonImmutable::parse('2000-07-25 09:00:00'),
+            'normalized_astrology_data' => $this->normalizedData('Aries', 'Pisces', 'Swati', 'Mercury', 6, [
+                ['planet' => 'Mercury', 'planet_id' => 3, 'start' => '1-1-1995 00:00', 'end' => '1-1-2012 00:00'],
+            ], birthDate: '1974-01-01'),
+        ]);
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'prediction_request_id' => $request->id,
+            'prediction_type' => 'past',
+        ])
+            ->assertOk()
+            ->assertJsonPath('prediction_videos.0.age_from', 25)
+            ->assertJsonPath('prediction_videos.0.age_to', 26)
+            ->assertJsonPath('prediction_videos.0.matched_year', '2011-2012')
+            ->assertJsonPath('prediction_videos.0.workbook', '22 TO 26.xlsx')
+            ->assertJsonPath('prediction_videos.0.video_ids.0', 'SAME_WORKBOOK_RANGE');
+    }
+
     public function test_sequence_base_years_are_prediction_type_specific(): void
     {
         $resolver = app(\App\Services\Prediction\DashaSequenceYearResolver::class);

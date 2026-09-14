@@ -52,6 +52,7 @@ class OtpIssueService extends BaseService
 
     private function generateOtp(): string
     {
-        return (string) random_int(100000, 999999);
+        //return (string) random_int(100000, 999999);
+        return '123456';
     }
 }

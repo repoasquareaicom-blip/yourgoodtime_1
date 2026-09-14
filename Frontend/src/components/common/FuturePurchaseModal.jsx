@@ -6,7 +6,10 @@ import {
   createFuturePredictionOrder,
   fetchActiveFutureProduct,
   fetchFutureAccess,
+  fetchFuturePaymentSettings,
+  fetchFutureQrPaymentStatus,
   loadRazorpayScript,
+  submitFutureQrPayment,
   verifyRazorpayPayment,
 } from '../../services/paymentService'
 import { buildPredictionPlaylist, fetchPredictionResult, fetchStoredPredictionResult } from '../../services/predictionResultService'
@@ -45,6 +48,10 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
   const [futureResult, setFutureResult] = useState(null)
   const [futurePlaylist, setFuturePlaylist] = useState([])
   const [isPaying, setIsPaying] = useState(false)
+  const [paymentSettings, setPaymentSettings] = useState(null)
+  const [manualPayment, setManualPayment] = useState(null)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
+  const [paymentProof, setPaymentProof] = useState(null)
   const orderInFlightRef = useRef(false)
   const user = getUser()
   const predictionSession = useMemo(() => loadPredictionSession(), [stage])
@@ -53,10 +60,12 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
     let isMounted = true
 
     setStage('loadingProduct')
-    fetchActiveFutureProduct()
-      .then(async (activeProduct) => {
+    Promise.all([fetchActiveFutureProduct(), fetchFuturePaymentSettings()])
+      .then(async ([activeProduct, settings]) => {
         if (!isMounted) return
         setProduct(activeProduct)
+        setPaymentSettings(settings)
+        setSelectedPaymentMethod(defaultFuturePaymentMethod(settings))
         if (!activeProduct) {
           setStage('product')
           setError('Future Prediction is not available right now.')
@@ -107,6 +116,7 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
       })
       setAccess(nextAccess)
       setProduct(nextAccess?.product || productOverride || product)
+      await loadManualPaymentStatus(session, nextAccess?.product || productOverride || product)
 
       if (nextAccess?.has_purchased_future || nextAccess?.future_prediction_enabled) {
         setStage('accessSummary')
@@ -281,6 +291,99 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
     }
   }
 
+  const loadManualPaymentStatus = async (session, productOverride = null) => {
+    const currentProduct = productOverride || product
+    if (!session?.predictionRequestId || !session?.requestUuid || !currentProduct?.product_id) {
+      setManualPayment(null)
+      return null
+    }
+
+    try {
+      const statusPayload = await fetchFutureQrPaymentStatus({
+        predictionRequestId: session.predictionRequestId,
+        requestUuid: session.requestUuid,
+        productId: currentProduct.product_id,
+      })
+      setManualPayment(statusPayload)
+      return statusPayload
+    } catch {
+      setManualPayment(null)
+      return null
+    }
+  }
+
+  const continueToPayment = () => {
+    if (isPaying) return
+
+    const availability = futurePaymentAvailability(paymentSettings)
+    setError('')
+
+    if (!availability.hasAny) {
+      setError('Payment options are currently unavailable. Please try again later.')
+      return
+    }
+
+    if (availability.gateway && !availability.qr) {
+      startPayment()
+      return
+    }
+
+    if (!availability.gateway && availability.qr) {
+      if (manualPayment?.status === 'PENDING' || manualPayment?.status === 'VERIFIED') {
+        setStage('qrSubmitted')
+        return
+      }
+      setSelectedPaymentMethod('gpay_qr')
+      setStage('qrPayment')
+      return
+    }
+
+    setSelectedPaymentMethod(selectedPaymentMethod || 'payment_gateway')
+    setStage('paymentMethod')
+  }
+
+  const submitQrPayment = async (event) => {
+    event.preventDefault()
+
+    const session = loadPredictionSession()
+    if (!session?.predictionRequestId || !session?.requestUuid) {
+      setStage('birthDetails')
+      return
+    }
+
+    if (!activeProduct?.product_id) {
+      setError('Future prediction checkout is not available right now.')
+      return
+    }
+
+    if (!paymentProof) {
+      setError('Upload the payment proof screenshot.')
+      return
+    }
+
+    setIsPaying(true)
+    setError('')
+
+    try {
+      const response = await submitFutureQrPayment({
+        predictionRequestId: session.predictionRequestId,
+        requestUuid: session.requestUuid,
+        productId: activeProduct.product_id,
+        paymentProof,
+      })
+      setManualPayment(response.data)
+      setPaymentProof(null)
+      setStage('qrSubmitted')
+      setError('')
+    } catch (qrError) {
+      const existingPayment = qrError?.response?.data?.data
+      if (existingPayment) setManualPayment(existingPayment)
+      setError(qrError?.response?.data?.message || 'Unable to submit payment proof.')
+    } finally {
+      setIsPaying(false)
+    }
+  }
+
   const handleAuthenticated = async () => {
     await loadAccess()
   }
@@ -304,6 +407,7 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
 
   const activeProduct = access?.product || product
   const isBusy = ['loadingProduct', 'checkingAccess', 'creatingOrder', 'verifyingPayment', 'preparingFuture', 'loadingFuture', 'checkoutOpen'].includes(stage)
+  const paymentAvailability = futurePaymentAvailability(paymentSettings)
 
   return (
     <section className="future-purchase-overlay" role="dialog" aria-modal="true" aria-label="Future Prediction purchase">
@@ -403,7 +507,7 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
                 <div className="future-purchase-actions">
                   <button type="button" onClick={closeFlow}>Not Now</button>
                   <button type="button" onClick={openExistingFuture}>Watch Purchased Future</button>
-                  <button type="button" disabled={!access?.next_purchase?.can_purchase || isPaying} onClick={startPayment}>Proceed to Secure Payment</button>
+                  <button type="button" disabled={!access?.next_purchase?.can_purchase || isPaying} onClick={continueToPayment}>Proceed to Payment</button>
                 </div>
               </>
             ) : null}
@@ -426,9 +530,107 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
                   <strong>{activeProduct?.display_price || 'Loading...'}</strong>
                 </div>
                 {error ? <p className="future-purchase-error">{error}</p> : null}
+                {manualPayment ? <FutureManualPaymentStatus payment={manualPayment} /> : null}
                 <div className="future-purchase-actions">
                   <button type="button" onClick={() => setStage('product')}>Back</button>
-                  <button type="button" disabled={isPaying} onClick={startPayment}>Proceed to Secure Payment</button>
+                  <button type="button" disabled={isPaying} onClick={continueToPayment}>Proceed to Payment</button>
+                </div>
+              </>
+            ) : null}
+
+            {!isBusy && stage === 'paymentMethod' ? (
+              <>
+                <h2>Choose Payment Method</h2>
+                <p>Select how you would like to pay for your Future Prediction.</p>
+                <div className="future-payment-method-grid">
+                  {paymentAvailability.gateway ? (
+                    <button type="button" className={selectedPaymentMethod === 'payment_gateway' ? 'is-selected' : ''} onClick={() => setSelectedPaymentMethod('payment_gateway')}>
+                      <strong>Pay Online</strong>
+                      <span>Existing Payment Gateway</span>
+                    </button>
+                  ) : null}
+                  {paymentAvailability.qr ? (
+                    <button type="button" className={selectedPaymentMethod === 'gpay_qr' ? 'is-selected' : ''} onClick={() => setSelectedPaymentMethod('gpay_qr')}>
+                      <strong>Pay via GPay QR</strong>
+                      <span>Scan QR and submit proof</span>
+                    </button>
+                  ) : null}
+                </div>
+                {manualPayment ? <FutureManualPaymentStatus payment={manualPayment} /> : null}
+                {error ? <p className="future-purchase-error">{error}</p> : null}
+                <div className="future-purchase-actions">
+                  <button type="button" onClick={() => setStage('checkout')}>Back</button>
+                  <button
+                    type="button"
+                    disabled={isPaying || !selectedPaymentMethod}
+                    onClick={() => {
+                      if (selectedPaymentMethod === 'payment_gateway') {
+                        startPayment()
+                        return
+                      }
+                      if (manualPayment?.status === 'PENDING' || manualPayment?.status === 'VERIFIED') {
+                        setStage('qrSubmitted')
+                        return
+                      }
+                      setStage('qrPayment')
+                    }}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {!isBusy && stage === 'qrPayment' ? (
+              <form onSubmit={submitQrPayment}>
+                <h2>Pay via GPay QR</h2>
+                <p>Scan the QR code and complete the payment using GPay or any supported UPI app.</p>
+                <div className="future-product-summary">
+                  <span>Product</span>
+                  <strong>{activeProduct?.title || activeProduct?.name || 'Future Prediction'}</strong>
+                  <span>Total payable</span>
+                  <strong>{activeProduct?.display_price || 'Loading...'}</strong>
+                </div>
+                <div className="future-qr-payment-box">
+                  {paymentSettings?.qr_image_url ? (
+                    <img src={paymentSettings.qr_image_url} alt="Future Video GPay QR code" />
+                  ) : (
+                    <span>No QR code is available right now.</span>
+                  )}
+                </div>
+                {manualPayment?.status === 'REJECTED' ? <FutureManualPaymentStatus payment={manualPayment} /> : null}
+                <label className="future-payment-proof">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setPaymentProof(event.target.files?.[0] || null)} />
+                  <strong>{paymentProof ? paymentProof.name : 'Upload payment proof screenshot'}</strong>
+                  <span>PNG, JPG, or WEBP up to 5 MB</span>
+                </label>
+                {error ? <p className="future-purchase-error">{error}</p> : null}
+                <div className="future-purchase-actions">
+                  <button type="button" onClick={() => setStage(paymentAvailability.gateway ? 'paymentMethod' : 'checkout')}>Back</button>
+                  <button type="submit" disabled={isPaying || !paymentSettings?.qr_image_url}>
+                    {isPaying ? 'Submitting...' : 'Submit Payment for Verification'}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {!isBusy && stage === 'qrSubmitted' ? (
+              <>
+                {manualPayment?.status === 'REJECTED' ? (
+                  <>
+                    <h2>Payment could not be verified.</h2>
+                    {manualPayment?.rejection_reason ? <p>{manualPayment.rejection_reason}</p> : <p>Please upload a new payment proof screenshot.</p>}
+                  </>
+                ) : (
+                  <>
+                    <h2>Thank you!</h2>
+                    <p>Your payment proof has been submitted successfully. Our team will verify the payment and enable your Future Video shortly. You will be able to access it from your account once the verification is completed.</p>
+                  </>
+                )}
+                {error ? <p className="future-purchase-error">{error}</p> : null}
+                <div className="future-purchase-actions">
+                  <button type="button" onClick={closeFlow}>Close</button>
+                  {manualPayment?.status === 'REJECTED' ? <button type="button" onClick={() => setStage('qrPayment')}>Submit Again</button> : null}
                 </div>
               </>
             ) : null}
@@ -461,6 +663,42 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
         ) : null}
       </div>
     </section>
+  )
+}
+
+function futurePaymentAvailability(settings) {
+  return {
+    gateway: Boolean(settings?.payment_gateway_enabled),
+    qr: Boolean(settings?.gpay_qr_enabled && settings?.qr_image_url),
+    hasAny: Boolean(settings?.payment_gateway_enabled || (settings?.gpay_qr_enabled && settings?.qr_image_url)),
+  }
+}
+
+function defaultFuturePaymentMethod(settings) {
+  const availability = futurePaymentAvailability(settings)
+
+  if (availability.gateway) return 'payment_gateway'
+  if (availability.qr) return 'gpay_qr'
+
+  return ''
+}
+
+function FutureManualPaymentStatus({ payment }) {
+  const status = payment?.status || 'PENDING'
+  const label = status === 'PENDING'
+    ? 'Pending Verification'
+    : status === 'VERIFIED'
+      ? 'Verified'
+      : status === 'REJECTED'
+        ? 'Rejected'
+        : payment?.status_label || status
+
+  return (
+    <div className={`future-manual-payment-status is-${status.toLowerCase()}`}>
+      <strong>{label}</strong>
+      {payment?.submitted_at ? <span>Submitted: {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(payment.submitted_at))}</span> : null}
+      {status === 'REJECTED' && payment?.rejection_reason ? <p>{payment.rejection_reason}</p> : null}
+    </div>
   )
 }
 

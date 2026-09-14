@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createTempleRemedyOrder, loadRazorpayScript, verifyRazorpayPayment } from '../../services/paymentService'
 import { cancelTempleRemedyPayment, fetchTempleRemedyConfig, submitTempleRemedy } from '../../services/templeRemedyService'
-import paymentQrImage from '../../assets/payment-qr.png'
 
 function formatMoney(amountMinor, currency = 'INR') {
   return new Intl.NumberFormat('en-IN', {
@@ -49,7 +48,7 @@ function TempleRemedyModal({
         const methods = Array.isArray(payload?.payment_methods) ? payload.payment_methods : []
         setSelectedOptionCode(options[0]?.code || '')
         setPreferredLanguage(languages[0]?.code || 'ta')
-        setPaymentMethod(methods[0]?.code || 'payment_gateway')
+        setPaymentMethod(methods[0]?.code || '')
         setStatus('')
       })
       .catch(() => {
@@ -80,6 +79,10 @@ function TempleRemedyModal({
 
     if (step === 'payment' && isQrPayment && !manualProof) {
       return 'Upload the payment screenshot to continue.'
+    }
+
+    if (step === 'payment' && !paymentMethods.length) {
+      return 'Payment options are currently unavailable. Please try again later.'
     }
 
     return ''
@@ -213,7 +216,7 @@ function TempleRemedyModal({
         <h2>{step === 'confirmed' ? 'Thank you for your request' : step === 'intro' ? 'Temple Remedy Process' : 'Select Temple Remedy'}</h2>
         {step === 'intro' ? (
           <div className="temple-remedy-summary">
-            <p>Select one remedy option, share your contact details, choose Tamil or English, and complete the INR 1000 payment by QR Code or Payment Gateway.</p>
+            <p>Select one remedy option, share your contact details, choose Tamil or English, and complete payment by the available method.</p>
             <div>
               <span>1. Select remedy option</span>
               <span>2. Add contact details</span>
@@ -285,25 +288,30 @@ function TempleRemedyModal({
             </div>
             <div className="talk-payment-methods">
               <span>Payment Method</span>
-              <div>
-                {paymentMethods.map((method) => (
-                  <button key={method.code} type="button" className={paymentMethod === method.code ? 'is-selected' : ''} onClick={() => setPaymentMethod(method.code)}>
-                    {method.name}
-                  </button>
-                ))}
-              </div>
+              {paymentMethods.length ? (
+                <div className="future-payment-method-grid">
+                  {paymentMethods.map((method) => (
+                    <button key={method.code} type="button" className={paymentMethod === method.code ? 'is-selected' : ''} onClick={() => setPaymentMethod(method.code)}>
+                      <strong>{method.name}</strong>
+                      <span>{method.subtitle || method.instructions}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <strong>Payment options are currently unavailable. Please try again later.</strong>
+              )}
               {selectedPaymentMethod?.instructions ? <small>{selectedPaymentMethod.instructions}</small> : null}
             </div>
             {isQrPayment ? (
               <div className="talk-qr-payment">
                 <div className="talk-qr-box">
                   <span>Scan this QR code to pay</span>
-                  <img src={paymentQrImage} alt="Payment QR code" />
+                  {selectedPaymentMethod?.qr_image_url ? <img src={selectedPaymentMethod.qr_image_url} alt="Temple Remedy GPay QR code" /> : <strong>No QR code is available right now.</strong>}
                 </div>
                 <div className="talk-manual-proof-grid temple-remedy-proof-grid">
                   <label>
                     Screenshot / Receipt
-                    <input type="file" accept="image/*,.pdf" onChange={(event) => setManualProof(event.target.files?.[0] || null)} />
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setManualProof(event.target.files?.[0] || null)} />
                   </label>
                   <p>Upload the payment screenshot after scanning the QR code.</p>
                 </div>
@@ -325,9 +333,11 @@ function TempleRemedyModal({
 
         {step === 'confirmed' ? (
           <div className="temple-remedy-thanks">
-            <strong>Thanks, your Temple Remedy request has been received.</strong>
+            <strong>Thank you!</strong>
             <p>
-              Our admin team will verify your payment and review the selected remedy option. You can check the latest status from My Account.
+              {confirmation?.payment_method === 'qr_online'
+                ? 'Your payment proof has been submitted successfully. Our team will verify the payment and enable your Temple Remedy shortly. You will be able to access it once the verification is completed.'
+                : 'Thanks, your Temple Remedy request has been received. You can check the latest status from My Account.'}
             </p>
             <span>Request #{confirmation?.id}</span>
             <span>{confirmation?.payment_status === 'PAID' ? 'Payment Received' : 'Payment Pending'}</span>
@@ -339,7 +349,7 @@ function TempleRemedyModal({
         {error ? <p className="temple-remedy-error">{error}</p> : null}
         <div className="temple-remedy-actions">
           {step === 'confirmed' ? (
-            <button type="button" className="temple-remedy-primary" onClick={onClose}>Done</button>
+            <button type="button" className="temple-remedy-primary" onClick={onClose}>Close</button>
           ) : step === 'intro' ? (
             <button type="button" className="temple-remedy-primary" disabled={Boolean(status) || !config?.available} onClick={nextStep}>
               {status ? 'Loading...' : isAuthenticated ? 'Proceed' : 'Login and Proceed'}

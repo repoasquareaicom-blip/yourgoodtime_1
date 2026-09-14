@@ -41,6 +41,15 @@ class AstrologerAppointmentController extends Controller
         $config = $service->configPayload();
         $timezone = $config['business_timezone'] ?: 'Asia/Kolkata';
         $now = CarbonImmutable::now($timezone);
+        $activePaymentMethodCodes = $service->activePaymentMethodCodes();
+
+        if (! $activePaymentMethodCodes) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment options are currently unavailable. Please try again later.',
+                'errors' => ['payment_method' => ['Payment options are currently unavailable. Please try again later.']],
+            ], 422);
+        }
 
         $validated = $request->validate([
             'appointment_language_id' => ['nullable', 'integer', Rule::in($service->allowedAppointmentLanguageIds())],
@@ -53,9 +62,8 @@ class AstrologerAppointmentController extends Controller
             'preferred_date' => ['required', 'date_format:Y-m-d'],
             'preferred_time' => ['required', 'date_format:H:i'],
             'preferred_timezone' => ['nullable', 'string', 'max:64'],
-            'payment_method' => ['nullable', Rule::in($service->activePaymentMethodCodes())],
-            'payment_reference' => ['nullable', 'string', 'max:500'],
-            'payment_screenshot' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'payment_method' => ['nullable', Rule::in($activePaymentMethodCodes)],
+            'payment_screenshot' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
         if (! preg_match('/^\d{2}:(00|30)$/', $validated['preferred_time'])) {
@@ -67,11 +75,11 @@ class AstrologerAppointmentController extends Controller
         }
 
         $paymentMethod = $validated['payment_method'] ?? $config['payment_method'];
-        if ($paymentMethod === AppointmentPaymentMethod::QR_ONLINE && ! $request->hasFile('payment_screenshot') && empty($validated['payment_reference'])) {
+        if ($paymentMethod === AppointmentPaymentMethod::QR_ONLINE && ! $request->hasFile('payment_screenshot')) {
             return response()->json([
                 'success' => false,
-                'message' => 'Upload the payment proof or enter the payment reference.',
-                'errors' => ['payment_screenshot' => ['Upload the payment proof or enter the payment reference.']],
+                'message' => 'Upload the payment proof screenshot.',
+                'errors' => ['payment_screenshot' => ['Upload the payment proof screenshot.']],
             ], 422);
         }
 
@@ -88,7 +96,6 @@ class AstrologerAppointmentController extends Controller
         $validated['appointment_language_id'] ??= data_get($config, 'languages.0.id');
         if ($paymentMethod === AppointmentPaymentMethod::QR_ONLINE) {
             $validated['manual_payment'] = array_filter([
-                'reference' => $validated['payment_reference'] ?? null,
                 'uploaded_at' => now()->toJSON(),
                 'review_status' => 'waiting_admin_confirmation',
             ]);
@@ -122,7 +129,7 @@ class AstrologerAppointmentController extends Controller
         }
 
         $validated = $request->validate([
-            'payment_screenshot' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'payment_screenshot' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
         $file = $validated['payment_screenshot'];

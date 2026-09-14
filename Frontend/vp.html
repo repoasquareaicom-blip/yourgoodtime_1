@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>YGT Background Removal - Smooth Playback</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: white;
+        }
+
+        .container {
+            max-width: 1180px;
+            margin: auto;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+        }
+
+        .description {
+            color: #cbd5e1;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        button,
+        input[type="file"] {
+            padding: 9px 12px;
+            font-size: 14px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .stage {
+            position: relative;
+            width: 100%;
+            max-width: 960px;
+            margin: auto;
+
+            background:
+                radial-gradient(
+                    circle at center,
+                    #4338ca,
+                    #111827 75%
+                );
+
+            overflow: hidden;
+            border-radius: 12px;
+            min-height: 300px;
+        }
+
+        #backgroundImage {
+            position: absolute;
+            inset: 0;
+
+            width: 100%;
+            height: 100%;
+
+            object-fit: cover;
+
+            z-index: 1;
+
+            display: none;
+        }
+
+        #outputCanvas {
+            display: block;
+            position: relative;
+
+            width: 100%;
+            height: auto;
+
+            z-index: 2;
+        }
+
+        #sourceVideo {
+            display: none;
+        }
+
+        .settings {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+            margin-top: 22px;
+        }
+
+        .setting {
+            min-width: 220px;
+        }
+
+        .setting label {
+            display: block;
+            margin-bottom: 7px;
+        }
+
+        input[type="range"] {
+            width: 220px;
+        }
+
+        .value {
+            color: #fbbf24;
+            font-weight: bold;
+        }
+
+        .status {
+            margin-top: 18px;
+            text-align: center;
+            color: #93c5fd;
+        }
+
+        .performance {
+            margin-top: 6px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+    </style>
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <h1>
+        Background Removal - Smooth Multiclass
+    </h1>
+
+    <div class="description">
+        Keeps the higher-quality multiclass person mask,
+        while video rendering runs independently from AI segmentation.
+    </div>
+
+
+    <div class="controls">
+
+        <input
+            id="videoFile"
+            type="file"
+            accept="video/*"
+        />
+
+
+        <button
+            id="playButton"
+            disabled
+        >
+            Play
+        </button>
+
+
+        <button id="pauseButton">
+            Pause
+        </button>
+
+
+        <button id="restartButton">
+            Restart
+        </button>
+
+
+        <input
+            id="backgroundFile"
+            type="file"
+            accept="image/*"
+        />
+
+
+        <button id="gradientButton">
+            Gradient Background
+        </button>
+
+    </div>
+
+
+    <div
+        class="stage"
+        id="stage"
+    >
+
+        <img
+            id="backgroundImage"
+            alt=""
+        />
+
+
+        <video
+            id="sourceVideo"
+            playsinline
+            webkit-playsinline
+            preload="auto"
+        ></video>
+
+
+        <canvas
+            id="outputCanvas"
+        ></canvas>
+
+    </div>
+
+
+    <div class="settings">
+
+
+        <div class="setting">
+
+            <label>
+
+                Edge Threshold:
+
+                <span
+                    class="value"
+                    id="thresholdValue"
+                >
+                    0.35
+                </span>
+
+            </label>
+
+
+            <input
+                id="threshold"
+                type="range"
+                min="0.05"
+                max="0.80"
+                value="0.35"
+                step="0.01"
+            />
+
+        </div>
+
+
+        <div class="setting">
+
+            <label>
+
+                Edge Softness:
+
+                <span
+                    class="value"
+                    id="softnessValue"
+                >
+                    0.18
+                </span>
+
+            </label>
+
+
+            <input
+                id="softness"
+                type="range"
+                min="0.02"
+                max="0.50"
+                value="0.18"
+                step="0.01"
+            />
+
+        </div>
+
+
+        <div class="setting">
+
+            <label>
+
+                Mask Blur:
+
+                <span
+                    class="value"
+                    id="blurValue"
+                >
+                    0.5
+                </span>
+
+                px
+
+            </label>
+
+
+            <input
+                id="blur"
+                type="range"
+                min="0"
+                max="2"
+                value="0.5"
+                step="0.1"
+            />
+
+        </div>
+
+
+        <div class="setting">
+
+            <label>
+
+                AI FPS:
+
+                <span
+                    class="value"
+                    id="aiFpsValue"
+                >
+                    8
+                </span>
+
+            </label>
+
+
+            <input
+                id="aiFps"
+                type="range"
+                min="3"
+                max="15"
+                value="8"
+                step="1"
+            />
+
+        </div>
+
+    </div>
+
+
+    <div
+        class="status"
+        id="status"
+    >
+        Loading segmentation model...
+    </div>
+
+
+    <div
+        class="performance"
+        id="performance"
+    ></div>
+
+</div>
+
+
+<script type="module">
+
+import {
+    FilesetResolver,
+    ImageSegmenter
+}
+from
+"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+
+
+/* ======================================================
+   ELEMENTS
+====================================================== */
+
+const video =
+    document.getElementById("sourceVideo");
+
+
+const canvas =
+    document.getElementById("outputCanvas");
+
+
+const ctx =
+    canvas.getContext("2d");
+
+
+const stage =
+    document.getElementById("stage");
+
+
+const videoFile =
+    document.getElementById("videoFile");
+
+
+const backgroundFile =
+    document.getElementById("backgroundFile");
+
+
+const backgroundImage =
+    document.getElementById("backgroundImage");
+
+
+const playButton =
+    document.getElementById("playButton");
+
+
+const pauseButton =
+    document.getElementById("pauseButton");
+
+
+const restartButton =
+    document.getElementById("restartButton");
+
+
+const gradientButton =
+    document.getElementById("gradientButton");
+
+
+const threshold =
+    document.getElementById("threshold");
+
+
+const thresholdValue =
+    document.getElementById("thresholdValue");
+
+
+const softness =
+    document.getElementById("softness");
+
+
+const softnessValue =
+    document.getElementById("softnessValue");
+
+
+const blur =
+    document.getElementById("blur");
+
+
+const blurValue =
+    document.getElementById("blurValue");
+
+
+const aiFps =
+    document.getElementById("aiFps");
+
+
+const aiFpsValue =
+    document.getElementById("aiFpsValue");
+
+
+const status =
+    document.getElementById("status");
+
+
+const performanceText =
+    document.getElementById("performance");
+
+
+/* ======================================================
+   CANVASES
+====================================================== */
+
+const maskCanvas =
+    document.createElement("canvas");
+
+
+const maskCtx =
+    maskCanvas.getContext(
+        "2d",
+        {
+            willReadFrequently: true
+        }
+    );
+
+
+const featherCanvas =
+    document.createElement("canvas");
+
+
+const featherCtx =
+    featherCanvas.getContext("2d");
+
+
+const personCanvas =
+    document.createElement("canvas");
+
+
+const personCtx =
+    personCanvas.getContext("2d");
+
+
+/* ======================================================
+   STATE
+====================================================== */
+
+let segmenter =
+    null;
+
+
+let modelReady =
+    false;
+
+
+let videoLoaded =
+    false;
+
+
+let processing =
+    false;
+
+
+let segmentationBusy =
+    false;
+
+
+let latestMaskReady =
+    false;
+
+
+let currentVideoUrl =
+    null;
+
+
+let currentBackgroundUrl =
+    null;
+
+
+let lastSegmentationTime =
+    0;
+
+
+let lastTimestamp =
+    0;
+
+
+let renderFrames =
+    0;
+
+
+let aiFrames =
+    0;
+
+
+let statsStart =
+    performance.now();
+
+
+let lastInferenceMs =
+    0;
+
+
+/* ======================================================
+   MODEL
+
+   Keep the same model because this is giving you
+   the better edge quality.
+====================================================== */
+
+const MODEL_URL =
+
+    "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
+
+
+/* ======================================================
+   INITIALIZE
+====================================================== */
+
+async function initializeModel() {
+
+    try {
+
+        status.textContent =
+            "Loading MediaPipe runtime...";
+
+
+        const vision =
+            await FilesetResolver.forVisionTasks(
+
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+
+            );
+
+
+        status.textContent =
+            "Loading Selfie Multiclass model...";
+
+
+        try {
+
+            segmenter =
+                await ImageSegmenter.createFromOptions(
+
+                    vision,
+
+                    {
+
+                        baseOptions: {
+
+                            modelAssetPath:
+                                MODEL_URL,
+
+                            delegate:
+                                "GPU"
+
+                        },
+
+
+                        runningMode:
+                            "VIDEO",
+
+
+                        outputConfidenceMasks:
+                            true,
+
+
+                        outputCategoryMask:
+                            false
+
+                    }
+
+                );
+
+
+            status.textContent =
+                "AI ready — GPU mode.";
+
+        }
+
+        catch (gpuError) {
+
+            console.warn(
+                "GPU failed. Falling back to CPU.",
+                gpuError
+            );
+
+
+            segmenter =
+                await ImageSegmenter.createFromOptions(
+
+                    vision,
+
+                    {
+
+                        baseOptions: {
+
+                            modelAssetPath:
+                                MODEL_URL,
+
+                            delegate:
+                                "CPU"
+
+                        },
+
+
+                        runningMode:
+                            "VIDEO",
+
+
+                        outputConfidenceMasks:
+                            true,
+
+
+                        outputCategoryMask:
+                            false
+
+                    }
+
+                );
+
+
+            status.textContent =
+                "AI ready — CPU mode.";
+
+        }
+
+
+        modelReady =
+            true;
+
+
+        updatePlayButton();
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+
+        status.textContent =
+            "Unable to initialize segmentation model.";
+
+    }
+
+}
+
+
+initializeModel();
+
+
+/* ======================================================
+   BUTTON STATE
+====================================================== */
+
+function updatePlayButton() {
+
+    playButton.disabled =
+        !(
+            modelReady &&
+            videoLoaded
+        );
+
+}
+
+
+/* ======================================================
+   VIDEO LOAD
+====================================================== */
+
+videoFile.addEventListener(
+
+    "change",
+
+    event => {
+
+        const file =
+            event.target.files?.[0];
+
+
+        if (!file) {
+
+            videoLoaded =
+                false;
+
+
+            updatePlayButton();
+
+
+            return;
+
+        }
+
+
+        processing =
+            false;
+
+
+        video.pause();
+
+
+        segmentationBusy =
+            false;
+
+
+        latestMaskReady =
+            false;
+
+
+        videoLoaded =
+            false;
+
+
+        if (
+            currentVideoUrl
+        ) {
+
+            URL.revokeObjectURL(
+                currentVideoUrl
+            );
+
+        }
+
+
+        currentVideoUrl =
+            URL.createObjectURL(
+                file
+            );
+
+
+        video.src =
+            currentVideoUrl;
+
+
+        video.load();
+
+
+        status.textContent =
+            "Loading video...";
+
+
+        video.onloadedmetadata =
+            () => {
+
+                const width =
+                    video.videoWidth;
+
+
+                const height =
+                    video.videoHeight;
+
+
+                canvas.width =
+                    width;
+
+
+                canvas.height =
+                    height;
+
+
+                featherCanvas.width =
+                    width;
+
+
+                featherCanvas.height =
+                    height;
+
+
+                personCanvas.width =
+                    width;
+
+
+                personCanvas.height =
+                    height;
+
+
+                stage.style.aspectRatio =
+                    `${width} / ${height}`;
+
+
+                latestMaskReady =
+                    false;
+
+
+                videoLoaded =
+                    true;
+
+
+                video.currentTime =
+                    0;
+
+
+                status.textContent =
+                    `Video ready — ${width} × ${height}`;
+
+
+                updatePlayButton();
+
+            };
+
+
+        video.onerror =
+            error => {
+
+                console.error(
+                    error
+                );
+
+
+                videoLoaded =
+                    false;
+
+
+                status.textContent =
+                    "Unable to load video.";
+
+
+                updatePlayButton();
+
+            };
+
+    }
+
+);
+
+
+/* ======================================================
+   BACKGROUND IMAGE
+====================================================== */
+
+backgroundFile.addEventListener(
+
+    "change",
+
+    event => {
+
+        const file =
+            event.target.files?.[0];
+
+
+        if (!file) {
+            return;
+        }
+
+
+        if (
+            currentBackgroundUrl
+        ) {
+
+            URL.revokeObjectURL(
+                currentBackgroundUrl
+            );
+
+        }
+
+
+        currentBackgroundUrl =
+            URL.createObjectURL(
+                file
+            );
+
+
+        backgroundImage.src =
+            currentBackgroundUrl;
+
+
+        backgroundImage.style.display =
+            "block";
+
+    }
+
+);
+
+
+gradientButton.addEventListener(
+
+    "click",
+
+    () => {
+
+        backgroundImage.style.display =
+            "none";
+
+    }
+
+);
+
+
+/* ======================================================
+   SLIDERS
+====================================================== */
+
+threshold.addEventListener(
+
+    "input",
+
+    () => {
+
+        thresholdValue.textContent =
+            Number(
+                threshold.value
+            ).toFixed(2);
+
+    }
+
+);
+
+
+softness.addEventListener(
+
+    "input",
+
+    () => {
+
+        softnessValue.textContent =
+            Number(
+                softness.value
+            ).toFixed(2);
+
+    }
+
+);
+
+
+blur.addEventListener(
+
+    "input",
+
+    () => {
+
+        blurValue.textContent =
+            Number(
+                blur.value
+            ).toFixed(1);
+
+    }
+
+);
+
+
+aiFps.addEventListener(
+
+    "input",
+
+    () => {
+
+        aiFpsValue.textContent =
+            aiFps.value;
+
+    }
+
+);
+
+
+/* ======================================================
+   PLAY
+====================================================== */
+
+playButton.addEventListener(
+
+    "click",
+
+    async () => {
+
+        if (
+            !segmenter
+        ) {
+
+            alert(
+                "AI model is still loading."
+            );
+
+
+            return;
+
+        }
+
+
+        if (
+            !videoLoaded
+        ) {
+
+            alert(
+                "Choose a video first."
+            );
+
+
+            return;
+
+        }
+
+
+        try {
+
+            processing =
+                true;
+
+
+            lastSegmentationTime =
+                0;
+
+
+            await video.play();
+
+
+            status.textContent =
+                "Removing background...";
+
+
+            requestAnimationFrame(
+                renderLoop
+            );
+
+        }
+
+        catch (error) {
+
+            console.error(
+                error
+            );
+
+
+            processing =
+                false;
+
+        }
+
+    }
+
+);
+
+
+/* ======================================================
+   PAUSE
+====================================================== */
+
+pauseButton.addEventListener(
+
+    "click",
+
+    () => {
+
+        processing =
+            false;
+
+
+        video.pause();
+
+
+        status.textContent =
+            "Paused.";
+
+    }
+
+);
+
+
+/* ======================================================
+   RESTART
+====================================================== */
+
+restartButton.addEventListener(
+
+    "click",
+
+    async () => {
+
+        if (
+            !videoLoaded
+        ) {
+            return;
+        }
+
+
+        processing =
+            false;
+
+
+        video.pause();
+
+
+        video.currentTime =
+            0;
+
+
+        latestMaskReady =
+            false;
+
+
+        segmentationBusy =
+            false;
+
+
+        lastSegmentationTime =
+            0;
+
+
+        await video.play();
+
+
+        processing =
+            true;
+
+
+        requestAnimationFrame(
+            renderLoop
+        );
+
+    }
+
+);
+
+
+/* ======================================================
+   MAIN LOOP
+
+   VERY IMPORTANT:
+
+   Drawing happens every browser frame.
+
+   Segmentation does NOT control display timing.
+====================================================== */
+
+function renderLoop(
+    timestamp
+) {
+
+    if (
+
+        !processing ||
+
+        video.paused ||
+
+        video.ended
+
+    ) {
+
+        return;
+
+    }
+
+
+    /*
+    Always render current video immediately.
+    */
+
+    drawCurrentFrame();
+
+
+    renderFrames++;
+
+
+    /*
+    AI runs independently at selected FPS.
+    */
+
+    const requestedAiFps =
+        Number(
+            aiFps.value
+        );
+
+
+    const interval =
+        1000 /
+        requestedAiFps;
+
+
+    if (
+
+        !segmentationBusy &&
+
+        (
+            timestamp -
+            lastSegmentationTime
+        ) >= interval
+
+    ) {
+
+        lastSegmentationTime =
+            timestamp;
+
+
+        processSegmentation();
+
+    }
+
+
+    updatePerformance();
+
+
+    requestAnimationFrame(
+        renderLoop
+    );
+
+}
+
+
+/* ======================================================
+   AI SEGMENTATION
+
+   This only updates the mask.
+
+   It no longer draws the video.
+====================================================== */
+
+function processSegmentation() {
+
+    if (
+
+        segmentationBusy ||
+
+        !segmenter ||
+
+        video.paused ||
+
+        video.ended
+
+    ) {
+
+        return;
+
+    }
+
+
+    segmentationBusy =
+        true;
+
+
+    const now =
+        performance.now();
+
+
+    const timestamp =
+        Math.max(
+
+            now,
+
+            lastTimestamp + 1
+
+        );
+
+
+    lastTimestamp =
+        timestamp;
+
+
+    const start =
+        performance.now();
+
+
+    try {
+
+        segmenter.segmentForVideo(
+
+            video,
+
+            timestamp,
+
+            result => {
+
+                try {
+
+                    updateMask(
+                        result
+                    );
+
+
+                    latestMaskReady =
+                        true;
+
+
+                    aiFrames++;
+
+
+                    lastInferenceMs =
+                        performance.now() -
+                        start;
+
+                }
+
+                catch (error) {
+
+                    console.error(
+                        "Mask error:",
+                        error
+                    );
+
+                }
+
+                finally {
+
+                    if (
+                        result.confidenceMasks
+                    ) {
+
+                        for (
+                            const mask
+                            of result.confidenceMasks
+                        ) {
+
+                            mask.close();
+
+                        }
+
+                    }
+
+
+                    if (
+                        result.categoryMask
+                    ) {
+
+                        result.categoryMask.close();
+
+                    }
+
+
+                    segmentationBusy =
+                        false;
+
+                }
+
+            }
+
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Segmentation error:",
+            error
+        );
+
+
+        segmentationBusy =
+            false;
+
+    }
+
+}
+
+
+/* ======================================================
+   UPDATE MASK
+
+   Same multiclass edge logic from your good version.
+====================================================== */
+
+function updateMask(
+    result
+) {
+
+    const masks =
+        result.confidenceMasks;
+
+
+    if (
+
+        !masks ||
+
+        masks.length < 6
+
+    ) {
+
+        return;
+
+    }
+
+
+    const hair =
+        masks[1]
+            .getAsFloat32Array();
+
+
+    const bodySkin =
+        masks[2]
+            .getAsFloat32Array();
+
+
+    const faceSkin =
+        masks[3]
+            .getAsFloat32Array();
+
+
+    const clothes =
+        masks[4]
+            .getAsFloat32Array();
+
+
+    const accessories =
+        masks[5]
+            .getAsFloat32Array();
+
+
+    const maskWidth =
+        masks[0].width;
+
+
+    const maskHeight =
+        masks[0].height;
+
+
+    if (
+
+        maskCanvas.width !==
+            maskWidth ||
+
+        maskCanvas.height !==
+            maskHeight
+
+    ) {
+
+        maskCanvas.width =
+            maskWidth;
+
+
+        maskCanvas.height =
+            maskHeight;
+
+    }
+
+
+    const output =
+        maskCtx.createImageData(
+            maskWidth,
+            maskHeight
+        );
+
+
+    const pixels =
+        output.data;
+
+
+    const cut =
+        Number(
+            threshold.value
+        );
+
+
+    const softnessAmount =
+        Number(
+            softness.value
+        );
+
+
+    const lower =
+        Math.max(
+            0,
+            cut - softnessAmount
+        );
+
+
+    const upper =
+        Math.min(
+            1,
+            cut + softnessAmount
+        );
+
+
+    for (
+
+        let i = 0, p = 0;
+
+        i < hair.length;
+
+        i++, p += 4
+
+    ) {
+
+        let personConfidence =
+
+            hair[i] +
+
+            bodySkin[i] +
+
+            faceSkin[i] +
+
+            clothes[i] +
+
+            accessories[i];
+
+
+        personConfidence =
+            Math.min(
+                1,
+                personConfidence
+            );
+
+
+        let alpha;
+
+
+        if (
+            personConfidence <= lower
+        ) {
+
+            alpha =
+                0;
+
+        }
+
+        else if (
+            personConfidence >= upper
+        ) {
+
+            alpha =
+                1;
+
+        }
+
+        else {
+
+            let t =
+
+                (
+                    personConfidence -
+                    lower
+                )
+
+                /
+
+                (
+                    upper -
+                    lower
+                );
+
+
+            t =
+                t *
+                t *
+                (
+                    3 -
+                    2 * t
+                );
+
+
+            alpha =
+                t;
+
+        }
+
+
+        pixels[p] =
+            255;
+
+
+        pixels[p + 1] =
+            255;
+
+
+        pixels[p + 2] =
+            255;
+
+
+        pixels[p + 3] =
+            Math.round(
+                alpha * 255
+            );
+
+    }
+
+
+    maskCtx.putImageData(
+        output,
+        0,
+        0
+    );
+
+
+    /*
+    Scale mask to video dimensions.
+    */
+
+    featherCtx.clearRect(
+
+        0,
+        0,
+
+        featherCanvas.width,
+        featherCanvas.height
+
+    );
+
+
+    featherCtx.imageSmoothingEnabled =
+        true;
+
+
+    featherCtx.imageSmoothingQuality =
+        "high";
+
+
+    const blurAmount =
+        Number(
+            blur.value
+        );
+
+
+    if (
+        blurAmount > 0
+    ) {
+
+        featherCtx.filter =
+            `blur(${blurAmount}px)`;
+
+    }
+
+    else {
+
+        featherCtx.filter =
+            "none";
+
+    }
+
+
+    featherCtx.drawImage(
+
+        maskCanvas,
+
+        0,
+        0,
+        maskWidth,
+        maskHeight,
+
+        0,
+        0,
+        featherCanvas.width,
+        featherCanvas.height
+
+    );
+
+
+    featherCtx.filter =
+        "none";
+
+}
+
+
+/* ======================================================
+   DRAW CURRENT VIDEO
+
+   This happens continuously even while AI is busy.
+====================================================== */
+
+function drawCurrentFrame() {
+
+    const width =
+        canvas.width;
+
+
+    const height =
+        canvas.height;
+
+
+    if (
+
+        !width ||
+
+        !height
+
+    ) {
+        return;
+    }
+
+
+    /*
+    Current video frame.
+    */
+
+    personCtx.clearRect(
+
+        0,
+        0,
+
+        width,
+        height
+
+    );
+
+
+    personCtx.globalCompositeOperation =
+        "source-over";
+
+
+    personCtx.drawImage(
+
+        video,
+
+        0,
+        0,
+
+        width,
+        height
+
+    );
+
+
+    /*
+    Reuse most recent AI mask.
+    */
+
+    if (
+        latestMaskReady
+    ) {
+
+        personCtx.globalCompositeOperation =
+            "destination-in";
+
+
+        personCtx.drawImage(
+
+            featherCanvas,
+
+            0,
+            0,
+
+            width,
+            height
+
+        );
+
+
+        personCtx.globalCompositeOperation =
+            "source-over";
+
+    }
+
+
+    /*
+    Visible output.
+    */
+
+    ctx.clearRect(
+
+        0,
+        0,
+
+        width,
+        height
+
+    );
+
+
+    ctx.drawImage(
+
+        personCanvas,
+
+        0,
+        0,
+
+        width,
+        height
+
+    );
+
+}
+
+
+/* ======================================================
+   PERFORMANCE
+====================================================== */
+
+function updatePerformance() {
+
+    const now =
+        performance.now();
+
+
+    const elapsed =
+        now -
+        statsStart;
+
+
+    if (
+        elapsed < 1000
+    ) {
+        return;
+    }
+
+
+    const displayFps =
+
+        renderFrames /
+        elapsed *
+        1000;
+
+
+    const segmentationFps =
+
+        aiFrames /
+        elapsed *
+        1000;
+
+
+    performanceText.textContent =
+
+        `Display: ${displayFps.toFixed(1)} FPS` +
+
+        ` | AI: ${segmentationFps.toFixed(1)} FPS` +
+
+        ` | Segmentation: ${lastInferenceMs.toFixed(0)} ms`;
+
+
+    renderFrames =
+        0;
+
+
+    aiFrames =
+        0;
+
+
+    statsStart =
+        now;
+
+}
+
+
+/* ======================================================
+   VIDEO END
+====================================================== */
+
+video.addEventListener(
+
+    "ended",
+
+    () => {
+
+        processing =
+            false;
+
+
+        status.textContent =
+            "Video finished.";
+
+    }
+
+);
+
+
+/* ======================================================
+   CLEANUP
+====================================================== */
+
+window.addEventListener(
+
+    "beforeunload",
+
+    () => {
+
+        if (
+            currentVideoUrl
+        ) {
+
+            URL.revokeObjectURL(
+                currentVideoUrl
+            );
+
+        }
+
+
+        if (
+            currentBackgroundUrl
+        ) {
+
+            URL.revokeObjectURL(
+                currentBackgroundUrl
+            );
+
+        }
+
+    }
+
+);
+
+</script>
+
+</body>
+</html>

@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureMailGatewayKey;
 use App\Http\Middleware\EnsureAdminUser;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'mail.gateway' => EnsureMailGatewayKey::class,
             'admin' => EnsureAdminUser::class,
         ]);
+        $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/login');
         $middleware->validateCsrfTokens(except: [
             'api/admin/*',
             'api/astrology/sessions',
@@ -45,6 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/auth/send-otp',
             'api/auth/validate-otp',
             'api/auth/verify-otp',
+            'api/chatbot/message',
             'api/internal/mail/send-otp',
         ]);
     })

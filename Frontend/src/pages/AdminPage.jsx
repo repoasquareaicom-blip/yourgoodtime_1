@@ -12,6 +12,7 @@ import {
   fetchAdminFeedback,
   fetchAdminTempleRemedies,
   fetchAdminUsers,
+  regenerateAdminPastPrediction,
   logoutAdmin,
   updateAdminTempleRemedy,
   updateAdminAppointment,
@@ -19,6 +20,27 @@ import {
   fetchAdminTempleRemedyFile,
   fetchAdminTempleRemedyAstrology,
   fetchAdminTempleRemedyManualPaymentFile,
+  fetchAdminChatbotFaqs,
+  createAdminChatbotFaq,
+  updateAdminChatbotFaq,
+  deactivateAdminChatbotFaq,
+  fetchAdminChatbotTopics,
+  createAdminChatbotTopic,
+  updateAdminChatbotTopic,
+  deactivateAdminChatbotTopic,
+  fetchAdminChatbotIntents,
+  createAdminChatbotIntent,
+  updateAdminChatbotIntent,
+  deactivateAdminChatbotIntent,
+  fetchAdminChatbotSettings,
+  updateAdminChatbotSettings,
+  clearAdminChatbotOpenAiCache,
+  fetchAdminPaymentMethodSettings,
+  updateAdminPaymentMethodSetting,
+  fetchAdminFutureVideoManualPayments,
+  fetchAdminFutureVideoManualPaymentProof,
+  verifyAdminFutureVideoManualPayment,
+  rejectAdminFutureVideoManualPayment,
 } from '../services/adminService'
 import { getAdminUser, removeAdminToken, removeAdminUser } from '../utils/auth'
 import './AdminPage.css'
@@ -29,12 +51,37 @@ const tabs = [
   { id: 'future', label: 'Future Requests' },
   { id: 'remedies', label: 'Temple Remedies' },
   { id: 'appointments', label: 'Appointments' },
+  { id: 'paymentSettings', label: 'Payment Settings' },
+  { id: 'paymentVerification', label: 'Payment Verification' },
   { id: 'feedback', label: 'Feedback' },
+  { id: 'chatbot', label: 'Chatbot' },
 ]
 
 const statusOptions = ['PAYMENT_PENDING', 'COMPLETED']
 const appointmentFallbackGroups = ['payment_received', 'upcoming', 'completed', 'cancelled_failed']
 const appointmentTimezone = 'Asia/Kolkata'
+const chatbotViews = [
+  { id: 'faqs', label: 'FAQs' },
+  { id: 'topics', label: 'Topics' },
+  { id: 'intents', label: 'Intents' },
+  { id: 'settings', label: 'Settings' },
+]
+const paymentServiceLabels = {
+  FUTURE_VIDEO: 'Future Video',
+  TALK_TO_ASTROLOGER: 'Talk to Astrologer',
+  TEMPLE_REMEDY: 'Temple Remedy',
+}
+const paymentServiceMeta = {
+  FUTURE_VIDEO: { icon: 'video', tone: 'blue' },
+  TALK_TO_ASTROLOGER: { icon: 'headset', tone: 'orange' },
+  TEMPLE_REMEDY: { icon: 'temple', tone: 'green' },
+}
+const futureManualPaymentFilters = [
+  { id: 'PENDING', label: 'Pending' },
+  { id: 'VERIFIED', label: 'Verified' },
+  { id: 'REJECTED', label: 'Rejected' },
+  { id: 'ALL', label: 'All' },
+]
 
 function formatDate(value, timezone = null) {
   if (!value) return 'Not available'
@@ -260,6 +307,7 @@ function AdminPage() {
   const [selectedPrediction, setSelectedPrediction] = useState(null)
   const [predictionDetail, setPredictionDetail] = useState(null)
   const [predictionDetailStatus, setPredictionDetailStatus] = useState('idle')
+  const [regeneratingPastId, setRegeneratingPastId] = useState(null)
   const [remedies, setRemedies] = useState([])
   const [appointments, setAppointments] = useState([])
   const [appointmentGroup, setAppointmentGroup] = useState('waiting_payment')
@@ -283,6 +331,26 @@ function AdminPage() {
   const [edits, setEdits] = useState({})
   const [selectedRemedyId, setSelectedRemedyId] = useState(null)
   const [savingRemedyId, setSavingRemedyId] = useState(null)
+  const [chatbotView, setChatbotView] = useState('faqs')
+  const [chatbotFaqs, setChatbotFaqs] = useState([])
+  const [chatbotTopics, setChatbotTopics] = useState([])
+  const [chatbotIntents, setChatbotIntents] = useState([])
+  const [chatbotSettings, setChatbotSettings] = useState(null)
+  const [chatbotCacheCount, setChatbotCacheCount] = useState(0)
+  const [chatbotStatus, setChatbotStatus] = useState('idle')
+  const [chatbotEditor, setChatbotEditor] = useState(null)
+  const [savingChatbot, setSavingChatbot] = useState(false)
+  const [paymentSettings, setPaymentSettings] = useState([])
+  const [paymentSettingsStatus, setPaymentSettingsStatus] = useState('idle')
+  const [paymentSettingsDrafts, setPaymentSettingsDrafts] = useState({})
+  const [savingPaymentService, setSavingPaymentService] = useState('')
+  const [futureManualPayments, setFutureManualPayments] = useState([])
+  const [futureManualPaymentCounts, setFutureManualPaymentCounts] = useState({ PENDING: 0, VERIFIED: 0, REJECTED: 0, ALL: 0 })
+  const [futureManualPaymentStatus, setFutureManualPaymentStatus] = useState('idle')
+  const [futureManualPaymentFilter, setFutureManualPaymentFilter] = useState('PENDING')
+  const [futureManualPaymentSearch, setFutureManualPaymentSearch] = useState('')
+  const [selectedFuturePaymentProof, setSelectedFuturePaymentProof] = useState(null)
+  const [savingFutureManualPaymentId, setSavingFutureManualPaymentId] = useState(null)
   const [tabLoading, setTabLoading] = useState('')
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('')
@@ -406,6 +474,77 @@ function AdminPage() {
     }
   }, [remedyGroup])
 
+  const loadChatbot = useCallback(async (view = chatbotView) => {
+    setTabLoading('chatbot')
+    setChatbotStatus('loading')
+    setMessage('')
+
+    try {
+      if (view === 'topics') {
+        const topics = await fetchAdminChatbotTopics()
+        setChatbotTopics(topics)
+      } else if (view === 'intents') {
+        const intents = await fetchAdminChatbotIntents()
+        setChatbotIntents(intents)
+      } else if (view === 'settings') {
+        const response = await fetchAdminChatbotSettings()
+        setChatbotSettings(response.data)
+        setChatbotCacheCount(response.cacheCount)
+      } else {
+        const response = await fetchAdminChatbotFaqs()
+        setChatbotFaqs(response.data)
+        setChatbotTopics(response.topics)
+        setChatbotIntents(response.intents)
+      }
+      setChatbotStatus('ready')
+    } catch (error) {
+      setChatbotStatus('error')
+      setMessage(error.response?.data?.message || 'Unable to load chatbot records.')
+    } finally {
+      setTabLoading('')
+    }
+  }, [chatbotView])
+
+  const loadPaymentSettings = useCallback(async () => {
+    setTabLoading('paymentSettings')
+    setPaymentSettingsStatus('loading')
+    setMessage('')
+
+    try {
+      const data = await fetchAdminPaymentMethodSettings()
+      setPaymentSettings(data)
+      setPaymentSettingsDrafts(Object.fromEntries(data.map((setting) => [setting.service_type, paymentSettingDraft(setting)])))
+      setPaymentSettingsStatus('ready')
+      return data
+    } catch (error) {
+      setPaymentSettingsStatus('error')
+      setMessage(error.response?.data?.message || 'Unable to load payment method settings.')
+      return []
+    } finally {
+      setTabLoading('')
+    }
+  }, [])
+
+  const loadFutureManualPayments = useCallback(async (filter = futureManualPaymentFilter, search = futureManualPaymentSearch) => {
+    setTabLoading('paymentVerification')
+    setFutureManualPaymentStatus('loading')
+    setMessage('')
+
+    try {
+      const response = await fetchAdminFutureVideoManualPayments(filter, search)
+      setFutureManualPayments(response.data)
+      setFutureManualPaymentCounts(response.counts)
+      setFutureManualPaymentStatus('ready')
+      return response
+    } catch (error) {
+      setFutureManualPaymentStatus('error')
+      setMessage(error.response?.data?.message || 'Unable to load Future Video payment submissions.')
+      return null
+    } finally {
+      setTabLoading('')
+    }
+  }, [futureManualPaymentFilter, futureManualPaymentSearch])
+
   useEffect(() => {
     let mounted = true
 
@@ -438,6 +577,12 @@ function AdminPage() {
     }
   }, [])
 
+  useEffect(() => () => {
+    if (selectedFuturePaymentProof?.url) {
+      URL.revokeObjectURL(selectedFuturePaymentProof.url)
+    }
+  }, [selectedFuturePaymentProof])
+
   const changeAdminTab = (tabId) => {
     if (tabId === activeTab) return
 
@@ -460,12 +605,24 @@ function AdminPage() {
       loadAppointments(appointmentGroup)
     }
 
+    if (tabId === 'paymentSettings' && paymentSettingsStatus === 'idle') {
+      loadPaymentSettings()
+    }
+
+    if (tabId === 'paymentVerification' && futureManualPaymentStatus === 'idle') {
+      loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
+    }
+
     if (tabId === 'remedies' && remedyStatus === 'idle') {
       loadTempleRemedies(remedyGroup)
     }
 
     if (tabId === 'feedback' && feedbackItems.length === 0) {
       loadFeedback()
+    }
+
+    if (tabId === 'chatbot' && chatbotStatus === 'idle') {
+      loadChatbot(chatbotView)
     }
   }
 
@@ -475,8 +632,16 @@ function AdminPage() {
     if (activeTab === 'future') return futureRequests.length
     if (activeTab === 'feedback') return feedbackCategory === 'all' ? feedbackCounts.all : feedbackCounts[feedbackCategory] ?? 0
     if (activeTab === 'appointments') return appointmentCounts[appointmentGroup] ?? appointments.length
+    if (activeTab === 'paymentSettings') return paymentSettings.length
+    if (activeTab === 'paymentVerification') return futureManualPaymentCounts[futureManualPaymentFilter] ?? futureManualPayments.length
+    if (activeTab === 'chatbot') {
+      if (chatbotView === 'topics') return chatbotTopics.length
+      if (chatbotView === 'intents') return chatbotIntents.length
+      if (chatbotView === 'settings') return chatbotSettings ? 1 : 0
+      return chatbotFaqs.length
+    }
     return remedyCounts[remedyGroup] ?? remedies.length
-  }, [activeTab, appointmentCounts, appointmentGroup, appointments.length, feedbackCategory, feedbackCounts, futureRequests.length, pastRequests.length, remedies.length, remedyCounts, remedyGroup, users.length])
+  }, [activeTab, appointmentCounts, appointmentGroup, appointments.length, chatbotFaqs.length, chatbotIntents.length, chatbotSettings, chatbotTopics.length, chatbotView, feedbackCategory, feedbackCounts, futureManualPaymentCounts, futureManualPaymentFilter, futureManualPayments.length, futureRequests.length, pastRequests.length, paymentSettings.length, remedies.length, remedyCounts, remedyGroup, users.length])
   const ratingSummary = useMemo(() => {
     const backendSummary = overview?.cards?.ratings
     if (backendSummary?.overall?.count) return backendSummary
@@ -781,6 +946,26 @@ function AdminPage() {
     }
   }
 
+  const regeneratePastPrediction = async () => {
+    const requestId = predictionDetail?.request?.id || selectedPrediction?.row?.prediction_request_id || selectedPrediction?.row?.id
+    if (!requestId || regeneratingPastId) return
+
+    setRegeneratingPastId(requestId)
+    setMessage('Regenerating past prediction...')
+
+    try {
+      const response = await regenerateAdminPastPrediction(requestId)
+      setPredictionDetail(response.data)
+      setPredictionDetailStatus('ready')
+      setMessage(response.message || 'Past prediction regenerated.')
+      await Promise.all([loadPredictionRequests('past'), loadOverview()])
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to regenerate past prediction.')
+    } finally {
+      setRegeneratingPastId(null)
+    }
+  }
+
   const saveRemedy = async (id) => {
     const draft = edits[id]
     if (!draft) return
@@ -809,6 +994,213 @@ function AdminPage() {
       setMessage(error.response?.data?.message || 'Unable to update temple remedy request.')
     } finally {
       setSavingRemedyId(null)
+    }
+  }
+
+  const changeChatbotView = (view) => {
+    setChatbotView(view)
+    setChatbotEditor(null)
+    loadChatbot(view)
+  }
+
+  const saveChatbotRecord = async (view, record) => {
+    setSavingChatbot(true)
+    setMessage('Saving chatbot record...')
+
+    try {
+      const isExisting = Boolean(record.id)
+      const saveAction = view === 'topics'
+        ? isExisting ? updateAdminChatbotTopic : createAdminChatbotTopic
+        : view === 'intents'
+          ? isExisting ? updateAdminChatbotIntent : createAdminChatbotIntent
+          : isExisting ? updateAdminChatbotFaq : createAdminChatbotFaq
+
+      if (isExisting) {
+        await saveAction(record.id, record)
+      } else {
+        await saveAction(record)
+      }
+
+      setChatbotEditor(null)
+      setMessage('Chatbot record saved.')
+      await loadChatbot(view)
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to save chatbot record.')
+    } finally {
+      setSavingChatbot(false)
+    }
+  }
+
+  const deactivateChatbotRecord = async (view, record) => {
+    if (!record?.id) return
+    if (!window.confirm('Deactivate this chatbot record?')) return
+
+    setSavingChatbot(true)
+    setMessage('Deactivating chatbot record...')
+
+    try {
+      if (view === 'topics') {
+        await deactivateAdminChatbotTopic(record.id)
+      } else if (view === 'intents') {
+        await deactivateAdminChatbotIntent(record.id)
+      } else {
+        await deactivateAdminChatbotFaq(record.id)
+      }
+
+      setChatbotEditor(null)
+      setMessage('Chatbot record deactivated.')
+      await loadChatbot(view)
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to deactivate chatbot record.')
+    } finally {
+      setSavingChatbot(false)
+    }
+  }
+
+  const saveChatbotSettings = async (settings) => {
+    setSavingChatbot(true)
+    setMessage('Saving chatbot settings...')
+
+    try {
+      const response = await updateAdminChatbotSettings(settings)
+      setChatbotSettings(response.data)
+      setChatbotCacheCount(response.cacheCount)
+      setMessage(response.message || 'Chatbot settings saved.')
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to save chatbot settings.')
+    } finally {
+      setSavingChatbot(false)
+    }
+  }
+
+  const clearChatbotOpenAiCache = async () => {
+    if (!window.confirm('Clear all cached OpenAI chatbot answers? Usage history and YGT FAQs will not be deleted.')) return
+
+    setSavingChatbot(true)
+    setMessage('Clearing OpenAI chatbot cache...')
+
+    try {
+      const response = await clearAdminChatbotOpenAiCache()
+      setChatbotCacheCount(0)
+      setMessage(response.message || 'OpenAI chatbot cache cleared.')
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to clear OpenAI chatbot cache.')
+    } finally {
+      setSavingChatbot(false)
+    }
+  }
+
+  const updatePaymentSettingDraft = (serviceType, key, value) => {
+    setPaymentSettingsDrafts((current) => ({
+      ...current,
+      [serviceType]: {
+        ...paymentSettingDraft(paymentSettings.find((setting) => setting.service_type === serviceType)),
+        ...current[serviceType],
+        [key]: value,
+      },
+    }))
+  }
+
+  const savePaymentSetting = async (serviceType) => {
+    const draft = paymentSettingsDrafts[serviceType]
+    if (!draft) return
+
+    setSavingPaymentService(serviceType)
+    setMessage(`Saving ${paymentServiceLabels[serviceType] || serviceType} payment settings...`)
+
+    try {
+      const payload = new FormData()
+      payload.append('_method', 'PUT')
+      payload.append('service_type', serviceType)
+      payload.append('payment_gateway_enabled', draft.payment_gateway_enabled ? '1' : '0')
+      payload.append('gpay_qr_enabled', draft.gpay_qr_enabled ? '1' : '0')
+      if (draft.qr_image) payload.append('qr_image', draft.qr_image)
+
+      const response = await updateAdminPaymentMethodSetting(serviceType, payload)
+      const saved = response.data
+      setPaymentSettings((current) => current.map((setting) => (setting.service_type === serviceType ? saved : setting)))
+      setPaymentSettingsDrafts((current) => ({ ...current, [serviceType]: paymentSettingDraft(saved) }))
+      setMessage(response.message || 'Payment method setting saved.')
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to save payment method setting.')
+    } finally {
+      setSavingPaymentService('')
+    }
+  }
+
+  const changeFutureManualPaymentFilter = (filter) => {
+    setFutureManualPaymentFilter(filter)
+    loadFutureManualPayments(filter, futureManualPaymentSearch)
+  }
+
+  const searchFutureManualPayments = (event) => {
+    event.preventDefault()
+    loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
+  }
+
+  const refreshFutureManualPayments = () => {
+    loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
+  }
+
+  const closeFuturePaymentProof = () => {
+    if (selectedFuturePaymentProof?.url) {
+      URL.revokeObjectURL(selectedFuturePaymentProof.url)
+    }
+    setSelectedFuturePaymentProof(null)
+  }
+
+  const openFuturePaymentProof = async (payment) => {
+    setMessage('Loading payment proof...')
+
+    try {
+      const blob = await fetchAdminFutureVideoManualPaymentProof(payment.id)
+      if (selectedFuturePaymentProof?.url) {
+        URL.revokeObjectURL(selectedFuturePaymentProof.url)
+      }
+      setSelectedFuturePaymentProof({
+        payment,
+        url: URL.createObjectURL(blob),
+        mimeType: blob.type || payment.payment_proof?.mime_type || '',
+        fileName: payment.payment_proof?.file_name || 'payment-proof',
+      })
+      setMessage('')
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to load payment proof.')
+    }
+  }
+
+  const verifyFutureManualPayment = async (payment) => {
+    if (!window.confirm('Confirm this GPay QR payment has been received? Future Video access will be enabled after verification.')) return
+
+    setSavingFutureManualPaymentId(payment.id)
+    setMessage('Verifying Future Video payment...')
+
+    try {
+      const response = await verifyAdminFutureVideoManualPayment(payment.id)
+      setMessage(response.message || 'Payment verified and Future Video enabled.')
+      await loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to verify payment.')
+    } finally {
+      setSavingFutureManualPaymentId(null)
+    }
+  }
+
+  const rejectFutureManualPayment = async (payment) => {
+    const rejectionReason = window.prompt('Reason for rejection (optional)')
+    if (rejectionReason === null) return
+
+    setSavingFutureManualPaymentId(payment.id)
+    setMessage('Rejecting Future Video payment...')
+
+    try {
+      const response = await rejectAdminFutureVideoManualPayment(payment.id, rejectionReason.trim())
+      setMessage(response.message || 'Payment rejected.')
+      await loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to reject payment.')
+    } finally {
+      setSavingFutureManualPaymentId(null)
     }
   }
 
@@ -956,6 +1348,33 @@ function AdminPage() {
               savingRemedyId={savingRemedyId}
             />
           ) : null}
+          {status === 'ready' && !isActiveTabLoading && activeTab === 'paymentSettings' ? (
+            <PaymentMethodSettingsPanel
+              settings={paymentSettings}
+              drafts={paymentSettingsDrafts}
+              status={paymentSettingsStatus}
+              savingService={savingPaymentService}
+              onChange={updatePaymentSettingDraft}
+              onSave={savePaymentSetting}
+            />
+          ) : null}
+          {status === 'ready' && !isActiveTabLoading && activeTab === 'paymentVerification' ? (
+            <FutureVideoPaymentVerificationPanel
+              payments={futureManualPayments}
+              counts={futureManualPaymentCounts}
+              filter={futureManualPaymentFilter}
+              search={futureManualPaymentSearch}
+              status={futureManualPaymentStatus}
+              savingPaymentId={savingFutureManualPaymentId}
+              onFilterChange={changeFutureManualPaymentFilter}
+              onSearchChange={setFutureManualPaymentSearch}
+              onSearchSubmit={searchFutureManualPayments}
+              onRefresh={refreshFutureManualPayments}
+              onViewProof={openFuturePaymentProof}
+              onVerify={verifyFutureManualPayment}
+              onReject={rejectFutureManualPayment}
+            />
+          ) : null}
           {status === 'ready' && !isActiveTabLoading && activeTab === 'feedback' ? (
             <FeedbackList
               items={feedbackItems}
@@ -965,6 +1384,27 @@ function AdminPage() {
               onCategoryChange={setFeedbackCategory}
               onSelect={setSelectedFeedback}
               onClose={() => setSelectedFeedback(null)}
+            />
+          ) : null}
+          {status === 'ready' && !isActiveTabLoading && activeTab === 'chatbot' ? (
+            <ChatbotAdminPanel
+              view={chatbotView}
+              faqs={chatbotFaqs}
+              topics={chatbotTopics}
+              intents={chatbotIntents}
+              settings={chatbotSettings}
+              cacheCount={chatbotCacheCount}
+              status={chatbotStatus}
+              editor={chatbotEditor}
+              isSaving={savingChatbot}
+              onViewChange={changeChatbotView}
+              onNew={(view) => setChatbotEditor({ view, record: null })}
+              onEdit={(view, record) => setChatbotEditor({ view, record })}
+              onClose={() => setChatbotEditor(null)}
+              onSave={saveChatbotRecord}
+              onDeactivate={deactivateChatbotRecord}
+              onSaveSettings={saveChatbotSettings}
+              onClearCache={clearChatbotOpenAiCache}
             />
           ) : null}
         </section>
@@ -979,7 +1419,12 @@ function AdminPage() {
               setPredictionDetail(null)
               setPredictionDetailStatus('idle')
             }}
+            onRegeneratePast={regeneratePastPrediction}
+            regeneratingPast={Boolean(regeneratingPastId)}
           />
+        ) : null}
+        {selectedFuturePaymentProof ? (
+          <FuturePaymentProofModal proof={selectedFuturePaymentProof} onClose={closeFuturePaymentProof} />
         ) : null}
       </section>
     </main>
@@ -995,6 +1440,12 @@ function AdminIcon({ name }) {
     rating: 'M12 17.2 6.8 20l1-5.8-4.2-4.1 5.8-.8L12 4l2.6 5.3 5.8.8-4.2 4.1 1 5.8Z',
     clock: 'M12 7v5l3 1.8M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     calendar: 'M7 3v3m10-3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v11.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z',
+    video: 'M6 6.5h8.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Zm10.5 3.2 3.5-2v8.6l-3.5-2',
+    headset: 'M4 13v-1a8 8 0 0 1 16 0v1M6 12h1.5a1.5 1.5 0 0 1 1.5 1.5V17A2 2 0 0 1 7 19H6a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Zm12 0h-1.5a1.5 1.5 0 0 0-1.5 1.5V17a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2Zm-2 7c-.8 1.2-2.1 2-4 2',
+    temple: 'M3 10h18M5 10l7-5 7 5M6 10v8m4-8v8m4-8v8m4-8v8M4 18h16M3 21h18',
+    card: 'M3.5 6.5h17v11h-17Zm0 3h17M6.5 14.5h4',
+    qr: 'M4 4h6v6H4Zm10 0h6v6h-6ZM4 14h6v6H4Zm10 0h2v2h-2Zm4 0h2v2h-2Zm-4 4h2v2h-2Zm4 0h2v2h-2Z',
+    upload: 'M12 16V5m0 0L8 9m4-4 4 4M5 16v3h14v-3',
   }
 
   return (
@@ -1762,7 +2213,7 @@ function PredictionRequestTable({ type, requests, loadingId, onOpen }) {
   )
 }
 
-function PredictionDetailView({ type, detail, status, onClose }) {
+function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast, regeneratingPast }) {
   const header = detail?.request || {}
   const result = detail?.result || {}
   const identity = detail?.astrology?.identity || header.identity || {}
@@ -1789,6 +2240,16 @@ function PredictionDetailView({ type, detail, status, onClose }) {
             <span>Rating: {ratingLabel}</span>
           </div>
           <div className="admin-modal-status">
+            {type === 'past' && detail ? (
+              <button
+                type="button"
+                className="admin-regenerate-past-button"
+                onClick={onRegeneratePast}
+                disabled={regeneratingPast}
+              >
+                {regeneratingPast ? 'Regenerating...' : 'Regenerate Past'}
+              </button>
+            ) : null}
             <span className="admin-badge is-blue">Status: {statusLabel}</span>
             <button type="button" onClick={onClose} aria-label="Close prediction details">x</button>
           </div>
@@ -1938,7 +2399,7 @@ function remedyAmountLabel(remedy, group) {
 function remedyStateLabel(remedy, group) {
   if (group === 'completed') return 'Completed'
   if (group === 'payment_received') return 'Payment Received'
-  if (remedy.payment_method === 'qr_online') return 'QR Reference'
+  if (remedy.payment_method === 'qr_online') return 'GPay QR'
 
   return 'Gateway Pending'
 }
@@ -1952,6 +2413,7 @@ function completionLabel(remedy) {
 
 function RemedyList({ remedies, group, counts, isLoading, isError, edits, selectedRemedyId, onGroupChange, onSelect, onClose, onChange, onSave, savingRemedyId }) {
   const selectedRemedy = remedies.find((remedy) => remedy.id === selectedRemedyId) || null
+  const [gridPaymentProofPreview, setGridPaymentProofPreview] = useState(null)
   const isCompletedGroup = group === 'completed'
   const emptyMessage = isCompletedGroup
     ? 'No completed Temple Remedies yet.'
@@ -1964,6 +2426,47 @@ function RemedyList({ remedies, group, counts, isLoading, isError, edits, select
     { id: 'payment_received', label: 'Payment Received', count: counts.payment_received },
     { id: 'completed', label: 'Completed', count: counts.completed },
   ]
+
+  const closeGridPaymentProof = () => {
+    if (gridPaymentProofPreview?.url) {
+      URL.revokeObjectURL(gridPaymentProofPreview.url)
+    }
+    setGridPaymentProofPreview(null)
+  }
+
+  const openGridPaymentProof = async (event, remedy) => {
+    event.stopPropagation()
+    if (!remedy.manual_payment?.file_url) return
+
+    try {
+      const blob = await fetchAdminTempleRemedyManualPaymentFile(remedy.id)
+      if (gridPaymentProofPreview?.url) {
+        URL.revokeObjectURL(gridPaymentProofPreview.url)
+      }
+      const name = remedy.manual_payment?.original_name || 'Payment proof'
+      const type = blob.type || remedy.manual_payment?.mime_type || ''
+      setGridPaymentProofPreview({
+        url: URL.createObjectURL(blob),
+        type,
+        name,
+        isImage: type.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(name),
+      })
+    } catch {
+      setGridPaymentProofPreview({
+        url: '',
+        type: '',
+        name: 'Payment proof',
+        isImage: false,
+        error: 'Unable to load payment proof.',
+      })
+    }
+  }
+
+  useEffect(() => () => {
+    if (gridPaymentProofPreview?.url) {
+      URL.revokeObjectURL(gridPaymentProofPreview.url)
+    }
+  }, [gridPaymentProofPreview])
 
   return (
     <>
@@ -1996,7 +2499,7 @@ function RemedyList({ remedies, group, counts, isLoading, isError, edits, select
               <th>Problem</th>
               <th>{isCompletedGroup ? 'Completion' : 'Status'}</th>
               <th>Amount</th>
-              <th>{group === 'payment_pending' ? 'Payment Reference' : 'Remedy'}</th>
+              <th>{group === 'payment_pending' ? 'Payment Proof' : 'Remedy'}</th>
               <th>{isCompletedGroup ? 'Completed On' : 'Submitted'}</th>
               <th>Action</th>
             </tr>
@@ -2023,11 +2526,22 @@ function RemedyList({ remedies, group, counts, isLoading, isError, edits, select
                 </td>
                 <td>{remedyAmountLabel(remedy, group)}</td>
                 <td>
-                  <span className={`admin-badge ${remedy.remedy_file_path || remedy.remedy_url ? 'is-green' : 'is-muted'}`}>
-                    {remedyStateLabel(remedy, group)}
-                  </span>
-                  {group === 'payment_pending' && remedy.manual_payment?.reference ? <small>{remedy.manual_payment.reference}</small> : null}
-                  {group !== 'payment_pending' && remedy.remedy_file_name ? <small>{fileKind(remedy.remedy_file_name, remedy.remedy_mime_type)}</small> : null}
+                  {group === 'payment_pending' ? (
+                    remedy.manual_payment?.file_url ? (
+                      <button type="button" className="admin-row-action" onClick={(event) => openGridPaymentProof(event, remedy)}>
+                        View Proof
+                      </button>
+                    ) : (
+                      <span className="admin-badge is-muted">No Proof</span>
+                    )
+                  ) : (
+                    <>
+                      <span className={`admin-badge ${remedy.remedy_file_path || remedy.remedy_url ? 'is-green' : 'is-muted'}`}>
+                        {remedyStateLabel(remedy, group)}
+                      </span>
+                      {remedy.remedy_file_name ? <small>{fileKind(remedy.remedy_file_name, remedy.remedy_mime_type)}</small> : null}
+                    </>
+                  )}
                 </td>
                 <td>{formatDate(isCompletedGroup ? remedy.completed_at : remedy.submitted_at)}</td>
                 <td><button type="button" className="admin-row-action" onClick={(event) => { event.stopPropagation(); onSelect(remedy.id) }}>Open</button></td>
@@ -2048,6 +2562,13 @@ function RemedyList({ remedies, group, counts, isLoading, isError, edits, select
           isSaving={savingRemedyId === selectedRemedy.id}
         />
       ) : null}
+      {gridPaymentProofPreview ? (
+        <TemplePaymentProofLightbox
+          preview={gridPaymentProofPreview}
+          isImage={gridPaymentProofPreview.isImage}
+          onClose={closeGridPaymentProof}
+        />
+      ) : null}
     </>
   )
 }
@@ -2065,6 +2586,8 @@ function RemedyModal({ remedy, draft, onChange, onSave, onClose, isSaving }) {
   const hasExistingFile = Boolean(remedy.remedy_file_path || remedy.remedy_url)
   const [astrologyState, setAstrologyState] = useState({ status: 'loading', payload: null, message: '' })
   const [fileError, setFileError] = useState('')
+  const [paymentProofPreview, setPaymentProofPreview] = useState({ status: 'idle', url: '', type: '', name: '' })
+  const [isPaymentProofOpen, setIsPaymentProofOpen] = useState(false)
 
   const loadAstrology = async () => {
     setAstrologyState({ status: 'loading', payload: null, message: '' })
@@ -2085,6 +2608,52 @@ function RemedyModal({ remedy, draft, onChange, onSave, onClose, isSaving }) {
     // Reload only when the selected request changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remedy.id])
+
+  useEffect(() => {
+    let isMounted = true
+    let objectUrl = ''
+
+    async function loadPaymentProofPreview() {
+      if (!remedy.manual_payment?.file_url) {
+        setPaymentProofPreview({ status: 'empty', url: '', type: '', name: '' })
+        return
+      }
+
+      setPaymentProofPreview({
+        status: 'loading',
+        url: '',
+        type: remedy.manual_payment?.mime_type || '',
+        name: remedy.manual_payment?.original_name || 'Payment proof',
+      })
+
+      try {
+        const blob = await fetchAdminTempleRemedyManualPaymentFile(remedy.id)
+        if (!isMounted) return
+        objectUrl = URL.createObjectURL(blob)
+        setPaymentProofPreview({
+          status: 'ready',
+          url: objectUrl,
+          type: blob.type || remedy.manual_payment?.mime_type || '',
+          name: remedy.manual_payment?.original_name || 'Payment proof',
+        })
+      } catch {
+        if (!isMounted) return
+        setPaymentProofPreview({
+          status: 'error',
+          url: '',
+          type: remedy.manual_payment?.mime_type || '',
+          name: remedy.manual_payment?.original_name || 'Payment proof',
+        })
+      }
+    }
+
+    loadPaymentProofPreview()
+
+    return () => {
+      isMounted = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [remedy.id, remedy.manual_payment?.file_url, remedy.manual_payment?.mime_type, remedy.manual_payment?.original_name])
 
   const validateAndSetFile = (file) => {
     if (!file) {
@@ -2110,18 +2679,7 @@ function RemedyModal({ remedy, draft, onChange, onSave, onClose, isSaving }) {
     onChange(remedy.id, 'remedy_file', file)
   }
 
-  const openPaymentProof = async () => {
-    if (!remedy.manual_payment?.file_url) return
-
-    try {
-      const blob = await fetchAdminTempleRemedyManualPaymentFile(remedy.id)
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank', 'noopener,noreferrer')
-      window.setTimeout(() => URL.revokeObjectURL(url), 30000)
-    } catch {
-      setFileError('Unable to load the payment proof.')
-    }
-  }
+  const paymentProofIsImage = paymentProofPreview.type?.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(paymentProofPreview.name || '')
 
   return (
     <section className="admin-modal-overlay" role="dialog" aria-modal="true" aria-label="Temple remedy request details">
@@ -2166,7 +2724,7 @@ function RemedyModal({ remedy, draft, onChange, onSave, onClose, isSaving }) {
               </div>
               <div>
                 <span>Payment Method</span>
-                <strong>{isQrPayment ? 'QR Code' : 'Razorpay Gateway'}</strong>
+                <strong>{isQrPayment ? 'GPay QR' : 'Razorpay Gateway'}</strong>
               </div>
               <div>
                 <span>Payment Status</span>
@@ -2176,14 +2734,15 @@ function RemedyModal({ remedy, draft, onChange, onSave, onClose, isSaving }) {
                 <span>Amount</span>
                 <strong>{remedyAmountLabel(remedy, 'payment_received')}</strong>
               </div>
-              {isQrPayment && remedy.manual_payment?.reference ? (
-                <div>
-                  <span>Reference</span>
-                  <strong>{remedy.manual_payment.reference}</strong>
+              {isQrPayment ? (
+                <div className="admin-payment-proof-cell">
+                  <span>Payment Proof</span>
+                  <TemplePaymentProofPreview
+                    preview={paymentProofPreview}
+                    isImage={paymentProofIsImage}
+                    onOpen={() => setIsPaymentProofOpen(true)}
+                  />
                 </div>
-              ) : null}
-              {isQrPayment && remedy.manual_payment?.file_url ? (
-                <button type="button" className="admin-inline-link" onClick={openPaymentProof}>View payment proof</button>
               ) : null}
             </section>
 
@@ -2241,7 +2800,62 @@ function RemedyModal({ remedy, draft, onChange, onSave, onClose, isSaving }) {
           </button>
         </footer>
       </form>
+      {isPaymentProofOpen ? (
+        <TemplePaymentProofLightbox
+          preview={paymentProofPreview}
+          isImage={paymentProofIsImage}
+          onClose={() => setIsPaymentProofOpen(false)}
+        />
+      ) : null}
     </section>
+  )
+}
+
+function TemplePaymentProofPreview({ preview, isImage, onOpen }) {
+  if (preview.status === 'loading') return <small>Loading payment proof...</small>
+  if (preview.status === 'error') return <small>Unable to load payment proof.</small>
+  if (preview.status !== 'ready' || !preview.url) return <small>No payment proof uploaded.</small>
+
+  if (!isImage) {
+    return (
+      <a className="admin-inline-link" href={preview.url} target="_blank" rel="noreferrer">
+        View Payment Proof
+      </a>
+    )
+  }
+
+  return (
+    <button type="button" className="admin-payment-proof-thumb" onClick={onOpen}>
+      <img src={preview.url} alt="Client uploaded Temple Remedy payment proof" />
+      <strong>View Payment Proof</strong>
+    </button>
+  )
+}
+
+function TemplePaymentProofLightbox({ preview, isImage, onClose }) {
+  return (
+    <div className="admin-nested-modal-overlay" role="dialog" aria-modal="true" aria-label="Temple Remedy payment proof preview">
+      <section className="admin-nested-modal admin-payment-proof-lightbox">
+        <header>
+          <div>
+            <span>Client Payment Proof</span>
+            <h3>{preview.name || 'Payment proof'}</h3>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close payment proof preview">x</button>
+        </header>
+        <div className="admin-payment-proof-large">
+          {preview.error ? (
+            <p>{preview.error}</p>
+          ) : isImage && preview.url ? (
+            <img src={preview.url} alt="Client uploaded Temple Remedy payment proof" />
+          ) : preview.url ? (
+            <a className="admin-inline-link" href={preview.url} target="_blank" rel="noreferrer">Open Payment Proof</a>
+          ) : (
+            <p>No payment proof uploaded.</p>
+          )}
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -2375,6 +2989,800 @@ function RemedyFileDropzone({ remedyId, disabled, selectedFile, existingFileName
       {error ? <p className="admin-file-error">{error}</p> : null}
     </div>
   )
+}
+
+function ChatbotAdminPanel({ view, faqs, topics, intents, settings, cacheCount, status, editor, isSaving, onViewChange, onNew, onEdit, onClose, onSave, onDeactivate, onSaveSettings, onClearCache }) {
+  const isLoading = status === 'loading'
+  const isError = status === 'error'
+  const countForView = (tabId) => {
+    if (tabId === 'topics') return topics.length
+    if (tabId === 'intents') return intents.length
+    if (tabId === 'settings') return settings ? 1 : 0
+    return faqs.length
+  }
+
+  return (
+    <>
+      <div className="admin-chatbot-toolbar">
+        <div className="admin-remedy-tabs" aria-label="Chatbot sections">
+          {chatbotViews.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={view === tab.id ? 'is-active' : ''}
+              onClick={() => onViewChange(tab.id)}
+            >
+              <span>{tab.label}</span>
+              <strong>{countForView(tab.id)}</strong>
+            </button>
+          ))}
+        </div>
+        {view !== 'settings' ? (
+          <button type="button" className="admin-row-action" onClick={() => onNew(view)}>
+            Add {chatbotViews.find((tab) => tab.id === view)?.label.slice(0, -1) || 'Record'}
+          </button>
+        ) : null}
+      </div>
+
+      {isLoading ? <AdminProgress label="Loading chatbot records..." /> : null}
+      {isError ? <div className="admin-empty is-compact">Unable to load chatbot records.</div> : null}
+      {!isLoading && !isError && view === 'faqs' ? <ChatbotFaqTable faqs={faqs} onEdit={(record) => onEdit('faqs', record)} /> : null}
+      {!isLoading && !isError && view === 'topics' ? <ChatbotTopicTable topics={topics} onEdit={(record) => onEdit('topics', record)} /> : null}
+      {!isLoading && !isError && view === 'intents' ? <ChatbotIntentTable intents={intents} onEdit={(record) => onEdit('intents', record)} /> : null}
+      {!isLoading && !isError && view === 'settings' ? (
+        <ChatbotSettingsPanel
+          settings={settings}
+          cacheCount={cacheCount}
+          isSaving={isSaving}
+          onSave={onSaveSettings}
+          onClearCache={onClearCache}
+        />
+      ) : null}
+
+      {editor ? (
+        <ChatbotEditorModal
+          view={editor.view}
+          record={editor.record}
+          topics={topics}
+          intents={intents}
+          isSaving={isSaving}
+          onClose={onClose}
+          onSave={onSave}
+          onDeactivate={onDeactivate}
+        />
+      ) : null}
+    </>
+  )
+}
+
+function FutureVideoPaymentVerificationPanel({
+  payments,
+  counts,
+  filter,
+  search,
+  status,
+  savingPaymentId,
+  onFilterChange,
+  onSearchChange,
+  onSearchSubmit,
+  onRefresh,
+  onViewProof,
+  onVerify,
+  onReject,
+}) {
+  const isLoading = status === 'loading'
+  const isError = status === 'error'
+
+  return (
+    <div className="admin-future-payment-verification">
+      <div className="admin-verification-toolbar">
+        <div className="admin-remedy-tabs admin-verification-tabs" aria-label="Future Video payment status filters">
+          {futureManualPaymentFilters.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={filter === tab.id ? 'is-active' : ''}
+              onClick={() => onFilterChange(tab.id)}
+            >
+              <span>{tab.label}</span>
+              <strong>{counts?.[tab.id] ?? 0}</strong>
+            </button>
+          ))}
+        </div>
+
+        <form className="admin-verification-search" onSubmit={onSearchSubmit}>
+          <input
+            type="search"
+            value={search}
+            placeholder="Search reference, user, or email"
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+          <button type="submit" className="admin-row-action">Search</button>
+          <button type="button" className="admin-row-action" onClick={onRefresh}>Refresh</button>
+        </form>
+      </div>
+
+      {isLoading ? <AdminProgress label="Loading payment submissions..." /> : null}
+      {isError ? <div className="admin-empty is-compact">Unable to load payment submissions.</div> : null}
+      {!isLoading && !isError && !payments.length ? <div className="admin-empty">No Future Video manual payments found.</div> : null}
+
+      {!isLoading && !isError && payments.length ? (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-future-payment-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Future Video</th>
+                <th>Amount</th>
+                <th>Payment Method</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Payment Proof</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((payment) => (
+                <tr key={payment.id}>
+                  <td>
+                    <strong>{payment.user?.name || payment.prediction_request?.full_name || 'User'}</strong>
+                    <small>{payment.user?.email || payment.prediction_request?.email || 'No email'}</small>
+                  </td>
+                  <td>
+                    <strong>{payment.product?.name || 'Future Video'}</strong>
+                    <small>{payment.purchase_reference}</small>
+                  </td>
+                  <td>{payment.amount_label || formatMoney(payment.amount_minor, payment.currency)}</td>
+                  <td>{payment.payment_method_label || 'GPay QR'}</td>
+                  <td>{formatDate(payment.submitted_at)}</td>
+                  <td><FutureManualPaymentStatusBadge status={payment.status} /></td>
+                  <td>
+                    <button type="button" className="admin-row-action" onClick={() => onViewProof(payment)}>
+                      View Proof
+                    </button>
+                    <small>{payment.payment_proof?.file_name || 'Uploaded image'}</small>
+                  </td>
+                  <td>
+                    {payment.status === 'PENDING' ? (
+                      <div className="admin-verification-actions">
+                        <button
+                          type="button"
+                          className="admin-row-action is-success"
+                          disabled={savingPaymentId === payment.id}
+                          onClick={() => onVerify(payment)}
+                        >
+                          {savingPaymentId === payment.id ? 'Saving...' : 'Verify Payment'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-row-action is-danger"
+                          disabled={savingPaymentId === payment.id}
+                          onClick={() => onReject(payment)}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="admin-muted-cell">{payment.status === 'VERIFIED' ? `Verified ${formatDate(payment.verified_at)}` : 'No action'}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function FutureManualPaymentStatusBadge({ status }) {
+  const normalized = String(status || '').toUpperCase()
+  const badgeClass = normalized === 'VERIFIED' ? 'is-green' : normalized === 'REJECTED' ? 'is-muted' : 'is-gold'
+
+  return <span className={`admin-badge ${badgeClass}`}>{labelFromKey(normalized || 'PENDING')}</span>
+}
+
+function FuturePaymentProofModal({ proof, onClose }) {
+  const isImage = proof.mimeType?.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(proof.fileName || '')
+
+  return (
+    <div className="admin-modal-overlay" role="dialog" aria-modal="true" aria-label="Future Video payment proof">
+      <section className="admin-modal admin-proof-modal">
+        <header className="admin-modal-head">
+          <div>
+            <span>Future Video Payment</span>
+            <h3>Payment Proof</h3>
+            <p>{proof.fileName}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close payment proof">x</button>
+        </header>
+        <div className="admin-proof-preview">
+          {isImage ? (
+            <img src={proof.url} alt="Uploaded payment proof" />
+          ) : (
+            <a href={proof.url} target="_blank" rel="noreferrer">Open payment proof</a>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function PaymentMethodSettingsPanel({ settings, drafts, status, savingService, onChange, onSave }) {
+  const isLoading = status === 'loading'
+  const isError = status === 'error'
+
+  if (isLoading) return <AdminProgress label="Loading payment method settings..." />
+  if (isError) return <div className="admin-empty is-compact">Unable to load payment method settings.</div>
+  if (!settings.length) return <div className="admin-empty">No payment method settings found.</div>
+
+  return (
+    <div className="admin-payment-settings">
+      {settings.map((setting) => {
+        const draft = drafts[setting.service_type] || paymentSettingDraft(setting)
+        const isSaving = savingService === setting.service_type
+        const meta = paymentServiceMeta[setting.service_type] || { icon: 'star', tone: 'blue' }
+        const title = paymentServiceLabels[setting.service_type] || labelFromKey(setting.service_type)
+        const qrEnabled = Boolean(draft.gpay_qr_enabled)
+        const hasQrImage = Boolean(setting.qr_image_url)
+
+        return (
+          <section className={`admin-payment-settings-card is-${meta.tone}`} key={setting.service_type}>
+            <div className="admin-payment-settings-head">
+              <span className="admin-payment-service-icon"><AdminIcon name={meta.icon} /></span>
+              <div>
+                <h3>{title}</h3>
+                <p>Configure available payment methods</p>
+              </div>
+            </div>
+
+            <div className="admin-payment-options">
+              <PaymentToggle
+                icon="card"
+                label="Payment Gateway"
+                checked={Boolean(draft.payment_gateway_enabled)}
+                disabled={isSaving}
+                onChange={(checked) => onChange(setting.service_type, 'payment_gateway_enabled', checked)}
+              />
+
+              <PaymentToggle
+                icon="qr"
+                label="GPay QR Payment"
+                checked={qrEnabled}
+                disabled={isSaving}
+                onChange={(checked) => onChange(setting.service_type, 'gpay_qr_enabled', checked)}
+              />
+            </div>
+
+            <div className={`admin-payment-qr-section ${qrEnabled ? '' : 'is-muted'}`}>
+              <h4>GPay QR Code</h4>
+
+              <div className="admin-payment-qr-body">
+                <div className="admin-payment-qr-preview">
+                  {hasQrImage ? <img src={setting.qr_image_url} alt={`${title} QR code`} /> : <span>No QR uploaded</span>}
+                </div>
+
+                <div className="admin-payment-file-control">
+                  <label className="admin-payment-upload-button">
+                    <AdminIcon name="upload" />
+                    <span>{hasQrImage ? 'Change QR' : 'Upload QR'}</span>
+                    <input
+                      disabled={isSaving || !qrEnabled}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(event) => onChange(setting.service_type, 'qr_image', event.target.files?.[0] || null)}
+                    />
+                  </label>
+                  <small>{draft.qr_image?.name || (hasQrImage ? 'QR image uploaded' : 'PNG, JPG, or WEBP')}</small>
+                </div>
+              </div>
+            </div>
+
+            <button className="admin-payment-save-button" type="button" disabled={isSaving} onClick={() => onSave(setting.service_type)}>
+              {isSaving ? <span className="admin-save-spinner" aria-hidden="true" /> : null}
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function PaymentToggle({ icon, label, checked, disabled, onChange }) {
+  return (
+    <div className="admin-payment-toggle-row">
+      <span className="admin-payment-option-icon"><AdminIcon name={icon} /></span>
+      <strong>{label}</strong>
+      <label className="admin-payment-switch">
+        <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+        <span />
+      </label>
+      <em>{checked ? 'ON' : 'OFF'}</em>
+    </div>
+  )
+}
+
+function ChatbotSettingsPanel({ settings, cacheCount, isSaving, onSave, onClearCache }) {
+  const [draft, setDraft] = useState(() => chatbotSettingsDraft(settings))
+
+  useEffect(() => {
+    setDraft(chatbotSettingsDraft(settings))
+  }, [settings])
+
+  const updateDraft = (key, value) => {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const submit = (event) => {
+    event.preventDefault()
+    onSave({
+      chatbot_model: draft.chatbot_model,
+      openai_model: draft.openai_model.trim(),
+      openai_api_key: draft.openai_api_key.trim(),
+      openai_fallback_ygt: Number(draft.openai_fallback_ygt),
+      openai_cache_enabled: Number(draft.openai_cache_enabled),
+      openai_knowledge_version: Number(draft.openai_knowledge_version || 1),
+    })
+  }
+
+  return (
+    <form className="admin-chatbot-settings" onSubmit={submit}>
+      <section className="admin-chatbot-settings-card">
+        <div>
+          <span>Chatbot Model</span>
+          <h3>Response Engine</h3>
+          <p>Switch between the current YGT rule-based FAQ model and prepared OpenAI mode.</p>
+        </div>
+        <label>
+          Active Model
+          <select disabled={isSaving} value={draft.chatbot_model} onChange={(event) => updateDraft('chatbot_model', event.target.value)}>
+            <option value="ygt">YGT Model</option>
+            <option value="openai">OpenAI Model</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="admin-chatbot-settings-card">
+        <div>
+          <span>OpenAI</span>
+          <h3>Configuration</h3>
+          <p>{settings?.openai_api_key_configured ? `Configured: ${settings.openai_api_key_masked || 'Configured'}` : 'API key is not configured.'}</p>
+        </div>
+        <label>
+          OpenAI Model
+          <input disabled={isSaving} value={draft.openai_model} maxLength="100" placeholder="Example: gpt-4.1-mini" onChange={(event) => updateDraft('openai_model', event.target.value)} />
+        </label>
+        <label>
+          OpenAI API Key
+          <input disabled={isSaving} type="password" value={draft.openai_api_key} maxLength="500" placeholder={settings?.openai_api_key_configured ? 'Enter new key to replace' : 'Enter API key'} onChange={(event) => updateDraft('openai_api_key', event.target.value)} />
+        </label>
+      </section>
+
+      <section className="admin-chatbot-settings-card">
+        <div>
+          <span>Fallback & Cache</span>
+          <h3>Cost Controls</h3>
+          <p>Knowledge Version: {draft.openai_knowledge_version || 1}. Cached answers: {cacheCount}.</p>
+        </div>
+        <label>
+          Fallback to YGT Model
+          <select disabled={isSaving} value={String(draft.openai_fallback_ygt)} onChange={(event) => updateDraft('openai_fallback_ygt', Number(event.target.value))}>
+            <option value="1">ON</option>
+            <option value="0">OFF</option>
+          </select>
+        </label>
+        <label>
+          Cache OpenAI Answers
+          <select disabled={isSaving} value={String(draft.openai_cache_enabled)} onChange={(event) => updateDraft('openai_cache_enabled', Number(event.target.value))}>
+            <option value="1">ON</option>
+            <option value="0">OFF</option>
+          </select>
+        </label>
+        <label>
+          Knowledge Version
+          <input disabled={isSaving} type="number" min="1" value={draft.openai_knowledge_version} onChange={(event) => updateDraft('openai_knowledge_version', event.target.value)} />
+        </label>
+      </section>
+
+      <footer className="admin-chatbot-settings-actions">
+        <button type="button" className="admin-row-action" disabled={isSaving} onClick={onClearCache}>Clear OpenAI Cache</button>
+        <button type="submit" disabled={isSaving}>
+          {isSaving ? <span className="admin-save-spinner" aria-hidden="true" /> : null}
+          {isSaving ? 'Saving...' : 'Save Settings'}
+        </button>
+      </footer>
+    </form>
+  )
+}
+
+function ChatbotFaqTable({ faqs, onEdit }) {
+  if (!faqs.length) return <div className="admin-empty">No chatbot FAQs yet.</div>
+
+  return (
+    <div className="admin-table-wrap">
+      <table className="admin-table admin-chatbot-table">
+        <thead>
+          <tr>
+            <th>FAQ</th>
+            <th>Topic</th>
+            <th>Intent</th>
+            <th>Priority</th>
+            <th>Keywords</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {faqs.map((faq) => (
+            <tr key={faq.id}>
+              <td>
+                <strong>{faq.question}</strong>
+                <span>{faq.answer}</span>
+              </td>
+              <td>{faq.topic_name || faq.topic_code || '-'}</td>
+              <td>{faq.intent_name || faq.intent_code || '-'}</td>
+              <td>{faq.priority}</td>
+              <td>{activeKeywordCount(faq.keywords)}</td>
+              <td><StatusBadge status={faq.status} /></td>
+              <td><button type="button" className="admin-row-action" onClick={() => onEdit(faq)}>Edit</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ChatbotTopicTable({ topics, onEdit }) {
+  if (!topics.length) return <div className="admin-empty">No chatbot topics yet.</div>
+
+  return (
+    <div className="admin-table-wrap">
+      <table className="admin-table admin-chatbot-table">
+        <thead>
+          <tr>
+            <th>Topic</th>
+            <th>Code</th>
+            <th>Description</th>
+            <th>Keywords</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {topics.map((topic) => (
+            <tr key={topic.id}>
+              <td><strong>{topic.topic_name}</strong></td>
+              <td>{topic.topic_code}</td>
+              <td>{topic.description || '-'}</td>
+              <td>{activeKeywordCount(topic.keywords)}</td>
+              <td><StatusBadge status={topic.status} /></td>
+              <td><button type="button" className="admin-row-action" onClick={() => onEdit(topic)}>Edit</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ChatbotIntentTable({ intents, onEdit }) {
+  if (!intents.length) return <div className="admin-empty">No chatbot intents yet.</div>
+
+  return (
+    <div className="admin-table-wrap">
+      <table className="admin-table admin-chatbot-table">
+        <thead>
+          <tr>
+            <th>Intent</th>
+            <th>Code</th>
+            <th>Description</th>
+            <th>Keywords</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {intents.map((intent) => (
+            <tr key={intent.id}>
+              <td><strong>{intent.intent_name}</strong></td>
+              <td>{intent.intent_code}</td>
+              <td>{intent.description || '-'}</td>
+              <td>{activeKeywordCount(intent.keywords)}</td>
+              <td><StatusBadge status={intent.status} /></td>
+              <td><button type="button" className="admin-row-action" onClick={() => onEdit(intent)}>Edit</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ChatbotEditorModal({ view, record, topics, intents, isSaving, onClose, onSave, onDeactivate }) {
+  const [draft, setDraft] = useState(() => chatbotDraft(view, record, topics, intents))
+  const title = record?.id ? `Edit ${chatbotLabel(view)}` : `Add ${chatbotLabel(view)}`
+
+  const updateDraft = (key, value) => {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const updateKeyword = (index, key, value) => {
+    setDraft((current) => ({
+      ...current,
+      keywords: current.keywords.map((keyword, keywordIndex) => (
+        keywordIndex === index ? { ...keyword, [key]: value } : keyword
+      )),
+    }))
+  }
+
+  const addKeyword = () => {
+    setDraft((current) => ({
+      ...current,
+      keywords: [...current.keywords, { keyword: '', weight: 5, language: 'en', status: 1 }],
+    }))
+  }
+
+  const removeKeyword = (index) => {
+    setDraft((current) => ({
+      ...current,
+      keywords: current.keywords
+        .map((keyword, keywordIndex) => {
+          if (keywordIndex !== index) return keyword
+          return keyword.id ? { ...keyword, _delete: true, status: 0 } : null
+        })
+        .filter(Boolean),
+    }))
+  }
+
+  const submit = (event) => {
+    event.preventDefault()
+    onSave(view, normalizeChatbotDraft(view, draft))
+  }
+
+  const visibleKeywords = draft.keywords.filter((keyword) => !keyword._delete)
+
+  return (
+    <section className="admin-modal-overlay" role="dialog" aria-modal="true" aria-label={title}>
+      <form className="admin-modal admin-chatbot-modal" onSubmit={submit}>
+        <header className="admin-modal-head">
+          <div>
+            <span>Chatbot</span>
+            <h3>{title}</h3>
+            <p>{record?.id ? `Record #${record.id}` : 'New record'}</p>
+          </div>
+          <div className="admin-modal-status">
+            <button type="button" disabled={isSaving} onClick={onClose} aria-label="Close chatbot editor">x</button>
+          </div>
+        </header>
+
+        <div className="admin-chatbot-form">
+          {view === 'faqs' ? (
+            <>
+              <label>
+                Topic
+                <select required disabled={isSaving} value={draft.topic_id} onChange={(event) => updateDraft('topic_id', event.target.value)}>
+                  <option value="">Select topic</option>
+                  {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.topic_name}</option>)}
+                </select>
+              </label>
+              <label>
+                Intent
+                <select required disabled={isSaving} value={draft.intent_id} onChange={(event) => updateDraft('intent_id', event.target.value)}>
+                  <option value="">Select intent</option>
+                  {intents.map((intent) => <option key={intent.id} value={intent.id}>{intent.intent_name}</option>)}
+                </select>
+              </label>
+              <label className="is-wide">
+                Question
+                <input required disabled={isSaving} value={draft.question} maxLength="500" onChange={(event) => updateDraft('question', event.target.value)} />
+              </label>
+              <label className="is-wide">
+                Answer
+                <textarea required disabled={isSaving} value={draft.answer} rows="5" onChange={(event) => updateDraft('answer', event.target.value)} />
+              </label>
+              <label>
+                Priority
+                <input required disabled={isSaving} type="number" min="0" value={draft.priority} onChange={(event) => updateDraft('priority', event.target.value)} />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                {view === 'topics' ? 'Topic Code' : 'Intent Code'}
+                <input required disabled={isSaving} value={view === 'topics' ? draft.topic_code : draft.intent_code} maxLength="100" onChange={(event) => updateDraft(view === 'topics' ? 'topic_code' : 'intent_code', event.target.value)} />
+              </label>
+              <label>
+                {view === 'topics' ? 'Topic Name' : 'Intent Name'}
+                <input required disabled={isSaving} value={view === 'topics' ? draft.topic_name : draft.intent_name} maxLength="150" onChange={(event) => updateDraft(view === 'topics' ? 'topic_name' : 'intent_name', event.target.value)} />
+              </label>
+              <label className="is-wide">
+                Description
+                <textarea disabled={isSaving} value={draft.description} rows="4" onChange={(event) => updateDraft('description', event.target.value)} />
+              </label>
+            </>
+          )}
+
+          {view === 'faqs' ? (
+            <label>
+              Language
+              <input required disabled={isSaving} value={draft.language} maxLength="10" onChange={(event) => updateDraft('language', event.target.value)} />
+            </label>
+          ) : null}
+          <label>
+            Status
+            <select required disabled={isSaving} value={String(draft.status)} onChange={(event) => updateDraft('status', Number(event.target.value))}>
+              <option value="1">Active</option>
+              <option value="0">Inactive</option>
+            </select>
+          </label>
+
+          <section className="admin-chatbot-keywords is-wide">
+            <div className="admin-chatbot-keywords-head">
+              <h4>Keywords</h4>
+              <button type="button" disabled={isSaving} onClick={addKeyword}>Add Keyword</button>
+            </div>
+            {!visibleKeywords.length ? <div className="admin-empty is-compact">No keywords added.</div> : null}
+            {visibleKeywords.map((keyword, visibleIndex) => {
+              const index = draft.keywords.findIndex((item) => item === keyword)
+
+              return (
+                <div className="admin-chatbot-keyword-row" key={keyword.id || `new-${visibleIndex}`}>
+                  <label>
+                    Keyword
+                    <input required disabled={isSaving} value={keyword.keyword} maxLength="255" onChange={(event) => updateKeyword(index, 'keyword', event.target.value)} />
+                  </label>
+                  <label>
+                    Weight
+                    <input required disabled={isSaving} type="number" min="0" value={keyword.weight} onChange={(event) => updateKeyword(index, 'weight', event.target.value)} />
+                  </label>
+                  <label>
+                    Language
+                    <input required disabled={isSaving} value={keyword.language || 'en'} maxLength="10" onChange={(event) => updateKeyword(index, 'language', event.target.value)} />
+                  </label>
+                  <label>
+                    Status
+                    <select disabled={isSaving} value={String(keyword.status ?? 1)} onChange={(event) => updateKeyword(index, 'status', Number(event.target.value))}>
+                      <option value="1">Active</option>
+                      <option value="0">Inactive</option>
+                    </select>
+                  </label>
+                  <button type="button" disabled={isSaving} onClick={() => removeKeyword(index)}>Remove</button>
+                </div>
+              )
+            })}
+          </section>
+        </div>
+
+        <footer className="admin-modal-actions">
+          {record?.id ? <button type="button" disabled={isSaving || Number(draft.status) === 0} onClick={() => onDeactivate(view, record)}>Deactivate</button> : null}
+          <button type="button" disabled={isSaving} onClick={onClose}>Cancel</button>
+          <button type="submit" disabled={isSaving}>
+            {isSaving ? <span className="admin-save-spinner" aria-hidden="true" /> : null}
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+        </footer>
+      </form>
+    </section>
+  )
+}
+
+function StatusBadge({ status }) {
+  return <span className={`admin-badge ${Number(status) === 1 ? 'is-green' : 'is-muted'}`}>{Number(status) === 1 ? 'Active' : 'Inactive'}</span>
+}
+
+function activeKeywordCount(keywords = []) {
+  return keywords.filter((keyword) => Number(keyword.status) === 1).length
+}
+
+function chatbotLabel(view) {
+  if (view === 'topics') return 'Topic'
+  if (view === 'intents') return 'Intent'
+
+  return 'FAQ'
+}
+
+function chatbotDraft(view, record, topics, intents) {
+  const base = {
+    id: record?.id,
+    language: record?.language || 'en',
+    status: record?.status ?? 1,
+    keywords: (record?.keywords || []).map((keyword) => ({ ...keyword })),
+  }
+
+  if (view === 'topics') {
+    return {
+      ...base,
+      topic_code: record?.topic_code || '',
+      topic_name: record?.topic_name || '',
+      description: record?.description || '',
+    }
+  }
+
+  if (view === 'intents') {
+    return {
+      ...base,
+      intent_code: record?.intent_code || '',
+      intent_name: record?.intent_name || '',
+      description: record?.description || '',
+    }
+  }
+
+  return {
+    ...base,
+    topic_id: record?.topic_id || topics.find((topic) => Number(topic.status) === 1)?.id || '',
+    intent_id: record?.intent_id || intents.find((intent) => Number(intent.status) === 1)?.id || '',
+    question: record?.question || '',
+    answer: record?.answer || '',
+    priority: record?.priority ?? 0,
+  }
+}
+
+function chatbotSettingsDraft(settings = {}) {
+  return {
+    chatbot_model: settings?.chatbot_model || 'ygt',
+    openai_model: settings?.openai_model || '',
+    openai_api_key: '',
+    openai_fallback_ygt: Number(settings?.openai_fallback_ygt ?? 1),
+    openai_cache_enabled: Number(settings?.openai_cache_enabled ?? 1),
+    openai_knowledge_version: Number(settings?.openai_knowledge_version ?? 1),
+  }
+}
+
+function paymentSettingDraft(setting = {}) {
+  return {
+    service_type: setting?.service_type || '',
+    payment_gateway_enabled: Boolean(setting?.payment_gateway_enabled),
+    gpay_qr_enabled: Boolean(setting?.gpay_qr_enabled),
+    qr_image: null,
+  }
+}
+
+function normalizeChatbotDraft(view, draft) {
+  const keywords = draft.keywords.map((keyword) => ({
+    ...keyword,
+    keyword: keyword.keyword?.trim() || '',
+    weight: Number(keyword.weight || 0),
+    language: keyword.language?.trim() || 'en',
+    status: Number(keyword.status ?? 1),
+    _delete: Boolean(keyword._delete),
+  }))
+
+  if (view === 'topics') {
+    return {
+      id: draft.id,
+      topic_code: draft.topic_code.trim(),
+      topic_name: draft.topic_name.trim(),
+      description: draft.description?.trim() || '',
+      status: Number(draft.status),
+      keywords,
+    }
+  }
+
+  if (view === 'intents') {
+    return {
+      id: draft.id,
+      intent_code: draft.intent_code.trim(),
+      intent_name: draft.intent_name.trim(),
+      description: draft.description?.trim() || '',
+      status: Number(draft.status),
+      keywords,
+    }
+  }
+
+  return {
+    id: draft.id,
+    topic_id: Number(draft.topic_id),
+    intent_id: Number(draft.intent_id),
+    question: draft.question.trim(),
+    answer: draft.answer.trim(),
+    priority: Number(draft.priority || 0),
+    language: draft.language?.trim() || 'en',
+    status: Number(draft.status),
+    keywords,
+  }
 }
 
 function AstrologyPanel({ state, onRetry }) {

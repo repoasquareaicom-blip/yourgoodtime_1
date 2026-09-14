@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { fetchAppointmentConfig, submitAppointmentRequest, uploadAppointmentManualPayment } from '../../services/appointmentService'
 import { createAppointmentOrder, loadRazorpayScript, verifyRazorpayPayment } from '../../services/paymentService'
 import { isLoggedIn } from '../../utils/auth'
-import paymentQrImage from '../../assets/payment-qr.png'
 import './TalkToAstrologerModal.css'
 
 const appointmentTimezone = 'Asia/Kolkata'
@@ -47,7 +46,6 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
   const [confirmation, setConfirmation] = useState(null)
   const [paymentMethod, setPaymentMethod] = useState('payment_gateway')
   const [appointmentLanguageId, setAppointmentLanguageId] = useState('')
-  const [paymentReference, setPaymentReference] = useState('')
   const [manualAppointment, setManualAppointment] = useState(null)
   const [manualProof, setManualProof] = useState(null)
   const signedIn = isLoggedIn()
@@ -63,14 +61,13 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
     setError('')
     setPaymentMethod('payment_gateway')
     setAppointmentLanguageId('')
-    setPaymentReference('')
     setManualAppointment(null)
     setManualProof(null)
     fetchAppointmentConfig()
       .then((payload) => {
         setConfig(payload)
         const methods = Array.isArray(payload?.payment_methods) ? payload.payment_methods : []
-        const firstMethod = methods[0]?.code || payload?.payment_method || 'payment_gateway'
+        const firstMethod = methods[0]?.code || payload?.payment_method || ''
         const languages = Array.isArray(payload?.languages) ? payload.languages : []
         setPaymentMethod(firstMethod === 'gateway' ? 'payment_gateway' : firstMethod)
         setAppointmentLanguageId(languages[0]?.id ? String(languages[0].id) : '')
@@ -133,8 +130,13 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
       }
     }
 
-    if (wizardStep === 'payment' && isQrOnlinePayment && !manualProof && !paymentReference.trim()) {
-      setError('Upload the payment proof or enter the payment reference.')
+    if (wizardStep === 'payment' && !availablePaymentMethods.length) {
+      setError('Payment options are currently unavailable. Please try again later.')
+      return
+    }
+
+    if (wizardStep === 'payment' && isQrOnlinePayment && !manualProof) {
+      setError('Upload the payment proof screenshot.')
       return
     }
 
@@ -162,8 +164,12 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
       setError('Enter your contact number.')
       return
     }
-    if (isQrOnlinePayment && !manualProof && !paymentReference.trim()) {
-      setError('Upload the payment proof or enter the payment reference.')
+    if (!availablePaymentMethods.length) {
+      setError('Payment options are currently unavailable. Please try again later.')
+      return
+    }
+    if (isQrOnlinePayment && !manualProof) {
+      setError('Upload the payment proof screenshot.')
       return
     }
 
@@ -189,7 +195,6 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
         payload.append('preferred_time', preferredTime)
         payload.append('preferred_timezone', appointmentTimezone)
         payload.append('payment_method', paymentMethod)
-        if (paymentReference.trim()) payload.append('payment_reference', paymentReference.trim())
         if (manualProof) payload.append('payment_screenshot', manualProof)
       }
 
@@ -308,7 +313,7 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
                   <p>Online private consultation</p>
                   <p>Appointment confirmed by our team</p>
                 <p>Meeting details sent by email</p>
-                <p>Gateway or QR / Online payment</p>
+                <p>Online or GPay QR payment</p>
                 </div>
                 <div className="talk-price">
                   <span>Consultation Fee</span>
@@ -416,16 +421,17 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
               <>
                 <div className="talk-payment-methods">
                   <span>Payment Method</span>
-                  {availablePaymentMethods.length > 1 ? (
-                    <div>
+                  {availablePaymentMethods.length ? (
+                    <div className="future-payment-method-grid">
                       {availablePaymentMethods.map((method) => (
                         <button key={method.code} type="button" className={paymentMethod === method.code ? 'is-selected' : ''} onClick={() => setPaymentMethod(method.code)}>
-                          {method.name}
+                          <strong>{method.name}</strong>
+                          <span>{method.subtitle || method.instructions}</span>
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <strong>{availablePaymentMethods[0]?.name || 'Payment Gateway'}</strong>
+                    <strong>Payment options are currently unavailable. Please try again later.</strong>
                   )}
                   {selectedPaymentMethod?.instructions ? <small>{selectedPaymentMethod.instructions}</small> : null}
                 </div>
@@ -433,17 +439,14 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
                   <div className="talk-qr-payment">
                     <div className="talk-qr-box">
                       <span>Scan this QR code to pay</span>
-                      <img src={paymentQrImage} alt="Payment QR code" />
+                      {selectedPaymentMethod?.qr_image_url ? <img src={selectedPaymentMethod.qr_image_url} alt="GPay QR code" /> : <strong>No QR code is available right now.</strong>}
                     </div>
                     <div className="talk-manual-proof-grid">
                       <label>
-                        Payment Reference
-                        <input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="UPI reference / transaction ID" />
-                      </label>
-                      <label>
                         Screenshot / Receipt
-                        <input type="file" accept="image/*,.pdf" onChange={(event) => setManualProof(event.target.files?.[0] || null)} />
+                        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setManualProof(event.target.files?.[0] || null)} />
                       </label>
+                      <p>Upload the payment screenshot after scanning the QR code.</p>
                     </div>
                   </div>
                 ) : null}
@@ -467,7 +470,7 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
             <div className="talk-wizard-actions">
               <button type="button" className="talk-secondary-btn" disabled={Boolean(status) || activeWizardIndex === 0} onClick={goToPreviousWizardStep}>Previous</button>
               {wizardStep === 'review' ? (
-                <button type="submit" className="talk-primary-btn" disabled={Boolean(status)}>{status ? 'Processing...' : isQrOnlinePayment ? 'Submit Payment Reference' : `Pay ${formatMoney(config?.amount_minor, config?.currency)}`}</button>
+                <button type="submit" className="talk-primary-btn" disabled={Boolean(status)}>{status ? 'Processing...' : isQrOnlinePayment ? 'Submit Payment for Verification' : `Pay ${formatMoney(config?.amount_minor, config?.currency)}`}</button>
               ) : (
                 <button type="button" className="talk-primary-btn" disabled={Boolean(status)} onClick={goToNextWizardStep}>Next</button>
               )}
@@ -479,8 +482,8 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
           <form className="talk-form" onSubmit={uploadManualProof}>
             <div>
               <span>QR / Online Payment Proof</span>
-              <h2>Upload your payment reference.</h2>
-              <p>Admin will verify the reference and move the request to payment received.</p>
+              <h2>Upload your payment proof.</h2>
+              <p>Admin will verify the payment proof and move the request to payment received.</p>
             </div>
             <div className="talk-price">
               <span>Request</span>
@@ -488,7 +491,7 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
             </div>
             <label>
               Screenshot / Receipt
-              <input type="file" accept="image/*,.pdf" required onChange={(event) => setManualProof(event.target.files?.[0] || null)} />
+              <input type="file" accept="image/png,image/jpeg,image/webp" required onChange={(event) => setManualProof(event.target.files?.[0] || null)} />
             </label>
             {error ? <p className="talk-error">{error}</p> : null}
             {status ? <p>{status}</p> : null}
@@ -499,13 +502,17 @@ function TalkToAstrologerModal({ open, onClose, onRequireLogin, onSubmitted }) {
         {step === 'confirmed' ? (
           <div className="talk-intro">
             <span>Request Received</span>
-            <h2>Thank you. Your consultation request has been received.</h2>
-            <p>Our team will review your preferred date and time and send the confirmed appointment details by email.</p>
+            <h2>Thank you!</h2>
+            <p>
+              {confirmation?.payment_method === 'qr_online'
+                ? 'Your payment proof has been submitted successfully. Our team will verify the payment and confirm your appointment shortly. You will be able to access it once the verification is completed.'
+                : 'Thank you. Your consultation request has been received. Our team will review your preferred date and time and send the confirmed appointment details by email.'}
+            </p>
             <div className="talk-price">
               <span>Request</span>
               <strong>{confirmation?.appointment_number}</strong>
             </div>
-            <button type="button" className="talk-primary-btn" onClick={onClose}>Done</button>
+            <button type="button" className="talk-primary-btn" onClick={onClose}>Close</button>
           </div>
         ) : null}
       </div>

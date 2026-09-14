@@ -152,6 +152,35 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
                 return $this->result($startedAt, 'NO_MATCH', $yearMetadata, $age, $predictionPeriod, $workbook, $worksheet['worksheet'], $identifiedValues, $matchedValues, 'Excel sequence year column not found.', $matchedRow, sequenceYear: $sequenceYear);
             }
 
+            $nextWorkbookMatch = $this->nextWorkbookRangeVideoMatch(
+                predictionPeriod: $predictionPeriod,
+                age: $age,
+                dasha: $dasha,
+                lagnam: $context->getLagnam(),
+                rasi: $context->getRasi(),
+                position: $planetHousePosition,
+                sequenceYear: $sequenceYear,
+                currentWorkbook: $workbook,
+                currentYearMatch: $yearMatch
+            );
+
+            if ($nextWorkbookMatch !== null) {
+                $workbook = $nextWorkbookMatch['workbook'];
+                $worksheet = $nextWorkbookMatch['worksheet'];
+                $matchedRow = $nextWorkbookMatch['matched_row'];
+                $yearMatch = $nextWorkbookMatch['year_match'];
+                $matchedValues = $this->matchedValues($workbook, $worksheet['worksheet'], $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear, $age);
+                $matchedValues['rasi'] = $nextWorkbookMatch['matched_rasi'];
+                $this->logLookup('range video switched to next age workbook', [
+                    'age' => $age,
+                    'next_age' => $age + 1,
+                    'workbook' => $workbook->fileName,
+                    'sheet' => $worksheet['worksheet'],
+                    'matched_year' => $yearMatch['matched_year'],
+                    'video_ids' => $yearMatch['video_ids'],
+                ]);
+            }
+
             $matchedValues['matched_year'] = $yearMatch['matched_year'];
             $matchedValues['video_ids'] = $yearMatch['video_ids'];
             $this->logLookup('year/video lookup completed', [
@@ -392,6 +421,91 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
         }
 
         return null;
+    }
+
+    private function nextWorkbookRangeVideoMatch(
+        string $predictionPeriod,
+        int $age,
+        DashaPeriod $dasha,
+        ?string $lagnam,
+        ?string $rasi,
+        int $position,
+        DashaSequenceYearResult $sequenceYear,
+        AgeWorkbookResult $currentWorkbook,
+        array $currentYearMatch
+    ): ?array {
+        $range = $this->matchedYearRange((string) ($currentYearMatch['matched_year'] ?? ''));
+
+        if ($range === null) {
+            return null;
+        }
+
+        [$fromYear, $toYear] = $range;
+
+        if ($fromYear === $toYear || $sequenceYear->excelSequenceYear !== $fromYear) {
+            return null;
+        }
+
+        $nextWorkbook = $this->workbookResolver->resolve($predictionPeriod, $age + 1);
+
+        if (! $nextWorkbook->found || $nextWorkbook->path === null) {
+            return null;
+        }
+
+        if ($currentWorkbook->path !== null && realpath($currentWorkbook->path) === realpath($nextWorkbook->path)) {
+            return null;
+        }
+
+        $worksheets = $this->excelReader->readWorkbook($nextWorkbook->path);
+        $worksheet = $this->findWorksheet($worksheets, $dasha->planet);
+
+        if ($worksheet === null) {
+            return null;
+        }
+
+        $rowMatches = $this->matchingRows($worksheet['rows'], $lagnam, $rasi, $position);
+
+        if (count($rowMatches) !== 1) {
+            return null;
+        }
+
+        $matchedRow = (int) array_key_first($rowMatches);
+        $rowMatch = $rowMatches[$matchedRow];
+        $yearMatch = $this->findYearVideos($rowMatch['row'], $sequenceYear->excelSequenceYear);
+
+        if ($yearMatch === null || trim((string) $yearMatch['matched_year']) !== trim((string) $currentYearMatch['matched_year'])) {
+            return null;
+        }
+
+        if (($yearMatch['video_ids'] ?? []) === []) {
+            return null;
+        }
+
+        return [
+            'workbook' => $nextWorkbook,
+            'worksheet' => $worksheet,
+            'matched_row' => $matchedRow,
+            'matched_rasi' => $rowMatch['matched_rasi'],
+            'year_match' => $yearMatch,
+        ];
+    }
+
+    private function matchedYearRange(string $value): ?array
+    {
+        $value = strtolower(preg_replace('/\s+/', ' ', trim($value)));
+
+        if (! preg_match('/^\d{4}(\s*(-|to)\s*\d{4})$/i', $value)) {
+            return null;
+        }
+
+        preg_match_all('/\d{4}/', $value, $matches);
+        $years = array_map('intval', $matches[0] ?? []);
+
+        if (count($years) !== 2 || count(array_filter($years, fn (int $item): bool => $item >= 1900 && $item <= 2100)) !== 2) {
+            return null;
+        }
+
+        return [min($years), max($years)];
     }
 
     private function cellContainsYear(mixed $value, int $year): bool

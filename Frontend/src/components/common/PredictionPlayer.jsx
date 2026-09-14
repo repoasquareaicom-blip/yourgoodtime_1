@@ -313,7 +313,7 @@ function PredictionPlayer({
           {state.playerState === playerStates.COUNTDOWN ? (
             <PredictionCountdown
               key={`${state.currentGroupIndex}-${state.countdownKey}`}
-              seconds={5}
+              seconds={3}
               title={currentGroup?.title}
               subtitle={introSubtitle}
               details={groupDetails(currentGroup)}

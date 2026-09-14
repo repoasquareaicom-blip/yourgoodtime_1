@@ -14,11 +14,16 @@ import DailyPage from './pages/DailyPage'
 import PastPredictionPage from './pages/PastPredictionPage'
 import ProtectedRoute from './components/common/ProtectedRoute'
 import AdminProtectedRoute from './components/common/AdminProtectedRoute'
+import ChatbotWidget from './components/common/ChatbotWidget'
 import './App.css'
 
 function App() {
   const location = useLocation()
   const backgroundLocation = location.state?.backgroundLocation
+  const chatbotHiddenPaths = ['/splash', '/language', '/intro', '/login', '/admin-login', '/admin']
+  const shouldShowChatbot = !backgroundLocation && !chatbotHiddenPaths.some((path) => (
+    location.pathname === path || location.pathname.startsWith(`${path}/`)
+  ))
 
   return (
     <div className="app-shell">
@@ -52,6 +57,8 @@ function App() {
           <Route path="/past-prediction" element={<PastPredictionPage />} />
         </Routes>
       ) : null}
+
+      {shouldShowChatbot ? <ChatbotWidget /> : null}
     </div>
   )
 }

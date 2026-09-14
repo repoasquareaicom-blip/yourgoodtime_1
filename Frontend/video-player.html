@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Color Adjustment Player</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 30px;
+      font-family: Arial, sans-serif;
+      background: #111827;
+      color: white;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 26px;
+    }
+
+    .upload-box {
+      background: #1f2937;
+      padding: 18px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    input[type="file"] {
+      margin-top: 10px;
+    }
+
+    .video-wrapper {
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    video {
+      display: block;
+      width: 100%;
+      max-height: 620px;
+      background: #000;
+
+      filter:
+        brightness(100%)
+        contrast(100%)
+        saturate(100%)
+        hue-rotate(0deg)
+        grayscale(0%);
+    }
+
+    .controls {
+      background: #1f2937;
+      padding: 22px;
+      border-radius: 12px;
+    }
+
+    .control {
+      display: grid;
+      grid-template-columns: 130px 1fr 70px;
+      gap: 15px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .control:last-child {
+      margin-bottom: 0;
+    }
+
+    .control label {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .control input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+    }
+
+    .value {
+      text-align: right;
+      font-size: 14px;
+      color: #93c5fd;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    button {
+      border: 0;
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    .reset {
+      background: #374151;
+    }
+
+    .reset:hover {
+      background: #4b5563;
+    }
+
+    .hint {
+      margin-top: 15px;
+      color: #9ca3af;
+      font-size: 13px;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 15px;
+      }
+
+      .control {
+        grid-template-columns: 100px 1fr 55px;
+        gap: 8px;
+      }
+    }
+  </style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>Video Color Adjustment Player</h1>
+
+  <div class="upload-box">
+    <strong>Select a video from your computer</strong>
+    <br>
+    <input
+      type="file"
+      id="videoFile"
+      accept="video/*"
+    >
+  </div>
+
+  <div class="video-wrapper">
+    <video id="video" controls>
+      Your browser does not support HTML video.
+    </video>
+  </div>
+
+  <div class="controls">
+
+```
+<div class="control">
+  <label>Brightness</label>
+  <input
+    type="range"
+    id="brightness"
+    min="25"
+    max="200"
+    value="100"
+  >
+  <span class="value" id="brightnessValue">100%</span>
+</div>
+
+<div class="control">
+  <label>Contrast</label>
+  <input
+    type="range"
+    id="contrast"
+    min="25"
+    max="200"
+    value="100"
+  >
+  <span class="value" id="contrastValue">100%</span>
+</div>
+
+<div class="control">
+  <label>Saturation</label>
+  <input
+    type="range"
+    id="saturation"
+    min="0"
+    max="300"
+    value="100"
+  >
+  <span class="value" id="saturationValue">100%</span>
+</div>
+
+<div class="control">
+  <label>Hue</label>
+  <input
+    type="range"
+    id="hue"
+    min="-180"
+    max="180"
+    value="0"
+  >
+  <span class="value" id="hueValue">0°</span>
+</div>
+
+<div class="control">
+  <label>Grayscale</label>
+  <input
+    type="range"
+    id="grayscale"
+    min="0"
+    max="100"
+    value="0"
+  >
+  <span class="value" id="grayscaleValue">0%</span>
+</div>
+
+<div class="buttons">
+  <button id="resetButton" class="reset">
+    Reset Adjustments
+  </button>
+</div>
+
+<div class="hint">
+  These adjustments affect only the video display in the browser.
+  The original video file is not modified.
+</div>
+```
+
+  </div>
+
+</div>
+
+<script>
+
+  const video = document.getElementById("video");
+  const videoFile = document.getElementById("videoFile");
+
+  const brightness = document.getElementById("brightness");
+  const contrast = document.getElementById("contrast");
+  const saturation = document.getElementById("saturation");
+  const hue = document.getElementById("hue");
+  const grayscale = document.getElementById("grayscale");
+
+  const brightnessValue =
+    document.getElementById("brightnessValue");
+
+  const contrastValue =
+    document.getElementById("contrastValue");
+
+  const saturationValue =
+    document.getElementById("saturationValue");
+
+  const hueValue =
+    document.getElementById("hueValue");
+
+  const grayscaleValue =
+    document.getElementById("grayscaleValue");
+
+
+  // ------------------------------------
+  // Load local video
+  // ------------------------------------
+
+  videoFile.addEventListener("change", function () {
+
+    const file = this.files[0];
+
+    if (!file) {
+      return;
+    }
+
+    const videoURL = URL.createObjectURL(file);
+
+    video.src = videoURL;
+    video.load();
+
+  });
+
+
+  // ------------------------------------
+  // Apply video filters
+  // ------------------------------------
+
+  function updateFilters() {
+
+    video.style.filter = `
+      brightness(${brightness.value}%)
+      contrast(${contrast.value}%)
+      saturate(${saturation.value}%)
+      hue-rotate(${hue.value}deg)
+      grayscale(${grayscale.value}%)
+    `;
+
+    brightnessValue.textContent =
+      brightness.value + "%";
+
+    contrastValue.textContent =
+      contrast.value + "%";
+
+    saturationValue.textContent =
+      saturation.value + "%";
+
+    hueValue.textContent =
+      hue.value + "°";
+
+    grayscaleValue.textContent =
+      grayscale.value + "%";
+  }
+
+
+  // ------------------------------------
+  // Slider events
+  // ------------------------------------
+
+  brightness.addEventListener("input", updateFilters);
+  contrast.addEventListener("input", updateFilters);
+  saturation.addEventListener("input", updateFilters);
+  hue.addEventListener("input", updateFilters);
+  grayscale.addEventListener("input", updateFilters);
+
+
+  // ------------------------------------
+  // Reset
+  // ------------------------------------
+
+  document
+    .getElementById("resetButton")
+    .addEventListener("click", function () {
+
+      brightness.value = 100;
+      contrast.value = 100;
+      saturation.value = 100;
+      hue.value = 0;
+      grayscale.value = 0;
+
+      updateFilters();
+
+    });
+
+
+  // Initial settings
+  updateFilters();
+
+</script>
+
+</body>
+</html>
