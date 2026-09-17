@@ -79,8 +79,45 @@
 
 .past-birth-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
   gap: 10px;
+  min-width: 0;
+}
+
+.past-birth-row > label {
+  min-width: 0;
+}
+
+.prediction-registration-form.prediction-registration-form input[type="date"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.past-time-of-birth {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 160px;
+}
+
+.prediction-registration-form.prediction-registration-form .past-time-of-birth input {
+  flex: 1 1 72px;
+  width: 80px;
+  min-width: 80px;
+  padding-left: 10px;
+  padding-right: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.prediction-registration-form.prediction-registration-form .past-time-of-birth .past-meridiem {
+  flex: 0 0 80px;
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  padding-left: 8px;
+  padding-right: 1.55rem;
+  overflow: visible;
 }
 
 .past-field-error {

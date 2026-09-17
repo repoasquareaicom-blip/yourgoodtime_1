@@ -1488,6 +1488,7 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
 
       {isPlayerOpen ? (
         <PredictionPlayer
+          key={`past-${predictionResult?.result_id || predictionRequestAccess?.predictionRequestId || 'current'}`}
           playlist={predictionPlaylist}
           onClose={() => setIsPlayerOpen(false)}
           onComplete={handlePlayerComplete}

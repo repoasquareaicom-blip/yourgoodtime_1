@@ -195,7 +195,7 @@
 .video-play-button {
   position: absolute;
   left: 50%;
-  top: 72%;
+  top: 90%;
   z-index: 2;
   transform: translate(-50%, -50%);
   border: 1px solid rgba(246, 195, 102, 0.72);
@@ -671,7 +671,7 @@
   }
 
   .video-play-button {
-    top: 50%;
+    top: 90%;
   }
 
   .gallery-strip {
@@ -697,7 +697,7 @@
   }
 
   .gallery-track {
-    grid-auto-columns: calc((100% - 60px) / 6);
+    grid-auto-columns: calc((100% - 36px) / 4);
     gap: 12px;
     padding-top: 9px;
     padding-bottom: 8px;

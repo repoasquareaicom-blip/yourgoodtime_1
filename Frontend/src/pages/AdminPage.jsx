@@ -9,10 +9,17 @@ import {
   fetchAdminPreferredSlotAvailability,
   fetchAdminPredictionRequestDetails,
   fetchAdminPredictionRequests,
+  fetchAdminPredictionRegenerationSettings,
   fetchAdminFeedback,
+  fetchAdminGalleryVideos,
   fetchAdminTempleRemedies,
   fetchAdminUsers,
+  createAdminGalleryVideo,
+  updateAdminGalleryVideo,
+  updateAdminGalleryVideoVisibility,
+  deleteAdminGalleryVideo,
   regenerateAdminPastPrediction,
+  markAdminPredictionRegeneration,
   logoutAdmin,
   updateAdminTempleRemedy,
   updateAdminAppointment,
@@ -41,8 +48,11 @@ import {
   fetchAdminFutureVideoManualPaymentProof,
   verifyAdminFutureVideoManualPayment,
   rejectAdminFutureVideoManualPayment,
+  validateAdminPredictionExcel,
 } from '../services/adminService'
 import { getAdminUser, removeAdminToken, removeAdminUser } from '../utils/auth'
+import { copyTextToClipboard, galleryVideoShareUrl } from '../services/galleryVideoService'
+import { isAbortError, uploadGalleryVideoInChunks } from '../services/galleryVideoChunkUpload'
 import './AdminPage.css'
 
 const tabs = [
@@ -53,8 +63,11 @@ const tabs = [
   { id: 'appointments', label: 'Appointments' },
   { id: 'paymentSettings', label: 'Payment Settings' },
   { id: 'paymentVerification', label: 'Payment Verification' },
+  { id: 'galleryVideos', label: 'Video Gallery' },
   { id: 'feedback', label: 'Feedback' },
   { id: 'chatbot', label: 'Chatbot' },
+  { id: 'excelValidator', label: 'Prediction Excel Validator' },
+
 ]
 
 const statusOptions = ['PAYMENT_PENDING', 'COMPLETED']
@@ -82,6 +95,56 @@ const futureManualPaymentFilters = [
   { id: 'REJECTED', label: 'Rejected' },
   { id: 'ALL', label: 'All' },
 ]
+const excelValidatorOptions = [
+  {
+    id: 'rule001_nakshatra_lagnam',
+    label: 'Rule001 - Nakshatra / Lagnam',
+    file: 'nakshatra_lagnam.xlsx',
+    description: 'Checks Lagnam, Rasi, Nakshatra, Video ID and duplicate combinations.',
+  },
+  {
+    id: 'rule002_past_workbooks',
+    label: 'Rule002 - Past Workbooks',
+    file: 'Past age workbooks',
+    description: 'Checks age ranges, Dasha worksheets, Lagnam blocks, positions, years and video IDs.',
+  },
+]
+
+const emptyGalleryVideoDraft = {
+  id: null,
+  title: '',
+  description: '',
+  category: 'General',
+  video_type: 'WIDE',
+  publication_status: 'DRAFT',
+  display_order: 0,
+  is_active: true,
+  thumbnail_file: null,
+  video_file: null,
+}
+
+function adminUploadErrorMessage(error) {
+  const data = error.response?.data
+  const firstValidationMessage = data?.errors
+    ? Object.values(data.errors).flat().find(Boolean)
+    : ''
+
+  if (firstValidationMessage) return firstValidationMessage
+  if (data?.message) return data.message
+  if (error.response?.status === 413) return 'The selected video is larger than the server upload limit.'
+  if (!error.response) return 'Unable to reach the server. Check that the backend is running and try again.'
+
+  return 'Unable to save gallery video.'
+}
+
+function adminUploadErrorMessages(error) {
+  const data = error.response?.data
+  const validationMessages = data?.errors ? Object.values(data.errors).flat().filter(Boolean) : []
+
+  if (validationMessages.length) return validationMessages
+
+  return [adminUploadErrorMessage(error)]
+}
 
 function formatDate(value, timezone = null) {
   if (!value) return 'Not available'
@@ -292,7 +355,185 @@ function AdminProgress({ label }) {
     </div>
   )
 }
+function PredictionExcelValidator({
+  result,
+  validationStatus,
+  selectedValidator,
+  onValidatorChange,
+  onValidate,
+}) {
+  const isLoading = validationStatus === 'loading'
+  const selectedOption = excelValidatorOptions.find((option) => option.id === selectedValidator) || excelValidatorOptions[0]
+  const isRule002 = selectedValidator === 'rule002_past_workbooks'
+  const summaryItems = isRule002
+    ? [
+        ['Workbooks', result?.summary?.workbooks_checked ?? 0],
+        ['Worksheets', result?.summary?.worksheets_checked ?? 0],
+        ['Total Rows', result?.summary?.total_rows ?? 0],
+        ['Valid Rows', result?.summary?.valid_rows ?? 0],
+        ['Issue Rows', result?.summary?.issue_rows ?? 0],
+        ['Missing Videos', result?.summary?.missing_video_ids ?? 0],
+        ['Missing Positions', result?.summary?.missing_positions ?? 0],
+        ['Invalid Years', result?.summary?.invalid_year_cells ?? 0],
+        ['Mapping Issues', result?.summary?.mapping_mismatches ?? 0],
+        ['Duplicates', result?.summary?.duplicate_combinations ?? 0],
+        ['Structure Issues', result?.summary?.structural_row_problems ?? 0],
+        ['Range Overlaps', result?.summary?.overlapping_age_ranges ?? 0],
+      ]
+    : [
+        ['Total Rows', result?.summary?.total_rows ?? 0],
+        ['Valid Rows', result?.summary?.valid_rows ?? 0],
+        ['Issue Rows', result?.summary?.issue_rows ?? 0],
+        ['Unique Lagnams', result?.summary?.unique_lagnams ?? 0],
+        ['Unique Rasis', result?.summary?.unique_rasis ?? 0],
+        ['Unique Nakshatras', result?.summary?.unique_nakshatras ?? 0],
+      ]
 
+  return (
+    <section className="admin-section">
+      <div className="admin-section-header">
+        <div>
+          <h2>Prediction Excel Validator</h2>
+          <p>
+            Validate prediction Excel files against the same configured mappings
+            and workbook rules used by the prediction engine.
+          </p>
+        </div>
+      </div>
+
+      <div className="admin-card excel-validator-file-card">
+        <div>
+          <label>
+            Validator
+            <select
+              value={selectedValidator}
+              onChange={(event) => onValidatorChange(event.target.value)}
+              disabled={isLoading}
+            >
+              {excelValidatorOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <strong>{selectedOption.file}</strong>
+          <p>{selectedOption.description}</p>
+        </div>
+
+        <button
+          type="button"
+          className="admin-primary-button"
+          onClick={onValidate}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Validating...' : 'Validate Excel'}
+        </button>
+      </div>
+
+      {result ? (
+      <>
+        <div
+          className={`excel-validation-result ${
+            result.valid ? 'is-valid' : 'has-issues'
+          }`}
+        >
+          <strong>
+            {result.valid ? '✓ Validation Passed' : '⚠ Validation Issues Found'}
+          </strong>
+
+          <p>{result.message}</p>
+        </div>
+
+        <div className="excel-validator-summary">
+          {summaryItems.map(([label, value]) => (
+            <div key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </div>
+        {Array.isArray(result.workbooks) && result.workbooks.length > 0 ? (
+          <div className="admin-card">
+            <h3>Workbooks Checked</h3>
+
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Workbook</th>
+                    <th>Period</th>
+                    <th>Age Range</th>
+                    <th>Worksheets</th>
+                    <th>Total Rows</th>
+                    <th>Valid Rows</th>
+                    <th>Issue Rows</th>
+                    <th>Missing Videos</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {result.workbooks.map((workbook) => (
+                    <tr key={workbook.workbook}>
+                      <td>{workbook.workbook}</td>
+                      <td>{workbook.period ?? '-'}</td>
+                      <td>
+                        {workbook.age_range?.from != null && workbook.age_range?.to != null
+                          ? `${workbook.age_range.from}-${workbook.age_range.to}`
+                          : '-'}
+                      </td>
+                      <td>{workbook.worksheets_checked ?? 0}</td>
+                      <td>{workbook.total_rows ?? 0}</td>
+                      <td>{workbook.valid_rows ?? 0}</td>
+                      <td>{workbook.issue_rows ?? 0}</td>
+                      <td>{workbook.missing_video_ids ?? 0}</td>
+                      <td>{workbook.valid ? 'Valid' : 'Issues'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+        {Array.isArray(result.issues) && result.issues.length > 0 ? (
+          <div className="admin-card">
+            <h3>Validation Issues</h3>
+
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    {isRule002 ? <th>Workbook</th> : null}
+                    {isRule002 ? <th>Worksheet</th> : null}
+                    <th>Excel Row</th>
+                    <th>Field</th>
+                    <th>Excel Value</th>
+                    <th>Normalized Value</th>
+                    <th>Issue</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {result.issues.map((issue, index) => (
+                    <tr key={`${issue.workbook || 'rule001'}-${issue.worksheet || 'sheet'}-${issue.row}-${issue.field}-${index}`}>
+                      {isRule002 ? <td>{issue.workbook ?? '-'}</td> : null}
+                      {isRule002 ? <td>{issue.worksheet ?? '-'}</td> : null}
+                      <td>{issue.row ?? '-'}</td>
+                      <td>{issue.field ?? '-'}</td>
+                      <td>{issue.excel_value ?? '-'}</td>
+                      <td>{issue.normalized_value ?? '-'}</td>
+                      <td>{issue.issue ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+      </>
+    ) : null}
+    </section>
+  )
+}
 function AdminPage() {
   const user = getAdminUser()
   const [activeTab, setActiveTab] = useState('users')
@@ -344,6 +585,8 @@ function AdminPage() {
   const [paymentSettingsStatus, setPaymentSettingsStatus] = useState('idle')
   const [paymentSettingsDrafts, setPaymentSettingsDrafts] = useState({})
   const [savingPaymentService, setSavingPaymentService] = useState('')
+  const [predictionRegenerationSettings, setPredictionRegenerationSettings] = useState([])
+  const [markingRegenerationType, setMarkingRegenerationType] = useState('')
   const [futureManualPayments, setFutureManualPayments] = useState([])
   const [futureManualPaymentCounts, setFutureManualPaymentCounts] = useState({ PENDING: 0, VERIFIED: 0, REJECTED: 0, ALL: 0 })
   const [futureManualPaymentStatus, setFutureManualPaymentStatus] = useState('idle')
@@ -351,6 +594,19 @@ function AdminPage() {
   const [futureManualPaymentSearch, setFutureManualPaymentSearch] = useState('')
   const [selectedFuturePaymentProof, setSelectedFuturePaymentProof] = useState(null)
   const [savingFutureManualPaymentId, setSavingFutureManualPaymentId] = useState(null)
+  const [galleryVideos, setGalleryVideos] = useState([])
+  const [galleryVideoStatus, setGalleryVideoStatus] = useState('idle')
+  const [galleryVideoDraft, setGalleryVideoDraft] = useState(emptyGalleryVideoDraft)
+  const [savingGalleryVideo, setSavingGalleryVideo] = useState(false)
+  const [galleryVideoUploadProgress, setGalleryVideoUploadProgress] = useState(null)
+  const [galleryVideoUploadPhase, setGalleryVideoUploadPhase] = useState('idle')
+  const [galleryVideoErrors, setGalleryVideoErrors] = useState([])
+  const [updatingGalleryVideoId, setUpdatingGalleryVideoId] = useState(null)
+  const galleryUploadAbortRef = useRef(null)
+  const finalizedGalleryUploadRef = useRef(null)
+  const [selectedExcelValidator, setSelectedExcelValidator] = useState('rule001_nakshatra_lagnam')
+  const [excelValidationResult, setExcelValidationResult] = useState(null)
+  const [excelValidationStatus, setExcelValidationStatus] = useState('idle')
   const [tabLoading, setTabLoading] = useState('')
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('')
@@ -511,8 +767,12 @@ function AdminPage() {
     setMessage('')
 
     try {
-      const data = await fetchAdminPaymentMethodSettings()
+      const [data, regenerationSettings] = await Promise.all([
+        fetchAdminPaymentMethodSettings(),
+        fetchAdminPredictionRegenerationSettings(),
+      ])
       setPaymentSettings(data)
+      setPredictionRegenerationSettings(regenerationSettings)
       setPaymentSettingsDrafts(Object.fromEntries(data.map((setting) => [setting.service_type, paymentSettingDraft(setting)])))
       setPaymentSettingsStatus('ready')
       return data
@@ -544,6 +804,25 @@ function AdminPage() {
       setTabLoading('')
     }
   }, [futureManualPaymentFilter, futureManualPaymentSearch])
+
+  const loadGalleryVideos = useCallback(async () => {
+    setTabLoading('galleryVideos')
+    setGalleryVideoStatus('loading')
+    setMessage('')
+
+    try {
+      const data = await fetchAdminGalleryVideos()
+      setGalleryVideos(data)
+      setGalleryVideoStatus('ready')
+      return data
+    } catch (error) {
+      setGalleryVideoStatus('error')
+      setMessage(error.response?.data?.message || 'Unable to load gallery videos.')
+      return []
+    } finally {
+      setTabLoading('')
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -578,11 +857,33 @@ function AdminPage() {
   }, [])
 
   useEffect(() => () => {
+    galleryUploadAbortRef.current?.abort()
+  }, [])
+
+  useEffect(() => () => {
     if (selectedFuturePaymentProof?.url) {
       URL.revokeObjectURL(selectedFuturePaymentProof.url)
     }
   }, [selectedFuturePaymentProof])
+  const validatePredictionExcel = async () => {
+    setExcelValidationStatus('loading')
+    setExcelValidationResult(null)
+    setMessage('Validating prediction Excel...')
 
+    try {
+      const result = await validateAdminPredictionExcel(selectedExcelValidator)
+
+      setExcelValidationResult(result)
+      setExcelValidationStatus('ready')
+      setMessage(result.message || 'Excel validation completed.')
+    } catch (error) {
+      setExcelValidationStatus('error')
+      setMessage(
+        error.response?.data?.message ||
+        'Unable to validate prediction Excel.'
+      )
+    }
+  }
   const changeAdminTab = (tabId) => {
     if (tabId === activeTab) return
 
@@ -613,6 +914,10 @@ function AdminPage() {
       loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
     }
 
+    if (tabId === 'galleryVideos' && galleryVideoStatus === 'idle') {
+      loadGalleryVideos()
+    }
+
     if (tabId === 'remedies' && remedyStatus === 'idle') {
       loadTempleRemedies(remedyGroup)
     }
@@ -634,6 +939,7 @@ function AdminPage() {
     if (activeTab === 'appointments') return appointmentCounts[appointmentGroup] ?? appointments.length
     if (activeTab === 'paymentSettings') return paymentSettings.length
     if (activeTab === 'paymentVerification') return futureManualPaymentCounts[futureManualPaymentFilter] ?? futureManualPayments.length
+    if (activeTab === 'galleryVideos') return galleryVideos.length
     if (activeTab === 'chatbot') {
       if (chatbotView === 'topics') return chatbotTopics.length
       if (chatbotView === 'intents') return chatbotIntents.length
@@ -641,7 +947,7 @@ function AdminPage() {
       return chatbotFaqs.length
     }
     return remedyCounts[remedyGroup] ?? remedies.length
-  }, [activeTab, appointmentCounts, appointmentGroup, appointments.length, chatbotFaqs.length, chatbotIntents.length, chatbotSettings, chatbotTopics.length, chatbotView, feedbackCategory, feedbackCounts, futureManualPaymentCounts, futureManualPaymentFilter, futureManualPayments.length, futureRequests.length, pastRequests.length, paymentSettings.length, remedies.length, remedyCounts, remedyGroup, users.length])
+  }, [activeTab, appointmentCounts, appointmentGroup, appointments.length, chatbotFaqs.length, chatbotIntents.length, chatbotSettings, chatbotTopics.length, chatbotView, feedbackCategory, feedbackCounts, futureManualPaymentCounts, futureManualPaymentFilter, futureManualPayments.length, futureRequests.length, galleryVideos.length, pastRequests.length, paymentSettings.length, remedies.length, remedyCounts, remedyGroup, users.length])
   const ratingSummary = useMemo(() => {
     const backendSummary = overview?.cards?.ratings
     if (backendSummary?.overall?.count) return backendSummary
@@ -677,6 +983,177 @@ function AdminPage() {
     removeAdminToken()
     removeAdminUser()
     window.location.assign('/admin-login')
+  }
+
+  const updateGalleryVideoDraft = (key, value) => {
+    if (key === 'video_file') {
+      finalizedGalleryUploadRef.current = null
+    }
+
+    setGalleryVideoDraft((current) => ({
+      ...current,
+      [key]: value,
+    }))
+  }
+
+  const editGalleryVideo = (video) => {
+    setGalleryVideoDraft({
+      id: video.id,
+      title: video.title || '',
+      description: video.description || '',
+      category: video.category || 'General',
+      video_type: video.video_type || 'WIDE',
+      publication_status: video.publication_status || 'DRAFT',
+      display_order: video.display_order ?? 0,
+      is_active: Boolean(video.is_active),
+      thumbnail_file: null,
+      video_file: null,
+    })
+  }
+
+  const clearGalleryVideoDraft = () => {
+    finalizedGalleryUploadRef.current = null
+    setGalleryVideoDraft(emptyGalleryVideoDraft)
+    setGalleryVideoUploadProgress(null)
+    setGalleryVideoUploadPhase('idle')
+    setGalleryVideoErrors([])
+  }
+
+  const resetGalleryVideoDraft = () => {
+    if (savingGalleryVideo) {
+      galleryUploadAbortRef.current?.abort()
+      return
+    }
+
+    clearGalleryVideoDraft()
+  }
+
+  const cancelGalleryVideoUpload = () => {
+    galleryUploadAbortRef.current?.abort()
+  }
+
+  const saveGalleryVideo = async (event) => {
+    event.preventDefault()
+    if (savingGalleryVideo) return
+
+    if (!galleryVideoDraft.id && !galleryVideoDraft.video_file && !finalizedGalleryUploadRef.current) {
+      setMessage('Choose a video file before saving.')
+      return
+    }
+
+    const abortController = new AbortController()
+    galleryUploadAbortRef.current = abortController
+    setSavingGalleryVideo(true)
+    setGalleryVideoErrors([])
+    setGalleryVideoUploadProgress(galleryVideoDraft.video_file ? 0 : null)
+    setGalleryVideoUploadPhase(galleryVideoDraft.video_file ? 'uploading' : 'saving')
+    setMessage(galleryVideoDraft.id ? 'Updating gallery video...' : 'Saving gallery video...')
+
+    try {
+      const payload = new FormData()
+      payload.append('title', galleryVideoDraft.title)
+      payload.append('description', galleryVideoDraft.description || '')
+      payload.append('category', galleryVideoDraft.category || 'General')
+      payload.append('video_type', galleryVideoDraft.video_type)
+      payload.append('publication_status', galleryVideoDraft.publication_status)
+      payload.append('display_order', galleryVideoDraft.display_order ?? 0)
+      payload.append('is_active', galleryVideoDraft.is_active ? '1' : '0')
+      if (galleryVideoDraft.thumbnail_file) payload.append('thumbnail_file', galleryVideoDraft.thumbnail_file)
+
+      if (galleryVideoDraft.video_file) {
+        const file = galleryVideoDraft.video_file
+        const cached = finalizedGalleryUploadRef.current
+        const canReuse = cached
+          && cached.fileName === file.name
+          && cached.fileSize === file.size
+          && cached.fileLastModified === file.lastModified
+        let uploadId = canReuse ? cached.uploadId : null
+
+        if (!uploadId) {
+          const result = await uploadGalleryVideoInChunks({
+            file,
+            signal: abortController.signal,
+            onProgress: ({ percent, phase }) => {
+              setGalleryVideoUploadProgress(percent)
+              setGalleryVideoUploadPhase(phase)
+              setMessage(phase === 'processing' ? 'Processing video...' : `Uploading video... ${percent}%`)
+            },
+          })
+          uploadId = result.uploadId
+          finalizedGalleryUploadRef.current = {
+            uploadId,
+            fileName: file.name,
+            fileSize: file.size,
+            fileLastModified: file.lastModified,
+          }
+        }
+
+        payload.append('upload_id', uploadId)
+        setGalleryVideoUploadProgress(100)
+        setGalleryVideoUploadPhase('processing')
+        setMessage('Processing video...')
+      }
+
+      const response = galleryVideoDraft.id
+        ? await updateAdminGalleryVideo(galleryVideoDraft.id, payload, { signal: abortController.signal })
+        : await createAdminGalleryVideo(payload, { signal: abortController.signal })
+
+      finalizedGalleryUploadRef.current = null
+      setMessage(response.message || 'Video uploaded successfully.')
+      clearGalleryVideoDraft()
+      await loadGalleryVideos()
+    } catch (error) {
+      if (isAbortError(error)) {
+        setMessage('Video upload cancelled.')
+        return
+      }
+
+      const messages = adminUploadErrorMessages(error)
+      setGalleryVideoErrors(messages)
+      setMessage(messages[0] || 'Unable to save gallery video.')
+    } finally {
+      if (galleryUploadAbortRef.current === abortController) {
+        galleryUploadAbortRef.current = null
+      }
+      setSavingGalleryVideo(false)
+      window.setTimeout(() => {
+        setGalleryVideoUploadProgress(null)
+        setGalleryVideoUploadPhase('idle')
+      }, 700)
+    }
+  }
+
+  const toggleGalleryVideoVisibility = async (video) => {
+    setUpdatingGalleryVideoId(video.id)
+    setMessage(video.is_active ? 'Hiding gallery video...' : 'Showing gallery video...')
+
+    try {
+      const response = await updateAdminGalleryVideoVisibility(video.id, !video.is_active)
+      setMessage(response.message || 'Gallery video updated.')
+      await loadGalleryVideos()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to update gallery video visibility.')
+    } finally {
+      setUpdatingGalleryVideoId(null)
+    }
+  }
+
+  const removeGalleryVideo = async (video) => {
+    if (!window.confirm(`Delete "${video.title}" from the gallery?`)) return
+
+    setUpdatingGalleryVideoId(video.id)
+    setMessage('Deleting gallery video...')
+
+    try {
+      const response = await deleteAdminGalleryVideo(video.id)
+      setMessage(response.message || 'Gallery video deleted.')
+      if (galleryVideoDraft.id === video.id) resetGalleryVideoDraft()
+      await loadGalleryVideos()
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to delete gallery video.')
+    } finally {
+      setUpdatingGalleryVideoId(null)
+    }
   }
 
   const updateRemedyEdit = (id, key, value) => {
@@ -1128,6 +1605,27 @@ function AdminPage() {
     }
   }
 
+  const markPredictionRegeneration = async (predictionType) => {
+    const label = predictionType === 'future' ? 'Future' : 'Past'
+    const confirmed = window.confirm(`Existing ${label} prediction results will be recalculated from the current prediction data the next time each prediction is accessed. Continue?`)
+    if (!confirmed) return
+
+    setMarkingRegenerationType(predictionType)
+    setMessage(`Marking ${label} predictions for regeneration...`)
+
+    try {
+      const response = await markAdminPredictionRegeneration(predictionType)
+      setPredictionRegenerationSettings((current) => current.map((setting) => (
+        setting.prediction_type === predictionType ? response.data : setting
+      )))
+      setMessage(response.message || `${label} predictions marked for regeneration.`)
+    } catch (error) {
+      setMessage(error.response?.data?.message || `Unable to mark ${label} predictions for regeneration.`)
+    } finally {
+      setMarkingRegenerationType('')
+    }
+  }
+
   const changeFutureManualPaymentFilter = (filter) => {
     setFutureManualPaymentFilter(filter)
     loadFutureManualPayments(filter, futureManualPaymentSearch)
@@ -1349,14 +1847,21 @@ function AdminPage() {
             />
           ) : null}
           {status === 'ready' && !isActiveTabLoading && activeTab === 'paymentSettings' ? (
-            <PaymentMethodSettingsPanel
-              settings={paymentSettings}
-              drafts={paymentSettingsDrafts}
-              status={paymentSettingsStatus}
-              savingService={savingPaymentService}
-              onChange={updatePaymentSettingDraft}
-              onSave={savePaymentSetting}
-            />
+            <>
+              <PredictionRegenerationPanel
+                settings={predictionRegenerationSettings}
+                markingType={markingRegenerationType}
+                onMark={markPredictionRegeneration}
+              />
+              <PaymentMethodSettingsPanel
+                settings={paymentSettings}
+                drafts={paymentSettingsDrafts}
+                status={paymentSettingsStatus}
+                savingService={savingPaymentService}
+                onChange={updatePaymentSettingDraft}
+                onSave={savePaymentSetting}
+              />
+            </>
           ) : null}
           {status === 'ready' && !isActiveTabLoading && activeTab === 'paymentVerification' ? (
             <FutureVideoPaymentVerificationPanel
@@ -1373,6 +1878,26 @@ function AdminPage() {
               onViewProof={openFuturePaymentProof}
               onVerify={verifyFutureManualPayment}
               onReject={rejectFutureManualPayment}
+            />
+          ) : null}
+          {status === 'ready' && !isActiveTabLoading && activeTab === 'galleryVideos' ? (
+            <AdminGalleryVideosPanel
+              videos={galleryVideos}
+              status={galleryVideoStatus}
+              draft={galleryVideoDraft}
+              isSaving={savingGalleryVideo}
+              uploadProgress={galleryVideoUploadProgress}
+              uploadPhase={galleryVideoUploadPhase}
+              errors={galleryVideoErrors}
+              updatingId={updatingGalleryVideoId}
+              onChange={updateGalleryVideoDraft}
+              onEdit={editGalleryVideo}
+              onCancel={resetGalleryVideoDraft}
+              onCancelUpload={cancelGalleryVideoUpload}
+              onSave={saveGalleryVideo}
+              onToggle={toggleGalleryVideoVisibility}
+              onDelete={removeGalleryVideo}
+              onRefresh={loadGalleryVideos}
             />
           ) : null}
           {status === 'ready' && !isActiveTabLoading && activeTab === 'feedback' ? (
@@ -1407,6 +1932,19 @@ function AdminPage() {
               onClearCache={clearChatbotOpenAiCache}
             />
           ) : null}
+          {status === 'ready' && activeTab === 'excelValidator' ? (
+            <PredictionExcelValidator
+              result={excelValidationResult}
+              validationStatus={excelValidationStatus}
+              selectedValidator={selectedExcelValidator}
+              onValidatorChange={(validator) => {
+                setSelectedExcelValidator(validator)
+                setExcelValidationResult(null)
+                setExcelValidationStatus('idle')
+              }}
+              onValidate={validatePredictionExcel}
+            />
+          ) : null}
         </section>
 
         {selectedPrediction ? (
@@ -1431,6 +1969,310 @@ function AdminPage() {
   )
 }
 
+function AdminGalleryVideosPanel({
+  videos,
+  status,
+  draft,
+  isSaving,
+  uploadProgress,
+  uploadPhase,
+  errors,
+  updatingId,
+  onChange,
+  onEdit,
+  onCancel,
+  onCancelUpload,
+  onSave,
+  onToggle,
+  onDelete,
+  onRefresh,
+}) {
+  const [copiedVideoId, setCopiedVideoId] = useState(null)
+  const categoryOptions = Array.from(new Set(['General', ...videos.map((video) => video.category || 'General')]))
+  const isCustomCategory = draft.category && !categoryOptions.includes(draft.category)
+  const categorySelectValue = isCustomCategory || !draft.category ? '__new' : draft.category
+
+  const copyShareLink = async (video) => {
+    const shareUrl = galleryVideoShareUrl(video)
+
+    try {
+      const copied = await copyTextToClipboard(shareUrl)
+      if (!copied) return
+      setCopiedVideoId(video.id)
+      window.setTimeout(() => {
+        setCopiedVideoId((current) => (current === video.id ? null : current))
+      }, 1800)
+    } catch {
+      setCopiedVideoId(null)
+    }
+  }
+
+  return (
+    <section className="admin-section">
+      <div className="admin-section-header">
+        <div>
+          <h3>Gallery Videos</h3>
+          <p>Manage the single public video library used by Gallery, Recent Videos, and Intro videos.</p>
+        </div>
+        <button type="button" className="admin-row-action" onClick={onRefresh}>Refresh</button>
+      </div>
+
+      <form className="admin-card admin-gallery-video-form is-compact" onSubmit={onSave}>
+        <div className="admin-gallery-upload-row">
+          <label>
+            <span>Thumbnail</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => onChange('thumbnail_file', event.target.files?.[0] || null)}
+              disabled={isSaving}
+            />
+            {draft.thumbnail_file ? <small>{draft.thumbnail_file.name}</small> : null}
+          </label>
+
+          <label>
+            <span>Video File {draft.id ? '' : '*'}</span>
+            <input
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime"
+              onChange={(event) => onChange('video_file', event.target.files?.[0] || null)}
+              required={!draft.id}
+              disabled={isSaving}
+            />
+            {draft.video_file ? <small>{draft.video_file.name}</small> : null}
+          </label>
+        </div>
+
+        <div className="admin-form-grid admin-gallery-compact-grid">
+          <label>
+            <span>Title *</span>
+            <input
+              type="text"
+              value={draft.title}
+              onChange={(event) => onChange('title', event.target.value)}
+              required
+            />
+          </label>
+
+          <label>
+            <span>Video Type *</span>
+            <select value={draft.video_type} onChange={(event) => onChange('video_type', event.target.value)} required>
+              <option value="SHORT">Short</option>
+              <option value="WIDE">Wide Video</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Category *</span>
+            <select
+              value={categorySelectValue}
+              onChange={(event) => onChange('category', event.target.value === '__new' ? '' : event.target.value)}
+              required
+            >
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+              <option value="__new">Add new category...</option>
+            </select>
+          </label>
+
+          {(categorySelectValue === '__new') ? (
+            <label>
+              <span>New Category *</span>
+              <input
+                type="text"
+                value={draft.category}
+                onChange={(event) => onChange('category', event.target.value)}
+                required
+              />
+            </label>
+          ) : null}
+
+          <label>
+            <span>Display Order</span>
+            <input
+              type="number"
+              value={draft.display_order}
+              onChange={(event) => onChange('display_order', event.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Publication *</span>
+            <select value={draft.publication_status} onChange={(event) => onChange('publication_status', event.target.value)} required>
+              <option value="DRAFT">Draft</option>
+              <option value="PUBLISHED">Published</option>
+            </select>
+          </label>
+
+          <label className="admin-toggle-row">
+            <span>Visible</span>
+            <input
+              type="checkbox"
+              checked={draft.is_active}
+              onChange={(event) => onChange('is_active', event.target.checked)}
+            />
+          </label>
+
+          <label className="admin-form-wide admin-gallery-description">
+            <span>Description</span>
+            <textarea
+              value={draft.description}
+              onChange={(event) => onChange('description', event.target.value)}
+              rows={3}
+            />
+          </label>
+        </div>
+
+        <footer className="admin-gallery-video-actions">
+          <button type="submit" className="admin-primary-button" disabled={isSaving}>
+            {isSaving ? 'Saving...' : draft.publication_status === 'PUBLISHED' ? 'Save & Publish' : 'Save Draft'}
+          </button>
+          {draft.id ? (
+            <button type="button" className="admin-secondary-button" onClick={onCancel} disabled={isSaving}>
+              Cancel Edit
+            </button>
+          ) : null}
+        </footer>
+      </form>
+
+      {errors?.length ? (
+        <div className="admin-gallery-error-box" role="alert">
+          <strong>Video could not be saved</strong>
+          {errors.map((error) => (
+            <p key={error}>{error}</p>
+          ))}
+        </div>
+      ) : null}
+
+      {isSaving && (draft.video_file || uploadPhase === 'uploading' || uploadPhase === 'processing') ? (
+        <div className="admin-upload-modal-backdrop" role="presentation">
+          <section className="admin-upload-modal" role="status" aria-live="polite" aria-label="Video upload progress">
+            <div className="admin-upload-modal-mark">
+              <span></span>
+            </div>
+            <div>
+              <h4>{uploadPhase === 'processing' || uploadPhase === 'saving' ? 'Processing video...' : 'Uploading video...'}</h4>
+              <p>
+                {uploadPhase === 'processing' || uploadPhase === 'saving'
+                  ? 'Please keep this window open while the video is saved.'
+                  : 'Please keep this window open while the video is uploaded.'}
+              </p>
+            </div>
+            <div className="admin-upload-progress-shell">
+              <span style={{ width: `${uploadProgress ?? 0}%` }}></span>
+            </div>
+            <strong>
+              {uploadPhase === 'processing' || uploadPhase === 'saving'
+                ? 'Processing video...'
+                : `${uploadProgress ?? 0}%`}
+            </strong>
+            <button type="button" className="admin-secondary-button" onClick={onCancelUpload}>
+              Cancel
+            </button>
+          </section>
+        </div>
+      ) : null}
+
+      {status === 'loading' ? <AdminProgress label="Loading gallery videos..." /> : null}
+      {status === 'error' ? <div className="admin-empty">Unable to load gallery videos.</div> : null}
+      {status !== 'loading' && !videos.length ? <div className="admin-empty">No gallery videos found.</div> : null}
+
+      {videos.length ? (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-gallery-video-table">
+            <thead>
+              <tr>
+                <th>Thumbnail</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Type</th>
+                <th>Display Order</th>
+                <th>Publication</th>
+                <th>Status</th>
+                <th>Published</th>
+                <th>Share Link</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {videos.map((video) => (
+                <tr key={video.id}>
+                  <td>
+                    {video.thumbnail_url ? (
+                      <img className="admin-gallery-thumb" src={video.thumbnail_url} alt={`${video.title} thumbnail`} />
+                    ) : (
+                      <span className="admin-muted">No thumbnail</span>
+                    )}
+                  </td>
+                  <td>
+                    <strong>{video.title}</strong>
+                    {video.description ? <small>{video.description}</small> : null}
+                  </td>
+                  <td>{video.category || 'General'}</td>
+                  <td><span className="admin-badge is-blue">{video.video_type === 'SHORT' ? 'Short' : 'Wide Video'}</span></td>
+                  <td>{video.display_order}</td>
+                  <td><span className={`admin-badge ${video.publication_status === 'PUBLISHED' ? 'is-green' : 'is-gold'}`}>{video.publication_status === 'PUBLISHED' ? 'Published' : 'Draft'}</span></td>
+                  <td><span className={`admin-badge ${video.is_active ? 'is-green' : 'is-muted'}`}>{video.is_active ? 'Visible' : 'Hidden'}</span></td>
+                  <td>{formatDate(video.published_at)}</td>
+                  <td>
+                    <div className="admin-share-link">
+                      <input
+                        type="text"
+                        readOnly
+                        value={galleryVideoShareUrl(video)}
+                        aria-label={`Share link for ${video.title}`}
+                        onFocus={(event) => event.target.select()}
+                      />
+                      <button
+                        type="button"
+                        className="admin-share-copy"
+                        onClick={() => copyShareLink(video)}
+                        aria-label={`Copy share link for ${video.title}`}
+                      >
+                        {copiedVideoId === video.id ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    {copiedVideoId === video.id ? <small className="admin-share-copied">Link copied</small> : null}
+                  </td>
+                  <td>
+                    <div className="admin-row-actions">
+                      <button type="button" className="admin-row-action" onClick={() => onEdit(video)}>Edit</button>
+                      <a className="admin-row-action" href={`/admin/gallery-videos/${video.id}/preview`} target="_blank" rel="noreferrer">Preview</a>
+                      <button
+                        type="button"
+                        className="admin-row-action"
+                        onClick={() => onToggle(video)}
+                        disabled={updatingId === video.id}
+                      >
+                        {video.is_active ? 'Hide' : 'Show'}
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-row-action is-danger"
+                        onClick={() => onDelete(video)}
+                        disabled={updatingId === video.id}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {videos.length ? (
+        <p className="admin-share-hint">
+          Share links use the public Gallery URL <code>/videos/VIDEO_ID/title-slug</code> and open that video in the player. Hidden videos stay unavailable to the public.
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
 function AdminIcon({ name }) {
   const paths = {
     users: 'M16 20v-1.5c0-1.7-1.8-3-4-3s-4 1.3-4 3V20M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm6.5 8v-1.2c0-1.3-1-2.4-2.5-2.9M17 5.4a3 3 0 0 1 0 5.2',
@@ -1446,6 +2288,7 @@ function AdminIcon({ name }) {
     card: 'M3.5 6.5h17v11h-17Zm0 3h17M6.5 14.5h4',
     qr: 'M4 4h6v6H4Zm10 0h6v6h-6ZM4 14h6v6H4Zm10 0h2v2h-2Zm4 0h2v2h-2Zm-4 4h2v2h-2Zm4 0h2v2h-2Z',
     upload: 'M12 16V5m0 0L8 9m4-4 4 4M5 16v3h14v-3',
+    refresh: 'M20 6v5h-5M4 18v-5h5M18.2 10A6.5 6.5 0 0 0 7 6.8L4 10m2 4a6.5 6.5 0 0 0 11.2 3.2L20 14',
   }
 
   return (
@@ -2223,7 +3066,6 @@ function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast,
   const ratingLabel = detail?.rating?.label || 'Not Rated'
   const statusLabel = labelFromKey(result.status || header.status)
   const periodLabelText = detail?.period?.label || 'Prediction period unavailable'
-  const viewerUrl = detail?.viewer_url
 
   return (
     <section className="admin-modal-overlay" role="dialog" aria-modal="true" aria-label={`${labelFromKey(type)} prediction details`}>
@@ -2261,15 +3103,7 @@ function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast,
           <>
             <div className="prediction-detail-body">
               <aside className="prediction-detail-left" aria-label="Astrology data">
-                {viewerUrl ? (
-                  <iframe
-                    src={viewerUrl}
-                    className="prediction-response-frame"
-                    title="Astrology Data"
-                  />
-                ) : (
-                  <div className="admin-empty is-compact">Astrology data is unavailable for this request.</div>
-                )}
+                <AdminPredictionResponseViewer astrology={detail.astrology} />
               </aside>
               <div className="prediction-detail-right">
                 <section className="admin-prediction-summary-bar" aria-label="Prediction summary">
@@ -2319,6 +3153,118 @@ function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast,
       </div>
     </section>
   )
+}
+
+function AdminPredictionResponseViewer({ astrology }) {
+  if (!astrology) {
+    return <div className="admin-empty is-compact">Astrology data is unavailable for this request.</div>
+  }
+
+  return (
+    <div className="admin-prediction-response-viewer">
+      <section className="admin-response-section">
+        <h4>Birth</h4>
+        <DefinitionGrid data={astrology.birth} />
+      </section>
+      <section className="admin-response-section">
+        <h4>Identity</h4>
+        <DefinitionGrid data={astrology.identity} />
+      </section>
+      <section className="admin-response-section">
+        <h4>Chart</h4>
+        <GenericValue value={astrology.chart} />
+      </section>
+      <section className="admin-response-section">
+        <h4>Planets Table</h4>
+        <GenericRowsTable rows={normalizeViewerRows(astrology.planets)} />
+      </section>
+      <section className="admin-response-section">
+        <h4>Dasha Major Table</h4>
+        <GenericRowsTable rows={normalizeViewerRows(astrology.dasha_major)} />
+      </section>
+    </div>
+  )
+}
+
+function DefinitionGrid({ data }) {
+  const entries = Object.entries(data || {}).filter(([, value]) => value !== null && value !== undefined && value !== '')
+
+  if (!entries.length) return <div className="admin-empty is-compact">No data.</div>
+
+  return (
+    <dl className="admin-response-definition-grid">
+      {entries.map(([key, value]) => (
+        <div key={key}>
+          <dt>{labelFromKey(key)}</dt>
+          <dd><DisplayValue value={value} /></dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function GenericValue({ value }) {
+  if (value === null || value === undefined || value === '') {
+    return <div className="admin-empty is-compact">No data.</div>
+  }
+
+  if (Array.isArray(value)) {
+    return <GenericRowsTable rows={normalizeViewerRows(value)} />
+  }
+
+  if (typeof value === 'object') {
+    return <DefinitionGrid data={value} />
+  }
+
+  return <p className="admin-response-plain-value"><DisplayValue value={value} /></p>
+}
+
+function GenericRowsTable({ rows }) {
+  if (!rows.length) return <div className="admin-empty is-compact">No data.</div>
+
+  const columns = rows.reduce((keys, row) => {
+    Object.keys(row || {}).forEach((key) => {
+      if (!keys.includes(key)) keys.push(key)
+    })
+    return keys
+  }, [])
+
+  if (!columns.length) return <div className="admin-empty is-compact">No data.</div>
+
+  return (
+    <div className="admin-table-wrap">
+      <table className="admin-table admin-response-table">
+        <thead>
+          <tr>{columns.map((key) => <th key={key}>{labelFromKey(key)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`viewer-row-${index}`}>
+              {columns.map((key) => (
+                <td key={key}><DisplayValue value={row?.[key]} /></td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function DisplayValue({ value }) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (Array.isArray(value) || typeof value === 'object') return <code>{JSON.stringify(value)}</code>
+
+  return String(value)
+}
+
+function normalizeViewerRows(value) {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((row) => row && typeof row === 'object')
+    .map((row) => ({ ...row }))
 }
 
 function IdentityVideoTable({ rows }) {
@@ -3181,6 +4127,44 @@ function FutureManualPaymentStatusBadge({ status }) {
   const badgeClass = normalized === 'VERIFIED' ? 'is-green' : normalized === 'REJECTED' ? 'is-muted' : 'is-gold'
 
   return <span className={`admin-badge ${badgeClass}`}>{labelFromKey(normalized || 'PENDING')}</span>
+}
+
+function PredictionRegenerationPanel({ settings, markingType, onMark }) {
+  const byType = Object.fromEntries((settings || []).map((setting) => [setting.prediction_type, setting]))
+
+  return (
+    <section className="admin-regeneration-settings">
+      <div className="admin-regeneration-head">
+        <span className="admin-payment-service-icon"><AdminIcon name="refresh" /></span>
+        <div>
+          <h3>Prediction Regeneration</h3>
+          <p>Mark stored predictions to recalculate lazily on next access</p>
+        </div>
+      </div>
+
+      <div className="admin-regeneration-grid">
+        {['past', 'future'].map((predictionType) => {
+          const setting = byType[predictionType] || { prediction_type: predictionType, regeneration_version: 0, is_enabled: false }
+          const title = predictionType === 'future' ? 'Future Prediction' : 'Past Prediction'
+          const isSaving = markingType === predictionType
+
+          return (
+            <article className="admin-regeneration-card" key={predictionType}>
+              <div>
+                <h4>{title}</h4>
+                <p>Current regeneration version: <strong>{setting.regeneration_version ?? 0}</strong></p>
+                <small>{setting.is_enabled ? `Enabled${setting.updated_at ? ` since ${formatDate(setting.updated_at)}` : ''}` : 'No regeneration cycle is active'}</small>
+              </div>
+              <button type="button" disabled={Boolean(markingType)} onClick={() => onMark(predictionType)}>
+                {isSaving ? <span className="admin-save-spinner" aria-hidden="true" /> : null}
+                {isSaving ? 'Marking...' : `Mark All ${predictionType === 'future' ? 'Future' : 'Past'} Predictions for Regeneration`}
+              </button>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
 }
 
 function FuturePaymentProofModal({ proof, onClose }) {

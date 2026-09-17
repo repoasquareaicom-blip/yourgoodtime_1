@@ -2,6 +2,9 @@
   RewriteEngine On
   RewriteBase /
 
+  RewriteCond %{HTTP_USER_AGENT} (whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|telegrambot|discordbot|pinterest|googlebot|bingbot|embedly|iframely|skypeuripreview|applebot|redditbot|quora|bitlybot|outbrain|showyoubot) [NC]
+  RewriteRule ^videos/([0-9]+)(?:/.*)?$ gallery-share.php?id=$1 [L,QSA]
+
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d

@@ -3,13 +3,16 @@
 namespace Tests\Feature;
 
 use App\Models\PredictionRequest;
+use App\Models\AdminUser;
 use App\Models\PredictionResult;
 use App\Models\PaymentTransaction;
 use App\Models\PredictionEntitlement;
 use App\Models\PredictionProduct;
+use App\Models\PredictionRegenerationSetting;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -231,6 +234,270 @@ class PredictionResultApiTest extends TestCase
             ->count());
     }
 
+    public function test_stored_result_response_recovers_identity_video_from_column_when_payload_is_missing_it(): void
+    {
+        $predictionRequest = $this->predictionRequest14();
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => '34',
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'prediction_videos' => [
+                    [
+                        'video_ids' => ['443'],
+                        'system_year_from' => 2016,
+                        'workbook' => '16.xlsx',
+                    ],
+                ],
+                'summary' => [
+                    'to_year' => now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->year,
+                ],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.result_id', $storedResult->id)
+            ->assertJsonPath('data.identity_video.video_id', '34')
+            ->assertJsonPath('data.identity_video.source.file', 'nakshatra_lagnam.xlsx')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '443');
+    }
+
+    public function test_old_result_recovers_missing_identity_video_from_stored_astrology(): void
+    {
+        $this->fakeNakshatraLagnamWorkbook();
+        $predictionRequest = $this->predictionRequest14();
+        $predictionRequest->forceFill([
+            'normalized_astrology_data' => $this->productionShapedNormalizedData(),
+        ])->save();
+        $predictionVideos = [
+            [
+                'video_ids' => ['443'],
+                'system_year' => 2026,
+                'workbook' => '51 TO 60.xlsx',
+            ],
+        ];
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => null,
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'identity_video' => null,
+                'prediction_videos' => $predictionVideos,
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        $this->getJson("/api/predictions/{$predictionRequest->id}/result?type=past&request_uuid={$predictionRequest->request_uuid}")
+            ->assertOk()
+            ->assertJsonPath('data.result_id', $storedResult->id)
+            ->assertJsonPath('data.identity_video.video_id', '34')
+            ->assertJsonPath('data.identity_video.source.file', 'nakshatra_lagnam.xlsx')
+            ->assertJsonPath('data.identity_video.source.sheet', 'Rule001')
+            ->assertJsonPath('data.identity_video.source.nakshatra', 'Poorvabhadrapada')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '443');
+
+        $storedResult->refresh();
+        $this->assertSame('34', $storedResult->identity_video_id);
+        $this->assertSame('34', data_get($storedResult->result_payload, 'identity_video.video_id'));
+        $this->assertSame($predictionVideos, data_get($storedResult->result_payload, 'prediction_videos'));
+    }
+
+    public function test_payload_identity_is_restored_from_identity_video_column_without_rule001(): void
+    {
+        $predictionRequest = $this->predictionRequest14();
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => '34',
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'prediction_videos' => [['video_ids' => ['443']]],
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        File::deleteDirectory($this->predictionDataDirectory());
+
+        $this->getJson("/api/predictions/{$predictionRequest->id}/result?type=past&request_uuid={$predictionRequest->request_uuid}")
+            ->assertOk()
+            ->assertJsonPath('data.result_id', $storedResult->id)
+            ->assertJsonPath('data.identity_video.video_id', '34')
+            ->assertJsonPath('data.identity_video.source.file', 'nakshatra_lagnam.xlsx');
+
+        $this->assertSame('34', data_get($storedResult->refresh()->result_payload, 'identity_video.video_id'));
+    }
+
+    public function test_existing_payload_identity_is_preserved_unchanged(): void
+    {
+        $predictionRequest = $this->predictionRequest14();
+        $identity = [
+            'video_id' => 'INTRO_CUSTOM',
+            'source' => [
+                'file' => 'custom.xlsx',
+                'sheet' => 'Original',
+                'status' => 'LEGACY',
+            ],
+        ];
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => null,
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'identity_video' => $identity,
+                'prediction_videos' => [['video_ids' => ['443']]],
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        File::deleteDirectory($this->predictionDataDirectory());
+
+        $this->getJson("/api/predictions/{$predictionRequest->id}/result?type=past&request_uuid={$predictionRequest->request_uuid}")
+            ->assertOk()
+            ->assertJsonPath('data.identity_video.video_id', 'INTRO_CUSTOM')
+            ->assertJsonPath('data.identity_video.source.file', 'custom.xlsx');
+
+        $storedResult->refresh();
+        $this->assertSame('INTRO_CUSTOM', $storedResult->identity_video_id);
+        $this->assertSame($identity, data_get($storedResult->result_payload, 'identity_video'));
+    }
+
+    public function test_future_result_recovers_identity_without_changing_prediction_videos(): void
+    {
+        $this->fakeNakshatraLagnamWorkbook();
+        $predictionRequest = $this->predictionRequest14();
+        $entitlement = $this->activeFutureEntitlement($predictionRequest);
+        $predictionVideos = [
+            [
+                'system_year' => $entitlement->access_start_year,
+                'video_ids' => ['619'],
+                'workbook' => 'FUTURE_51 TO 60.xlsx',
+            ],
+        ];
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'user_id' => $entitlement->user_id,
+            'prediction_entitlement_id' => $entitlement->id,
+            'prediction_type' => 'future',
+            'identity_video_id' => null,
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'future',
+                'prediction_videos' => $predictionVideos,
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        $this->getJson("/api/predictions/{$predictionRequest->id}/result?type=future&request_uuid={$predictionRequest->request_uuid}&entitlement_id={$entitlement->id}")
+            ->assertOk()
+            ->assertJsonPath('data.result_id', $storedResult->id)
+            ->assertJsonPath('data.identity_video.video_id', '34')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '619');
+
+        $this->assertSame($predictionVideos, data_get($storedResult->refresh()->result_payload, 'prediction_videos'));
+    }
+
+    public function test_reopening_recovered_result_does_not_rerun_rule001(): void
+    {
+        $this->fakeNakshatraLagnamWorkbook();
+        $predictionRequest = $this->predictionRequest14();
+        PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => null,
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'prediction_videos' => [['video_ids' => ['443']]],
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        $url = "/api/predictions/{$predictionRequest->id}/result?type=past&request_uuid={$predictionRequest->request_uuid}";
+        $this->getJson($url)->assertOk()->assertJsonPath('data.identity_video.video_id', '34');
+
+        File::deleteDirectory($this->predictionDataDirectory());
+
+        $this->getJson($url)
+            ->assertOk()
+            ->assertJsonPath('data.identity_video.video_id', '34');
+    }
+
+    public function test_missing_stored_astrology_does_not_invent_identity_video(): void
+    {
+        $this->fakeNakshatraLagnamWorkbook();
+        $predictionRequest = $this->predictionRequest14();
+        $predictionRequest->forceFill([
+            'normalized_astrology_data' => ['identity' => ['lagnam' => null, 'rasi' => null, 'nakshatra' => null]],
+        ])->save();
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => null,
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'prediction_videos' => [['video_ids' => ['443']]],
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
+
+        $this->getJson("/api/predictions/{$predictionRequest->id}/result?type=past&request_uuid={$predictionRequest->request_uuid}")
+            ->assertOk()
+            ->assertJsonPath('data.result_id', $storedResult->id)
+            ->assertJsonPath('data.identity_video', null);
+
+        $storedResult->refresh();
+        $this->assertNull($storedResult->identity_video_id);
+        $this->assertNull(data_get($storedResult->result_payload, 'identity_video'));
+    }
+
     public function test_stale_past_result_is_regenerated_when_current_past_range_moves_forward(): void
     {
         $this->seedSuccessfulPredictionData();
@@ -262,13 +529,13 @@ class PredictionResultApiTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('message', 'Prediction result generated successfully.')
-            ->assertJsonPath('data.identity_video.video_id', '34')
+            ->assertJsonPath('data.identity_video.video_id', 'old-identity')
             ->assertJsonPath('data.summary.to_year', $currentYear);
 
         $this->assertDatabaseHas('prediction_results', [
             'prediction_request_id' => $predictionRequest->id,
             'prediction_type' => 'past',
-            'identity_video_id' => '34',
+            'identity_video_id' => 'old-identity',
         ]);
     }
 
@@ -301,6 +568,227 @@ class PredictionResultApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Prediction result loaded successfully.')
             ->assertJsonPath('data.identity_video.video_id', 'stored-identity');
+    }
+
+    public function test_global_past_regeneration_version_regenerates_once_then_returns_stored_payload(): void
+    {
+        $this->seedSuccessfulPredictionData();
+        $predictionRequest = $this->predictionRequest14();
+        $currentYear = (int) now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
+        $storedResult = $this->storedPastResult($predictionRequest, [
+            'identity_video' => ['video_id' => 'old-identity'],
+            'prediction_videos' => [['system_year' => $currentYear, 'video_ids' => ['OLD']]],
+            'summary' => ['to_year' => $currentYear],
+        ], ['regeneration_version' => 1]);
+        $this->setRegenerationSetting('past', 2, true);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.identity_video.video_id', 'old-identity')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '6153');
+
+        $storedResult->refresh();
+        $this->assertSame(2, (int) $storedResult->regeneration_version);
+
+        $this->createAgeWorkbook('past', '51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2014', ['9999']));
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '6153');
+
+        $this->setRegenerationSetting('past', 3, true);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.identity_video.video_id', 'old-identity')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '9999');
+
+        $this->assertSame(3, (int) $storedResult->fresh()->regeneration_version);
+    }
+
+    public function test_future_regeneration_requires_active_entitlement_and_is_independent_from_past(): void
+    {
+        $this->seedSuccessfulPredictionData();
+        $predictionRequest = $this->predictionRequest14();
+        $entitlement = $this->activeFutureEntitlement($predictionRequest);
+        $futureResult = $this->storedFutureResult($predictionRequest, $entitlement, ['OLD_FUTURE'], 1);
+        $this->setRegenerationSetting('past', 2, true);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'future',
+            'request_uuid' => $predictionRequest->request_uuid,
+            'entitlement_id' => $entitlement->id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', 'OLD_FUTURE');
+
+        $this->setRegenerationSetting('future', 2, true);
+
+        $unauthorizedFutureRequest = PredictionRequest::query()->forceCreate([
+            'id' => 15,
+            'request_uuid' => (string) Str::uuid(),
+            'prediction_type' => 'past',
+            'status' => 'completed',
+            'full_name' => 'No Entitlement',
+            'date_of_birth' => '1973-12-16',
+            'time_of_birth' => '06:45',
+            'timezone' => 'Asia/Kolkata',
+            'place_of_birth' => 'Chennai, Tamil Nadu',
+            'email' => 'no-entitlement@example.com',
+            'latitude' => 13.0827,
+            'longitude' => 80.2707,
+            'birth_payload' => [],
+            'normalized_astrology_data' => $this->normalizedData(),
+            'submitted_at' => now(),
+            'completed_at' => now(),
+        ]);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $unauthorizedFutureRequest->id,
+            'type' => 'future',
+            'request_uuid' => $unauthorizedFutureRequest->request_uuid,
+        ])->assertForbidden();
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'future',
+            'request_uuid' => $predictionRequest->request_uuid,
+            'entitlement_id' => $entitlement->id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.identity_video.video_id', 'future-identity')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '619');
+
+        $futureResult->refresh();
+        $this->assertSame(2, (int) $futureResult->regeneration_version);
+        $this->assertSame($entitlement->id, (int) $futureResult->prediction_entitlement_id);
+        $this->assertSame('future-identity', data_get($futureResult->result_payload, 'identity_video.video_id'));
+    }
+
+    public function test_regeneration_failure_keeps_previous_payload_and_version(): void
+    {
+        $predictionRequest = $this->predictionRequest14();
+        $currentYear = (int) now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
+        $storedResult = $this->storedPastResult($predictionRequest, [
+            'identity_video' => ['video_id' => 'old-identity'],
+            'prediction_videos' => [['system_year' => $currentYear, 'video_ids' => ['OLD']]],
+            'summary' => ['to_year' => $currentYear],
+        ], ['regeneration_version' => 1]);
+        $this->setRegenerationSetting('past', 2, true);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])->assertStatus(500);
+
+        $storedResult->refresh();
+        $this->assertSame(1, (int) $storedResult->regeneration_version);
+        $this->assertSame('OLD', data_get($storedResult->result_payload, 'prediction_videos.0.video_ids.0'));
+        $this->assertSame('completed', $storedResult->status);
+    }
+
+    public function test_regeneration_restores_identity_video_payload_from_existing_identity_column(): void
+    {
+        $this->seedSuccessfulPredictionData();
+        $predictionRequest = $this->predictionRequest14();
+        $currentYear = (int) now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
+        $storedResult = PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => '00034',
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'past',
+                'prediction_videos' => [['system_year' => $currentYear, 'video_ids' => ['OLD']]],
+                'summary' => ['to_year' => $currentYear],
+                'warnings' => [],
+            ],
+            'summary_payload' => ['to_year' => $currentYear],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'regeneration_version' => 1,
+            'generated_at' => now()->subDay(),
+        ]);
+        $this->setRegenerationSetting('past', 2, true);
+
+        $this->postJson('/api/predictions/result', [
+            'id' => $predictionRequest->id,
+            'type' => 'past',
+            'request_uuid' => $predictionRequest->request_uuid,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.identity_video.video_id', '00034')
+            ->assertJsonPath('data.prediction_videos.0.video_ids.0', '6153');
+
+        $storedResult->refresh();
+        $this->assertSame('00034', $storedResult->identity_video_id);
+        $this->assertSame('00034', data_get($storedResult->result_payload, 'identity_video.video_id'));
+        $this->assertSame('nakshatra_lagnam.xlsx', data_get($storedResult->result_payload, 'identity_video.source.file'));
+    }
+
+    public function test_admin_individual_regenerate_past_sets_current_global_version(): void
+    {
+        $this->seedSuccessfulPredictionData();
+        $admin = AdminUser::query()->create([
+            'name' => 'Admin',
+            'email' => 'admin-regenerate@example.com',
+            'password' => Hash::make('secret123'),
+            'is_active' => true,
+        ]);
+        $predictionRequest = $this->predictionRequest14();
+        $this->storedPastResult($predictionRequest, [
+            'identity_video' => ['video_id' => 'old-identity'],
+            'prediction_videos' => [['system_year' => 2026, 'video_ids' => ['OLD']]],
+            'summary' => ['to_year' => 2026],
+        ], ['regeneration_version' => 1]);
+        $this->setRegenerationSetting('past', 4, true);
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson("/api/admin/prediction-requests/{$predictionRequest->id}/regenerate-past")
+            ->assertOk()
+            ->assertJsonPath('data.result.regeneration_version', 4);
+
+        $this->assertDatabaseHas('prediction_results', [
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'regeneration_version' => 4,
+        ]);
+    }
+
+    public function test_admin_can_increment_global_regeneration_version_without_touching_results(): void
+    {
+        $admin = AdminUser::query()->create([
+            'name' => 'Admin',
+            'email' => 'admin-mark-regeneration@example.com',
+            'password' => Hash::make('secret123'),
+            'is_active' => true,
+        ]);
+        $predictionRequest = $this->predictionRequest14();
+        $result = $this->storedPastResult($predictionRequest, [], ['regeneration_version' => 1]);
+        $this->setRegenerationSetting('past', 2, true);
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/admin/prediction-regeneration-settings/past/mark')
+            ->assertOk()
+            ->assertJsonPath('data.prediction_type', 'past')
+            ->assertJsonPath('data.regeneration_version', 3)
+            ->assertJsonPath('data.is_enabled', true);
+
+        $this->assertSame(1, (int) $result->fresh()->regeneration_version);
     }
 
     public function test_future_stored_result_can_be_loaded_for_selected_entitlement_only(): void
@@ -474,6 +962,63 @@ class PredictionResultApiTest extends TestCase
         $this->createAgeWorkbook('future', 'FUTURE_51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2006', ['619']));
     }
 
+    private function setRegenerationSetting(string $predictionType, int $version, bool $enabled): void
+    {
+        PredictionRegenerationSetting::query()->updateOrCreate(
+            ['prediction_type' => $predictionType],
+            ['regeneration_version' => $version, 'is_enabled' => $enabled]
+        );
+    }
+
+    private function storedPastResult(PredictionRequest $predictionRequest, array $payloadOverrides = [], array $overrides = []): PredictionResult
+    {
+        $payload = array_replace_recursive([
+            'prediction_request_id' => $predictionRequest->id,
+            'type' => 'past',
+            'identity_video' => ['video_id' => '34'],
+            'prediction_videos' => [],
+            'summary' => [],
+            'warnings' => [],
+        ], $payloadOverrides);
+
+        return PredictionResult::query()->create(array_merge([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => data_get($payload, 'identity_video.video_id'),
+            'result_payload' => $payload,
+            'summary_payload' => $payload['summary'] ?? [],
+            'warnings_payload' => $payload['warnings'] ?? [],
+            'status' => 'completed',
+            'regeneration_version' => 0,
+            'generated_at' => now(),
+        ], $overrides));
+    }
+
+    private function storedFutureResult(PredictionRequest $predictionRequest, PredictionEntitlement $entitlement, array $videoIds, int $regenerationVersion): PredictionResult
+    {
+        return PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'prediction_entitlement_id' => $entitlement->id,
+            'prediction_type' => 'future',
+            'identity_video_id' => 'future-identity',
+            'result_payload' => [
+                'prediction_request_id' => $predictionRequest->id,
+                'type' => 'future',
+                'identity_video' => ['video_id' => 'future-identity'],
+                'prediction_videos' => [
+                    ['system_year' => $entitlement->access_start_year, 'video_ids' => $videoIds],
+                ],
+                'summary' => [],
+                'warnings' => [],
+            ],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'regeneration_version' => $regenerationVersion,
+            'generated_at' => now(),
+        ]);
+    }
+
     private function predictionRequest14(): PredictionRequest
     {
         return PredictionRequest::query()->forceCreate([
@@ -613,6 +1158,38 @@ class PredictionResultApiTest extends TestCase
         ];
     }
 
+    private function productionShapedNormalizedData(): array
+    {
+        return [
+            'birth' => [
+                'date_of_birth' => '1973-12-16',
+                'time_of_birth' => '06:45',
+                'place_of_birth' => 'Chennai, Tamil Nadu',
+                'latitude' => 13.0827,
+                'longitude' => 80.2707,
+            ],
+            'identity' => [
+                'lagnam' => 'Aries',
+                'lagnam_lord' => 'Mars',
+                'rasi' => 'Pisces',
+                'rasi_lord' => 'Jupiter',
+                'nakshatra' => 'Purva Bhadrapad',
+                'nakshatra_lord' => 'Jupiter',
+                'nakshatra_pada' => 4,
+            ],
+            'dasha' => [
+                'current_major_lord' => 'Venus',
+                'major' => [
+                    ['planet' => 'Venus', 'planet_id' => 5, 'start' => '8-7-2019 18:21', 'end' => '8-7-2039 18:21'],
+                ],
+            ],
+            'chart' => [],
+            'planets' => [
+                ['id' => 5, 'name' => 'Venus', 'house' => 6],
+            ],
+        ];
+    }
+
     private function fakeNakshatraLagnamWorkbook(): void
     {
         $directory = $this->predictionDataDirectory();
@@ -627,6 +1204,7 @@ class PredictionResultApiTest extends TestCase
         $sheet->fromArray([
             ['Nakshatra', 'Rasi', 'Lagnam', 'VideoId'],
             ['Swati', 'Pisces', 'Aries', '34'],
+            ['Poorvabhadrapada', 'Pisces', 'Aries', '34'],
         ]);
 
         (new Xlsx($spreadsheet))->save($directory.DIRECTORY_SEPARATOR.'nakshatra_lagnam.xlsx');

@@ -1,6 +1,7 @@
 import demoIdentityVideo from '../assets/videos/Content/intro-1.mp4'
 import demoPredictionVideoOne from '../assets/videos/Content/00001.mp4'
 import demoPredictionVideoTwo from '../assets/videos/Content/00002.mp4'
+import { getLanguageByCode, getStoredLanguage } from '../data/languageOptions'
 import api from './api'
 
 const localVideoFallbacks = [demoPredictionVideoOne, demoPredictionVideoTwo]
@@ -48,6 +49,38 @@ export async function fetchPredictionSessionStatus({ predictionRequestId, reques
   return response.data?.data
 }
 
+export async function fetchProtectedVideoPlaybackUrl({
+  predictionRequestId,
+  requestUuid,
+  predictionType = 'past',
+  predictionResultId,
+  entitlementId,
+  videoId,
+  videoRole,
+  language,
+  signal,
+} = {}) {
+  const selectedLanguage = getLanguageByCode(language)?.code
+    || getStoredLanguage()?.code
+    || 'ta'
+
+  const response = await api.post('/video/playback-url', {
+    prediction_request_id: predictionRequestId,
+    request_uuid: requestUuid,
+    prediction_type: predictionType,
+    ...(predictionResultId ? { prediction_result_id: predictionResultId } : {}),
+    ...(entitlementId ? { entitlement_id: entitlementId } : {}),
+    video_id: videoId,
+    ...(videoRole ? { video_role: videoRole } : {}),
+    language: selectedLanguage,
+  }, { signal, timeout: 30000 })
+
+  return {
+    ...response.data?.data,
+    status: response.status,
+  }
+}
+
 export function resolvePredictionVideoUrl(videoId, type = 'PREDICTION') {
   if (!videoId) return null
 
@@ -91,8 +124,16 @@ function normalizePredictionVideoIds(group) {
   ))
 }
 
+function comparableVideoId(videoId) {
+  const value = String(videoId || '').trim()
+  const numeric = value.replace(/^0+/, '')
+
+  return numeric || value
+}
+
 export function buildPredictionPlaylist(result, predictionType = 'past') {
-  const identityVideoId = result?.identity_video?.video_id
+  const identityVideoId = result?.identity_video?.video_id || result?.identity_video_id
+  const identityVideoKey = identityVideoId ? comparableVideoId(identityVideoId) : null
   const groups = []
 
   if (identityVideoId) {
@@ -118,6 +159,7 @@ export function buildPredictionPlaylist(result, predictionType = 'past') {
 
   sortedPredictionGroups.forEach((group) => {
     const videoIds = normalizePredictionVideoIds(group)
+      .filter((videoId) => !identityVideoKey || comparableVideoId(videoId) !== identityVideoKey)
 
     if (!videoIds.length) return
 

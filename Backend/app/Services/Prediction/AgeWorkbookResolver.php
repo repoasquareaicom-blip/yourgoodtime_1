@@ -74,6 +74,11 @@ class AgeWorkbookResolver
 
     private function ageRange(string $fileName): ?array
     {
+        return $this->parseAgeRange($fileName);
+    }
+
+    public function parseAgeRange(string $fileName): ?array
+    {
         $name = pathinfo($fileName, PATHINFO_FILENAME);
         $name = preg_replace('/^future[_\s-]*/i', '', trim($name));
         $name = preg_replace('/\s+/', ' ', (string) $name);

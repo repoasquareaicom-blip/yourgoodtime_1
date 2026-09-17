@@ -7,17 +7,21 @@ use App\Http\Controllers\AdminAppointmentController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AstrologerAppointmentController;
 use App\Http\Controllers\AdminPaymentMethodSettingController;
+use App\Http\Controllers\AdminGalleryVideoController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FutureAccessController;
 use App\Http\Controllers\FutureVideoManualPaymentController;
+use App\Http\Controllers\GalleryVideoController;
 use App\Http\Controllers\InternalMailController;
 use App\Http\Controllers\MyAccountPredictionController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PredictionFeedbackController;
 use App\Http\Controllers\PredictionController;
 use App\Http\Controllers\PredictionProductController;
+use App\Http\Controllers\ProtectedVideoController;
 use App\Http\Controllers\TempleRemedyController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AdminPredictionExcelValidationController;
 
 Route::get('/health', function () {
     return response()->json([
@@ -37,8 +41,13 @@ Route::post('/predictions/result', [PredictionController::class, 'result']);
 Route::get('/predictions/session-status', [PredictionController::class, 'sessionStatus']);
 Route::get('/predictions/{id}/result', [PredictionController::class, 'storedResult']);
 Route::post('/predictions/{predictionRequest}/feedback', [PredictionFeedbackController::class, 'store']);
+Route::post('/video/playback-url', [ProtectedVideoController::class, 'playbackUrl'])->middleware('auth:sanctum');
+Route::get('/video/stream', [ProtectedVideoController::class, 'stream']);
 Route::get('/prediction-products/future/active', [PredictionProductController::class, 'activeFuture']);
 Route::get('/payment-method-settings/future-video', [FutureVideoManualPaymentController::class, 'paymentSettings']);
+Route::get('/gallery/videos', [GalleryVideoController::class, 'index']);
+Route::post('/gallery/videos/{galleryVideo}/view', [GalleryVideoController::class, 'view']);
+Route::post('/gallery/videos/{galleryVideo}/like', [GalleryVideoController::class, 'like']);
 Route::get('/astrologer-appointments/config', [AstrologerAppointmentController::class, 'config']);
 Route::get('/temple-remedies/config', [TempleRemedyController::class, 'config']);
 Route::get('/predictions/future-access', [FutureAccessController::class, 'show'])->middleware('auth:sanctum');
@@ -82,6 +91,8 @@ Route::prefix('admin')
             Route::get('/prediction-requests/{predictionRequest}', [AdminDashboardController::class, 'predictionRequest']);
             Route::get('/prediction-requests/{predictionRequest}/details', [AdminDashboardController::class, 'predictionRequestDetails']);
             Route::post('/prediction-requests/{predictionRequest}/regenerate-past', [AdminDashboardController::class, 'regeneratePastPrediction']);
+            Route::get('/prediction-regeneration-settings', [AdminDashboardController::class, 'predictionRegenerationSettings']);
+            Route::post('/prediction-regeneration-settings/{predictionType}/mark', [AdminDashboardController::class, 'markPredictionRegeneration']);
             Route::get('/appointments', [AdminAppointmentController::class, 'index']);
             Route::get('/appointments/available-slots', [AdminAppointmentController::class, 'availableSlots']);
             Route::get('/appointments/month-slots', [AdminAppointmentController::class, 'monthSlots']);
@@ -98,6 +109,15 @@ Route::prefix('admin')
             Route::get('/payment-method-settings', [AdminPaymentMethodSettingController::class, 'index']);
             Route::put('/payment-method-settings/{serviceType}', [AdminPaymentMethodSettingController::class, 'update']);
             Route::post('/payment-method-settings/{serviceType}', [AdminPaymentMethodSettingController::class, 'update']);
+            Route::get('/gallery-videos', [AdminGalleryVideoController::class, 'index']);
+            Route::post('/gallery-videos/upload-chunk', [AdminGalleryVideoController::class, 'uploadChunk']);
+            Route::post('/gallery-videos/finalize-upload', [AdminGalleryVideoController::class, 'finalizeUpload']);
+            Route::post('/gallery-videos', [AdminGalleryVideoController::class, 'store']);
+            Route::get('/gallery-videos/{galleryVideo}', [AdminGalleryVideoController::class, 'show']);
+            Route::post('/gallery-videos/{galleryVideo}', [AdminGalleryVideoController::class, 'update']);
+            Route::patch('/gallery-videos/{galleryVideo}', [AdminGalleryVideoController::class, 'update']);
+            Route::patch('/gallery-videos/{galleryVideo}/visibility', [AdminGalleryVideoController::class, 'visibility']);
+            Route::delete('/gallery-videos/{galleryVideo}', [AdminGalleryVideoController::class, 'destroy']);
             Route::get('/future-video-manual-payments', [FutureVideoManualPaymentController::class, 'adminIndex']);
             Route::get('/future-video-manual-payments/{payment}', [FutureVideoManualPaymentController::class, 'adminShow']);
             Route::get('/future-video-manual-payments/{payment}/proof', [FutureVideoManualPaymentController::class, 'adminProof']);
@@ -118,6 +138,10 @@ Route::prefix('admin')
             Route::post('/chatbot/intents', [AdminChatbotController::class, 'storeIntent']);
             Route::put('/chatbot/intents/{id}', [AdminChatbotController::class, 'updateIntent']);
             Route::delete('/chatbot/intents/{id}', [AdminChatbotController::class, 'destroyIntent']);
+            Route::post(
+                '/prediction-excel-validator/validate',
+                [AdminPredictionExcelValidationController::class, 'validateExcel']
+            );
         });
     });
 

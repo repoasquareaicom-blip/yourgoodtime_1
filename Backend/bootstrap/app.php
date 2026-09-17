@@ -6,6 +6,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\EnsureMailGatewayKey;
 use App\Http\Middleware\EnsureAdminUser;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
 
@@ -18,7 +19,6 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(HandleCors::class);
-        $middleware->statefulApi();
         $middleware->alias([
             'mail.gateway' => EnsureMailGatewayKey::class,
             'admin' => EnsureAdminUser::class,
@@ -58,6 +58,17 @@ return Application::configure(basePath: dirname(__DIR__))
                     'success' => false,
                     'message' => 'Unauthenticated.',
                 ], 401);
+            }
+
+            return null;
+        });
+
+        $exceptions->render(function (PostTooLargeException $exception, $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The uploaded file is larger than the server allows. Increase upload_max_filesize and post_max_size, or choose a smaller video.',
+                ], 413);
             }
 
             return null;

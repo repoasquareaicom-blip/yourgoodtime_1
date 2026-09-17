@@ -10,6 +10,7 @@ import templeIcon from '../assets/temple.png'
 import callIcon from '../assets/call.png'
 import PastPredictionPage from './PastPredictionPage'
 import { isLoggedIn } from '../utils/auth'
+import { scrollPageToTop } from '../utils/scrollPageToTop'
 import './HomePage.css'
 
 const TEMPLE_REMEDY_DRAFT_KEY = 'temple-remedy-draft'
@@ -251,22 +252,22 @@ function HomePage() {
           <section className="home-process-section" aria-label="How it works">
             <div className="home-process-copy">
               <span>How it works</span>
-              <strong>Start with your birth details, then follow clear guidance.</strong>
+              <strong>Start with your birth details and follow a simple guided journey.</strong>
             </div>
             <div className="home-process-steps">
               <article>
-                <span>1</span>
-                <strong>Enter details</strong>
+                <span>01</span>
+                <strong>Enter Details</strong>
                 <p>Share your birth information securely.</p>
               </article>
               <article>
-                <span>2</span>
-                <strong>Receive reading</strong>
-                <p>Get your free personalized past insight.</p>
+                <span>02</span>
+                <strong>Receive Reading</strong>
+                <p>Get your personalized past insight.</p>
               </article>
               <article>
-                <span>3</span>
-                <strong>Choose next step</strong>
+                <span>03</span>
+                <strong>Choose Next Step</strong>
                 <p>Continue with future guidance, remedies, or consultation.</p>
               </article>
             </div>
@@ -274,19 +275,19 @@ function HomePage() {
 
           <section className="home-info-section" aria-label="About Your Good Time">
             <article className="home-about-copy">
-              <span>About us</span>
-              <strong>Guidance for people who want clarity before they take the next step.</strong>
+              <span>About Your Good Time</span>
+              <strong>Guidance for people seeking clarity at important moments.</strong>
               <p>
-                Your Good Time brings astrology-led insights, spiritual remedies, and personal consultation into a simple digital experience.
+                Your Good Time combines astrology-led insights, spiritual remedies, and personal consultation in one simple digital experience.
               </p>
             </article>
 
             <article className="home-do-list">
-              <span>What we do</span>
+              <span>What we offer</span>
               <ul>
                 <li>Personalized past and future prediction journeys</li>
-                <li>Daily guidance for timing, focus, and balance</li>
-                <li>Temple remedy suggestions and astrologer support</li>
+                <li>Daily guidance for timing, focus and balance</li>
+                <li>Temple remedies and astrologer consultation</li>
               </ul>
             </article>
           </section>
@@ -294,7 +295,7 @@ function HomePage() {
           <section className="home-faq-section" aria-label="Frequently asked questions">
             <div className="home-section-heading">
               <span>FAQ</span>
-              <strong>Common questions</strong>
+              <strong>Frequently Asked Questions</strong>
             </div>
 
             <div className="home-faq-list">
@@ -353,12 +354,6 @@ function HomePage() {
               </button>
             </section>
 
-            <section className="home-legal-links" aria-label="Policies">
-              <button type="button">Terms and Conditions</button>
-              <button type="button">Privacy Policy</button>
-              <button type="button">Refund Policy</button>
-              <button type="button">Disclaimer</button>
-            </section>
           </footer>
           </div>
         </div>
@@ -429,6 +424,17 @@ function HomePage() {
           onRequireLogin={handleTalkLoginProceed}
         />
       </section>
+      <footer className="home-legal-footer" aria-label="Legal footer">
+        <div className="home-legal-footer-inner">
+          <nav className="home-legal-links" aria-label="Policies">
+            <button type="button" onClick={() => { navigate('/privacy-policy'); scrollPageToTop() }}>Privacy Policy</button>
+            <button type="button" onClick={() => { navigate('/terms-and-conditions'); scrollPageToTop() }}>Terms & Conditions</button>
+            <button type="button" onClick={() => { navigate('/disclaimer'); scrollPageToTop() }}>Disclaimer</button>
+            <button type="button" onClick={() => { navigate('/refund-policy'); scrollPageToTop() }}>Refund & Cancellation Policy</button>
+          </nav>
+          <p>Copyright {'\u00a9'} Your Good Time. All rights reserved.</p>
+        </div>
+      </footer>
     </main>
   )
 }

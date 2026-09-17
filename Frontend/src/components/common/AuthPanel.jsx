@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import AuthenticationLoader from './AuthenticationLoader'
 import PredictionRegistrationForm from './PredictionRegistrationForm'
 import ygtCircle from '../../assets/ygt_circle.png'
 import { loginWithPassword, sendOtp, validateOtp, verifyOtp } from '../../services/authService'
 import { saveToken, saveUser } from '../../utils/auth'
+import { dateOfBirthEligibilityError, dateYearsAgo, MIN_SIGNUP_AGE } from '../../utils/birthDetails'
+import { scrollPageToTop } from '../../utils/scrollPageToTop'
 
 const emptyOtp = ['', '', '', '', '', '']
 const resendSeconds = 180
 
 function getErrorMessage(error, fallback) {
-  return error?.response?.data?.message || error?.message || fallback
+  const data = error?.response?.data
+  const firstValidationMessage = data?.errors
+    ? Object.values(data.errors).flat().find(Boolean)
+    : ''
+
+  return firstValidationMessage || data?.message || error?.message || fallback
 }
 
 function isValidTimezone(timezone) {
@@ -120,6 +128,12 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
 
     if (!trimmedName || !trimmedEmail || !dateOfBirth || !timeOfBirth || !marriageStatus || !placeOfBirth.trim()) {
       setError('Please complete all details.')
+      return null
+    }
+
+    const dobError = dateOfBirthEligibilityError(dateOfBirth)
+    if (dobError) {
+      setError(dobError)
       return null
     }
 
@@ -479,6 +493,8 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
                 loadingLabel="Sending OTP..."
                 error=""
                 fieldErrors={{}}
+                requireMinimumAge
+                dateInputMax={dateYearsAgo(MIN_SIGNUP_AGE)}
                 renderAsForm={false}
                 onSubmit={(event) => {
                   event.preventDefault()
@@ -607,6 +623,13 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
           </button>
         ) : null}
       </div>
+
+      <nav className="auth-legal-links" aria-label="Authentication legal links">
+        <Link to="/privacy-policy" onClick={scrollPageToTop}>Privacy Policy</Link>
+        <Link to="/terms-and-conditions" onClick={scrollPageToTop}>Terms & Conditions</Link>
+        <Link to="/disclaimer" onClick={scrollPageToTop}>Disclaimer</Link>
+        <Link to="/refund-policy" onClick={scrollPageToTop}>Refund & Cancellation Policy</Link>
+      </nav>
 
       {onClose ? (
         <button type="button" className="auth-close-link" onClick={onClose}>Close</button>

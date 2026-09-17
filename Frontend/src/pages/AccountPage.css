@@ -110,9 +110,9 @@
     z-index: 190;
     display: grid;
     width: auto;
-    min-width: 460px;
+    min-width: 300px;
     transform: translateX(-50%);
-    grid-template-columns: repeat(5, auto);
+    grid-template-columns: repeat(3, auto);
     gap: 4px;
     padding: 6px;
     border-color: rgba(23, 52, 102, 0.1);
@@ -1956,14 +1956,18 @@
 }
 
 .app-footer {
-  width: min(1060px, 100%);
-  margin: 26px auto 0;
-  padding: 16px 0 0;
-  border-top: 1px solid rgba(116, 77, 20, 0.12);
+  width: 100%;
+  margin: 28px auto 0;
+  padding: 18px 18px calc(92px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  border-top: 1px solid rgba(124, 73, 10, 0.12);
+  background: #fff8e8;
+  box-shadow: 0 -10px 24px rgba(124, 73, 10, 0.1);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  border-radius: 8px 8px 0 0;
   color: #74634f;
   font-size: 0.78rem;
 }
@@ -1979,13 +1983,23 @@
   gap: 10px;
 }
 
-.app-footer button {
+.app-footer button,
+.app-footer a {
   border: 0;
   background: transparent;
-  color: #6b573f;
+  color: #173466;
   padding: 0;
   font: inherit;
   font-weight: 750;
+  text-decoration: none;
+}
+
+.app-footer button:hover,
+.app-footer a:hover,
+.app-footer button:focus-visible,
+.app-footer a:focus-visible {
+  color: #d28013;
+  outline: none;
 }
 
 @media (max-width: 720px) {
@@ -2545,7 +2559,8 @@
     overflow-wrap: anywhere;
   }
 
-  .app-footer button {
+  .app-footer button,
+  .app-footer a {
     width: 100%;
     max-width: 100%;
     white-space: normal;

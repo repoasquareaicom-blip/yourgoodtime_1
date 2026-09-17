@@ -1,0 +1,8 @@
+.prediction-video--curtain {
+  filter:
+    brightness(151%)
+    contrast(100%)
+    saturate(110%)
+    hue-rotate(0deg)
+    grayscale(0%);
+}

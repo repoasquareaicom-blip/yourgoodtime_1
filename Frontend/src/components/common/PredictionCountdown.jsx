@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 function PredictionCountdown({
-  seconds = 3,
+  seconds = 2,
   title,
   subtitle,
   details = [],

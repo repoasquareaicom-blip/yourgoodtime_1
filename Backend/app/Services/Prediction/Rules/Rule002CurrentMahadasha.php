@@ -10,9 +10,9 @@ use App\Services\Prediction\BusinessRuleInterface;
 use App\Services\Prediction\DashaPeriod;
 use App\Services\Prediction\DashaSequenceYearResolver;
 use App\Services\Prediction\DashaSequenceYearResult;
-use App\Services\Prediction\Excel\ExcelReader;
 use App\Services\Prediction\PredictionSession;
 use App\Services\Prediction\PredictionYearResolver;
+use App\Services\Prediction\Rule002WorkbookLookupService;
 use App\Services\Prediction\RuleResult;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -24,12 +24,12 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
     private const RULE_NAME = 'Age Year Mahadasha Prediction';
 
     public function __construct(
-        private readonly ExcelReader $excelReader,
         private readonly AstrologyNameMapper $nameMapper,
         private readonly PredictionYearResolver $yearResolver,
         private readonly DashaSequenceYearResolver $sequenceYearResolver,
         private readonly AgeResolver $ageResolver,
-        private readonly AgeWorkbookResolver $workbookResolver
+        private readonly AgeWorkbookResolver $workbookResolver,
+        private readonly Rule002WorkbookLookupService $workbookLookup
     ) {
     }
 
@@ -117,15 +117,24 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
         }
 
         try {
-            $worksheets = $this->excelReader->readWorkbook($workbook->path);
-            $worksheet = $this->findWorksheet($worksheets, $dasha->planet);
+            $lookup = $this->workbookLookup->lookupWorkbookMatch(
+                predictionPeriod: $predictionPeriod,
+                age: $age,
+                workbook: $workbook,
+                dasha: $dasha,
+                lagnam: $context->getLagnam(),
+                rasi: $context->getRasi(),
+                position: $planetHousePosition,
+                sequenceYear: $sequenceYear
+            );
+            $worksheet = $lookup['worksheet'];
 
-            if ($worksheet === null) {
+            if ($lookup['status'] === 'worksheet_missing') {
                 return $this->result($startedAt, 'NO_MATCH', $yearMetadata, $age, $predictionPeriod, $workbook, null, $identifiedValues, $matchedValues, 'No matching Mahadasha worksheet found.', sequenceYear: $sequenceYear);
             }
 
             $matchedValues = $this->matchedValues($workbook, $worksheet['worksheet'], $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear, $age);
-            $rowMatches = $this->matchingRows($worksheet['rows'], $context->getLagnam(), $context->getRasi(), $planetHousePosition);
+            $rowMatches = $lookup['row_matches'];
             $this->logLookup('worksheet row lookup completed', [
                 'sheet' => $worksheet['worksheet'],
                 'lagnam' => $context->getLagnam(),
@@ -134,43 +143,31 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
                 'matches' => array_keys($rowMatches),
             ]);
 
-            if (count($rowMatches) > 1) {
+            if ($lookup['status'] === 'row_ambiguous') {
                 return $this->result($startedAt, 'ERROR', $yearMetadata, $age, $predictionPeriod, $workbook, $worksheet['worksheet'], $identifiedValues, $matchedValues, 'Ambiguous matching rows: '.implode(', ', array_keys($rowMatches)), sequenceYear: $sequenceYear);
             }
 
-            if ($rowMatches === []) {
+            if ($lookup['status'] === 'row_missing') {
                 return $this->result($startedAt, 'NO_MATCH', $yearMetadata, $age, $predictionPeriod, $workbook, $worksheet['worksheet'], $identifiedValues, $matchedValues, 'No matching Lagnam, Rasi and position row found.', sequenceYear: $sequenceYear);
             }
 
-            $matchedRow = (int) array_key_first($rowMatches);
-            $rowMatch = $rowMatches[$matchedRow];
-            $row = $rowMatch['row'];
+            $matchedRow = $lookup['matched_row'];
+            $rowMatch = $lookup['row_match'];
             $matchedValues['rasi'] = $rowMatch['matched_rasi'];
-            $yearMatch = $this->findYearVideos($row, $sequenceYear->excelSequenceYear);
+            $yearMatch = $lookup['year_match'];
 
-            if ($yearMatch === null) {
+            if ($lookup['status'] === 'year_missing') {
                 return $this->result($startedAt, 'NO_MATCH', $yearMetadata, $age, $predictionPeriod, $workbook, $worksheet['worksheet'], $identifiedValues, $matchedValues, 'Excel sequence year column not found.', $matchedRow, sequenceYear: $sequenceYear);
             }
 
-            $nextWorkbookMatch = $this->nextWorkbookRangeVideoMatch(
-                predictionPeriod: $predictionPeriod,
-                age: $age,
-                dasha: $dasha,
-                lagnam: $context->getLagnam(),
-                rasi: $context->getRasi(),
-                position: $planetHousePosition,
-                sequenceYear: $sequenceYear,
-                currentWorkbook: $workbook,
-                currentYearMatch: $yearMatch
-            );
-
-            if ($nextWorkbookMatch !== null) {
-                $workbook = $nextWorkbookMatch['workbook'];
-                $worksheet = $nextWorkbookMatch['worksheet'];
-                $matchedRow = $nextWorkbookMatch['matched_row'];
-                $yearMatch = $nextWorkbookMatch['year_match'];
+            if ($lookup['switched_workbook']) {
+                $workbook = $lookup['workbook'];
+                $worksheet = $lookup['worksheet'];
+                $matchedRow = $lookup['matched_row'];
+                $rowMatch = $lookup['row_match'];
+                $yearMatch = $lookup['year_match'];
                 $matchedValues = $this->matchedValues($workbook, $worksheet['worksheet'], $context->getLagnam(), $context->getRasi(), $planetHousePosition, $sequenceYear, $age);
-                $matchedValues['rasi'] = $nextWorkbookMatch['matched_rasi'];
+                $matchedValues['rasi'] = $rowMatch['matched_rasi'];
                 $this->logLookup('range video switched to next age workbook', [
                     'age' => $age,
                     'next_age' => $age + 1,
@@ -269,297 +266,6 @@ class Rule002CurrentMahadasha implements BusinessRuleInterface
             'supported_age_from' => $workbook->supportedFromAge,
             'supported_age_to' => $workbook->supportedToAge,
         ];
-    }
-
-    private function findWorksheet(array $worksheets, string $mahadasha): ?array
-    {
-        $expected = $this->nameMapper->comparisonValue($mahadasha, 'dasha_sheets');
-
-        foreach ($worksheets as $worksheet) {
-            $actual = $this->nameMapper->comparisonValue($worksheet['worksheet'] ?? '', 'dasha_sheets');
-
-            if ($actual === $expected) {
-                return $worksheet;
-            }
-        }
-
-        return null;
-    }
-
-    private function matchingRows(array $rows, ?string $lagnam, ?string $rasi, int $position): array
-    {
-        $matches = [];
-        $expectedLagnam = $this->nameMapper->comparisonValue($lagnam, 'workbook_lagnams');
-        $expectedRasi = $this->nameMapper->comparisonValue($rasi, 'workbook_lagnams');
-        $expectedRasiLabel = $this->nameMapper->excelValue($rasi, 'workbook_lagnams');
-        $expectedBlockHasRasiSections = $this->lagnamBlockHasRasiSections($rows, $expectedLagnam);
-        $currentLagnam = null;
-        $currentRasi = null;
-
-        foreach ($rows as $rowNumber => $row) {
-            $firstCell = trim((string) ($row['A'] ?? ''));
-            $positionCell = trim((string) ($row['B'] ?? ''));
-            $firstCellComparison = $this->nameMapper->comparisonValue($firstCell, 'workbook_lagnams');
-            $isPositionRow = is_numeric($positionCell);
-            $isSignCell = $firstCell !== ''
-                && ! str_contains($firstCellComparison, 'dasa')
-                && $this->nameMapper->headerValue($firstCell) !== 'lagnam';
-
-            if ($isSignCell && ! $isPositionRow) {
-                $currentLagnam = $firstCell;
-                $currentRasi = null;
-            }
-
-            if (! $isPositionRow) {
-                continue;
-            }
-
-            if (! $expectedBlockHasRasiSections && $isSignCell) {
-                $currentLagnam = $firstCell;
-                $currentRasi = null;
-            }
-
-            $insideExpectedLagnam = $currentLagnam !== null
-                && $this->nameMapper->comparisonValue($currentLagnam, 'workbook_lagnams') === $expectedLagnam;
-
-            if ($insideExpectedLagnam && $firstCell !== '') {
-                $currentRasi = $firstCell;
-            }
-
-            if ((int) $positionCell !== $position) {
-                continue;
-            }
-
-            if ($insideExpectedLagnam && $this->nameMapper->comparisonValue($currentRasi, 'workbook_lagnams') === $expectedRasi) {
-                $matches[(int) $rowNumber] = [
-                    'row' => $row,
-                    'matched_rasi' => $this->nameMapper->excelValue($currentRasi, 'workbook_lagnams'),
-                ];
-
-                continue;
-            }
-
-            if (! $expectedBlockHasRasiSections && $insideExpectedLagnam) {
-                $matches[(int) $rowNumber] = [
-                    'row' => $row,
-                    'matched_rasi' => $expectedRasiLabel,
-                ];
-            }
-        }
-
-        return $matches;
-    }
-
-    private function lagnamBlockHasRasiSections(array $rows, string $expectedLagnam): bool
-    {
-        $currentLagnam = null;
-
-        foreach ($rows as $row) {
-            $firstCell = trim((string) ($row['A'] ?? ''));
-            $positionCell = trim((string) ($row['B'] ?? ''));
-            $firstCellComparison = $this->nameMapper->comparisonValue($firstCell, 'workbook_lagnams');
-            $isPositionRow = is_numeric($positionCell);
-            $isSignCell = $firstCell !== ''
-                && ! str_contains($firstCellComparison, 'dasa')
-                && $this->nameMapper->headerValue($firstCell) !== 'lagnam';
-
-            if ($isSignCell && ! $isPositionRow) {
-                $currentLagnam = $firstCell;
-
-                continue;
-            }
-
-            $insideExpectedLagnam = $currentLagnam !== null
-                && $this->nameMapper->comparisonValue($currentLagnam, 'workbook_lagnams') === $expectedLagnam;
-
-            if ($insideExpectedLagnam && $isSignCell && $isPositionRow && $firstCellComparison !== $expectedLagnam) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function findYearVideos(array $row, int $excelYear): ?array
-    {
-        $columns = array_keys($row);
-
-        foreach ($columns as $index => $column) {
-            if ($column === 'A' || $column === 'B') {
-                continue;
-            }
-
-            if (! $this->cellContainsYear($row[$column] ?? null, $excelYear)) {
-                continue;
-            }
-
-            $videoColumns = [];
-
-            foreach (array_slice($columns, $index + 1) as $candidateColumn) {
-                if ($this->cellContainsAnyYear($row[$candidateColumn] ?? null)) {
-                    break;
-                }
-
-                $videoColumns[] = $candidateColumn;
-            }
-
-            if ($videoColumns === []) {
-                return [
-                    'year_column' => $column,
-                    'first_video_column' => $columns[$index + 1] ?? $column,
-                    'matched_year' => trim((string) ($row[$column] ?? '')),
-                    'video_ids' => [],
-                ];
-            }
-
-            return [
-                'year_column' => $column,
-                'first_video_column' => $videoColumns[0],
-                'matched_year' => trim((string) ($row[$column] ?? '')),
-                'video_ids' => $this->videoIds($row, $videoColumns),
-            ];
-        }
-
-        return null;
-    }
-
-    private function nextWorkbookRangeVideoMatch(
-        string $predictionPeriod,
-        int $age,
-        DashaPeriod $dasha,
-        ?string $lagnam,
-        ?string $rasi,
-        int $position,
-        DashaSequenceYearResult $sequenceYear,
-        AgeWorkbookResult $currentWorkbook,
-        array $currentYearMatch
-    ): ?array {
-        $range = $this->matchedYearRange((string) ($currentYearMatch['matched_year'] ?? ''));
-
-        if ($range === null) {
-            return null;
-        }
-
-        [$fromYear, $toYear] = $range;
-
-        if ($fromYear === $toYear || $sequenceYear->excelSequenceYear !== $fromYear) {
-            return null;
-        }
-
-        $nextWorkbook = $this->workbookResolver->resolve($predictionPeriod, $age + 1);
-
-        if (! $nextWorkbook->found || $nextWorkbook->path === null) {
-            return null;
-        }
-
-        if ($currentWorkbook->path !== null && realpath($currentWorkbook->path) === realpath($nextWorkbook->path)) {
-            return null;
-        }
-
-        $worksheets = $this->excelReader->readWorkbook($nextWorkbook->path);
-        $worksheet = $this->findWorksheet($worksheets, $dasha->planet);
-
-        if ($worksheet === null) {
-            return null;
-        }
-
-        $rowMatches = $this->matchingRows($worksheet['rows'], $lagnam, $rasi, $position);
-
-        if (count($rowMatches) !== 1) {
-            return null;
-        }
-
-        $matchedRow = (int) array_key_first($rowMatches);
-        $rowMatch = $rowMatches[$matchedRow];
-        $yearMatch = $this->findYearVideos($rowMatch['row'], $sequenceYear->excelSequenceYear);
-
-        if ($yearMatch === null || trim((string) $yearMatch['matched_year']) !== trim((string) $currentYearMatch['matched_year'])) {
-            return null;
-        }
-
-        if (($yearMatch['video_ids'] ?? []) === []) {
-            return null;
-        }
-
-        return [
-            'workbook' => $nextWorkbook,
-            'worksheet' => $worksheet,
-            'matched_row' => $matchedRow,
-            'matched_rasi' => $rowMatch['matched_rasi'],
-            'year_match' => $yearMatch,
-        ];
-    }
-
-    private function matchedYearRange(string $value): ?array
-    {
-        $value = strtolower(preg_replace('/\s+/', ' ', trim($value)));
-
-        if (! preg_match('/^\d{4}(\s*(-|to)\s*\d{4})$/i', $value)) {
-            return null;
-        }
-
-        preg_match_all('/\d{4}/', $value, $matches);
-        $years = array_map('intval', $matches[0] ?? []);
-
-        if (count($years) !== 2 || count(array_filter($years, fn (int $item): bool => $item >= 1900 && $item <= 2100)) !== 2) {
-            return null;
-        }
-
-        return [min($years), max($years)];
-    }
-
-    private function cellContainsYear(mixed $value, int $year): bool
-    {
-        $value = strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
-
-        if (! preg_match('/^\d{4}(\s*(-|to)\s*\d{4})*$/i', $value)) {
-            return false;
-        }
-
-        preg_match_all('/\d{4}/', $value, $matches);
-
-        $years = array_map('intval', $matches[0] ?? []);
-
-        if ($years === [] || count(array_filter($years, fn (int $item): bool => $item >= 1900 && $item <= 2100)) !== count($years)) {
-            return false;
-        }
-
-        if (count($years) >= 2) {
-            return $year >= min($years) && $year <= max($years);
-        }
-
-        return in_array($year, $years, true);
-    }
-
-    private function cellContainsAnyYear(mixed $value): bool
-    {
-        $value = trim((string) $value);
-
-        if (preg_match('/^\s*\d{4}(\s*(-|to)\s*\d{4})*\s*$/i', $value) !== 1) {
-            return false;
-        }
-
-        preg_match_all('/\d{4}/', $value, $matches);
-        $years = array_map('intval', $matches[0] ?? []);
-
-        return $years !== [] && count(array_filter($years, fn (int $item): bool => $item >= 1900 && $item <= 2100)) === count($years);
-    }
-
-    private function videoIds(array $row, array $videoColumns): array
-    {
-        $videoIds = [];
-
-        foreach ($videoColumns as $column) {
-            foreach (preg_split('/[\s,]+/', trim((string) ($row[$column] ?? ''))) ?: [] as $videoId) {
-                $videoId = trim($videoId);
-
-                if ($videoId !== '') {
-                    $videoIds[] = $videoId;
-                }
-            }
-        }
-
-        return array_values(array_unique($videoIds));
     }
 
     private function logLookup(string $message, array $context): void

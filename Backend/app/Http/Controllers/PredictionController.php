@@ -9,6 +9,8 @@ use App\Services\AstrologyApiService;
 use App\Services\FuturePredictionAccessService;
 use App\Services\PredictionCacheService;
 use App\Services\Prediction\PredictionEngineService;
+use App\Services\Prediction\IdentityVideoRecoveryService;
+use App\Services\Prediction\PredictionRegenerationService;
 use App\Services\Prediction\PredictionResponseBuilder;
 use App\Services\Prediction\PredictionTimelineSummaryService;
 use App\Services\PredictionRequestProcessor;
@@ -28,6 +30,7 @@ class PredictionController extends Controller
         Request $request,
         PredictionEngineService $predictionEngineService,
         PredictionResponseBuilder $predictionResponseBuilder,
+        PredictionRegenerationService $predictionRegenerationService,
         FuturePredictionAccessService $futurePredictionAccessService,
         PredictionTimelineSummaryService $timelineSummaryService
     ): JsonResponse {
@@ -73,32 +76,22 @@ class PredictionController extends Controller
 
         $storedResult = $this->completedStoredResult($predictionRequest, $validated['type'], $futureEntitlement);
 
-        if ($storedResult !== null && $this->storedResultIsCurrent($storedResult, $predictionRequest, $validated['type'], $timelineSummaryService)) {
+        $storedResultIsCurrent = $storedResult !== null
+            && $this->storedResultIsCurrent($storedResult, $predictionRequest, $validated['type'], $timelineSummaryService);
+
+        if ($storedResultIsCurrent && ! $predictionRegenerationService->resultIsStaleForGlobalCycle($storedResult, $validated['type'])) {
             return $this->storedResultResponse($storedResult, 'Prediction result loaded successfully.');
         }
 
         try {
-            $timeline = $predictionEngineService->preparePredictionTimeline(
-                $predictionRequest->id,
+            $targetVersion = $predictionRegenerationService->currentVersion($validated['type']);
+            $storedResult = $predictionRegenerationService->regenerate(
+                $predictionRequest,
                 $validated['type'],
-                $futureEntitlement
+                $futureEntitlement,
+                $targetVersion,
+                ! $storedResultIsCurrent
             );
-            $result = $predictionResponseBuilder->buildTimeline($timeline);
-            $warnings = $this->predictionWarnings($result['prediction_videos'] ?? []);
-            $payload = [
-                'prediction_request_id' => $result['prediction_request_id'] ?? $predictionRequest->id,
-                'type' => $result['prediction_type'] ?? $validated['type'],
-                'identity_video' => $result['identity_video'] ?? null,
-                'prediction_videos' => $result['prediction_videos'] ?? [],
-                'summary' => $result['summary'] ?? [],
-                'warnings' => $warnings,
-            ];
-
-            if (! $this->resultPayloadHasPlayableVideo($payload)) {
-                throw new \RuntimeException('No matching prediction video is available for these birth details.');
-            }
-
-            $storedResult = $this->persistResult($predictionRequest, $validated['type'], $payload, $futureEntitlement);
 
             if ($futureEntitlement !== null && $futureEntitlement->generated_prediction_result_id === null) {
                 $futureEntitlement->forceFill(['generated_prediction_result_id' => $storedResult->id])->save();
@@ -106,7 +99,9 @@ class PredictionController extends Controller
 
             return $this->storedResultResponse($storedResult, 'Prediction result generated successfully.');
         } catch (Throwable $exception) {
-            $this->persistFailedResult($predictionRequest, $validated['type'], $futureEntitlement);
+            if ($storedResult === null) {
+                $this->persistFailedResult($predictionRequest, $validated['type'], $futureEntitlement);
+            }
 
             Log::error('Prediction result generation failed.', [
                 'prediction_request_id' => $predictionRequest->id,
@@ -126,7 +121,11 @@ class PredictionController extends Controller
         }
     }
 
-    public function storedResult(Request $request, int $id): JsonResponse
+    public function storedResult(
+        Request $request,
+        int $id,
+        PredictionRegenerationService $predictionRegenerationService
+    ): JsonResponse
     {
         $validator = Validator::make(array_merge($request->query(), ['id' => $id]), [
             'id' => ['required', 'integer'],
@@ -174,6 +173,28 @@ class PredictionController extends Controller
                     ], 404);
                 }
 
+                if ($predictionRegenerationService->resultIsStaleForGlobalCycle($storedResult, 'future')) {
+                    try {
+                        $storedResult = $predictionRegenerationService->regenerate(
+                            $predictionRequest,
+                            'future',
+                            $entitlement,
+                            $predictionRegenerationService->currentVersion('future')
+                        );
+                    } catch (Throwable $exception) {
+                        Log::error('Future prediction lazy regeneration failed.', [
+                            'prediction_request_id' => $predictionRequest->id,
+                            'entitlement_id' => $entitlement->id,
+                            'message' => $exception->getMessage(),
+                        ]);
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Unable to regenerate prediction result.',
+                        ], 500);
+                    }
+                }
+
                 return $this->storedResultResponse($storedResult, 'Prediction result loaded successfully.');
             }
 
@@ -187,6 +208,27 @@ class PredictionController extends Controller
                 'success' => false,
                 'message' => 'Stored prediction result not found.',
             ], 404);
+        }
+
+        if ($predictionRegenerationService->resultIsStaleForGlobalCycle($storedResult, 'past')) {
+            try {
+                $storedResult = $predictionRegenerationService->regenerate(
+                    $predictionRequest,
+                    'past',
+                    null,
+                    $predictionRegenerationService->currentVersion('past')
+                );
+            } catch (Throwable $exception) {
+                Log::error('Past prediction lazy regeneration failed.', [
+                    'prediction_request_id' => $predictionRequest->id,
+                    'message' => $exception->getMessage(),
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unable to regenerate prediction result.',
+                ], 500);
+            }
         }
 
         return $this->storedResultResponse($storedResult, 'Prediction result loaded successfully.');
@@ -475,6 +517,7 @@ class PredictionController extends Controller
 
     private function combinedFutureResultResponse(PredictionRequest $predictionRequest): JsonResponse
     {
+        $identityVideoRecovery = app(IdentityVideoRecoveryService::class);
         $results = PredictionResult::query()
             ->with('predictionRequest')
             ->where('prediction_request_id', $predictionRequest->id)
@@ -493,6 +536,10 @@ class PredictionController extends Controller
                 'message' => 'Stored prediction result not found.',
             ], 404);
         }
+
+        $results = $results
+            ->map(fn (PredictionResult $result): PredictionResult => $identityVideoRecovery->ensureIdentityVideo($result))
+            ->values();
 
         $firstPayload = $results->first()->result_payload ?: [];
         $predictionVideos = $results
@@ -554,7 +601,7 @@ class PredictionController extends Controller
             return true;
         }
 
-        if (! filled(data_get($predictionResult->result_payload, 'identity_video.video_id'))) {
+        if (! filled(data_get($predictionResult->result_payload, 'identity_video.video_id')) && ! filled($predictionResult->identity_video_id)) {
             return false;
         }
 
@@ -595,7 +642,7 @@ class PredictionController extends Controller
             $identity['prediction_entitlement_id'] = $entitlement->id;
         }
 
-        return PredictionResult::query()->updateOrCreate(
+        $result = PredictionResult::query()->updateOrCreate(
             $identity,
             [
                 'user_id' => $entitlement?->user_id ?? $this->userIdForPredictionRequest($predictionRequest),
@@ -608,6 +655,12 @@ class PredictionController extends Controller
                 'generated_at' => now(),
             ]
         );
+
+        $identityVideoRecovery = app(IdentityVideoRecoveryService::class);
+        $result = $identityVideoRecovery->ensureIdentityVideo($result);
+        $identityVideoRecovery->warnIfGeneratedResultMissingIdentity($predictionRequest, $predictionType, $result, $result->result_payload ?? $payload);
+
+        return $result;
     }
 
     private function persistFailedResult(PredictionRequest $predictionRequest, string $predictionType, mixed $entitlement = null): void
@@ -665,7 +718,18 @@ class PredictionController extends Controller
 
     private function storedResultResponse(PredictionResult $predictionResult, string $message): JsonResponse
     {
+        $predictionResult = app(IdentityVideoRecoveryService::class)->ensureIdentityVideo($predictionResult);
         $payload = $predictionResult->result_payload;
+
+        if (! filled(data_get($payload, 'identity_video.video_id')) && filled($predictionResult->identity_video_id)) {
+            $payload['identity_video'] = [
+                'video_id' => (string) $predictionResult->identity_video_id,
+                'source' => [
+                    'file' => config('prediction.files.nakshatra_lagnam', 'nakshatra_lagnam.xlsx'),
+                ],
+            ];
+        }
+
         $payload['result_id'] = $predictionResult->id;
         $payload['status'] = $predictionResult->status;
         $payload['generated_at'] = $predictionResult->generated_at?->toJSON();

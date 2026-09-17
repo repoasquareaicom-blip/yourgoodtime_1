@@ -488,8 +488,13 @@
 
 .past-birth-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
   gap: 10px;
+  min-width: 0;
+}
+
+.past-birth-row > label {
+  min-width: 0;
 }
 
 .past-otp-boxes {

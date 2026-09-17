@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import AuthenticationLoader from './AuthenticationLoader'
+import {
+  getLanguageByCode,
+  getStoredLanguage,
+  LANGUAGE_CHANGE_EVENT,
+  languageOptions,
+  savePreferredLanguage,
+} from '../../data/languageOptions'
 import { logout as logoutUser } from '../../services/authService'
 import { clearMyAccountPredictionCache } from '../../services/myAccountService'
 import { getUser, isLoggedIn, removeToken, removeUser } from '../../utils/auth'
@@ -27,6 +34,9 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [isMobileMenu, setIsMobileMenu] = useState(false)
+  const [selectedLanguageCode, setSelectedLanguageCode] = useState(() => (
+    getStoredLanguage()?.code || languageOptions[0].code
+  ))
   const displayName = useMemo(() => {
     if (!user) return 'My Account'
     return user.name || user.email || user.phone_e164 || 'My Account'
@@ -42,6 +52,30 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
     mediaQuery.addEventListener('change', syncMobileMenu)
 
     return () => mediaQuery.removeEventListener('change', syncMobileMenu)
+  }, [])
+
+  useEffect(() => {
+    const syncSelectedLanguage = (event) => {
+      const changedLanguage = getLanguageByCode(event?.detail?.code)
+      const storedLanguage = changedLanguage || getStoredLanguage()
+
+      if (storedLanguage) {
+        setSelectedLanguageCode(storedLanguage.code)
+      }
+    }
+
+    const handleStorage = (event) => {
+      if (event.key !== 'ygtPreferredLanguage') return
+      syncSelectedLanguage()
+    }
+
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, syncSelectedLanguage)
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      window.removeEventListener(LANGUAGE_CHANGE_EVENT, syncSelectedLanguage)
+      window.removeEventListener('storage', handleStorage)
+    }
   }, [])
 
   useEffect(() => {
@@ -144,6 +178,31 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
     setIsMenuOpen((open) => !open)
   }
 
+  const handleLanguageChange = (event) => {
+    const savedLanguage = savePreferredLanguage(event.target.value)
+
+    if (savedLanguage) {
+      setSelectedLanguageCode(savedLanguage.code)
+    }
+  }
+
+  const languageSelectorMarkup = (
+    <label className="home-language-selector">
+      <span>Language</span>
+      <select
+        value={selectedLanguageCode}
+        onChange={handleLanguageChange}
+        aria-label="Select language"
+      >
+        {languageOptions.map((language) => (
+          <option key={language.code} value={language.code}>
+            {language.nativeName}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+
   const menuMarkup = isMenuOpen ? (
     <div
       id="mobile-profile-menu"
@@ -210,18 +269,22 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
 
   if (!loggedIn) {
     return (
-      <button
-        type="button"
-        className="home-hero-login"
-        onClick={() => navigate(`/login?mode=login&redirect=${encodeURIComponent(redirectTo)}`, { state: { backgroundLocation: location } })}
-      >
-        Login
-      </button>
+      <div className="home-hero-auth-actions" aria-label="Language and account actions">
+        {languageSelectorMarkup}
+        <button
+          type="button"
+          className="home-hero-login"
+          onClick={() => navigate(`/login?mode=login&redirect=${encodeURIComponent(redirectTo)}`, { state: { backgroundLocation: location } })}
+        >
+          Login
+        </button>
+      </div>
     )
   }
 
   return (
-    <div className="home-hero-auth-actions" aria-label="Account actions">
+    <div className="home-hero-auth-actions" aria-label="Language and account actions">
+      {languageSelectorMarkup}
       <button
         ref={triggerRef}
         type="button"

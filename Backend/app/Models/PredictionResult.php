@@ -17,6 +17,7 @@ class PredictionResult extends Model
         'summary_payload',
         'warnings_payload',
         'status',
+        'regeneration_version',
         'generated_at',
     ];
 
@@ -26,6 +27,7 @@ class PredictionResult extends Model
             'result_payload' => 'array',
             'summary_payload' => 'array',
             'warnings_payload' => 'array',
+            'regeneration_version' => 'integer',
             'generated_at' => 'datetime',
         ];
     }

@@ -74,4 +74,12 @@ Artisan::command('appointments:send-reminders', function (): int {
     return 0;
 })->purpose('Send astrologer appointment reminder emails');
 
+Artisan::command('gallery:cleanup-chunks', function (): int {
+    $removed = app(\App\Services\GalleryVideoChunkUploadService::class)->cleanupAbandoned();
+    $this->info("Removed {$removed} abandoned gallery upload item(s).");
+
+    return 0;
+})->purpose('Remove abandoned Gallery video chunk uploads');
+
 Schedule::command('appointments:send-reminders')->everyFifteenMinutes();
+Schedule::command('gallery:cleanup-chunks')->daily();

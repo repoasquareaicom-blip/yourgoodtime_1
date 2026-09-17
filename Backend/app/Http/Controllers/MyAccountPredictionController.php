@@ -199,9 +199,18 @@ class MyAccountPredictionController extends Controller
 
     private function watchPayload(PredictionRequest $predictionRequest): array
     {
+        $identityVideoId = PredictionResult::query()
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('status', 'completed')
+            ->whereNotNull('identity_video_id')
+            ->latest('generated_at')
+            ->latest('id')
+            ->value('identity_video_id');
+
         return [
             'prediction_request_id' => $predictionRequest->id,
             'request_uuid' => $predictionRequest->request_uuid,
+            'identity_video_id' => $identityVideoId ? (string) $identityVideoId : null,
         ];
     }
 

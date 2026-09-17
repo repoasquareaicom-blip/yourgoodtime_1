@@ -44,6 +44,35 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonValidationErrors(['request_id']);
     }
 
+    public function test_identity_video_matches_swati_lookup_to_swathi_excel_row(): void
+    {
+        config(['prediction.debug_response' => true]);
+        $this->fakeNakshatraLagnamWorkbookWithRows([
+            ['LAGNAM', 'RASI', 'NAKSHATRA', 'VIDEO'],
+            ['MESHAM', 'THULAM', 'Chitra', '19'],
+            ['MESHAM', 'THULAM', 'Swathi    ', '20'],
+            ['MESHAM', 'THULAM', 'Vishakha  ', '21'],
+        ]);
+
+        $request = $this->createPredictionRequest([
+            'normalized_astrology_data' => $this->normalizedData('Aries', 'Libra', 'Swati', 'Venus', 6),
+        ]);
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'request_id' => $request->id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('playlist_items.0.video_id', '20')
+            ->assertJsonPath('rules.0.status', 'SUCCESS')
+            ->assertJsonPath('rules.0.lookup_values.lagnam', 'Aries')
+            ->assertJsonPath('rules.0.lookup_values.rasi', 'Libra')
+            ->assertJsonPath('rules.0.lookup_values.nakshatra', 'Swati')
+            ->assertJsonPath('rules.0.matched_values.lagnam', 'MESHAM')
+            ->assertJsonPath('rules.0.matched_values.rasi', 'THULAM')
+            ->assertJsonPath('rules.0.matched_values.nakshatra', 'Swathi')
+            ->assertJsonPath('rules.0.matched_row', 3);
+    }
+
     public function test_identity_video_is_matched_by_lagnam_rasi_and_nakshatra(): void
     {
         config(['prediction.debug_response' => true]);
@@ -88,6 +117,32 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertJsonPath('prediction_videos.0.matched_year', '2014')
             ->assertJsonPath('prediction_videos.0.video_ids.0', 'PRED_2014')
             ->assertJsonPath('rule_results.1.matched_values.rasi', 'MEENAM');
+    }
+
+    public function test_rule002_current_mahadasha_lookup_metadata_is_preserved_after_workbook_service_refactor(): void
+    {
+        config(['prediction.debug_response' => true]);
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('past', '51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2014', ['PRED_2014']));
+
+        $request = $this->requestForAgeTimeline();
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'prediction_request_id' => $request->id,
+            'prediction_type' => 'past',
+        ])
+            ->assertOk()
+            ->assertJsonPath('rule_results.1.rule_code', 'RULE-002')
+            ->assertJsonPath('rule_results.1.status', 'SUCCESS')
+            ->assertJsonPath('rule_results.1.excel_file', '51 TO 60.xlsx')
+            ->assertJsonPath('rule_results.1.worksheet', 'VENUS')
+            ->assertJsonPath('rule_results.1.matched_row', 5)
+            ->assertJsonPath('rule_results.1.year_column', 'C')
+            ->assertJsonPath('rule_results.1.video_column', 'D')
+            ->assertJsonPath('rule_results.1.matched_cell', 'D5')
+            ->assertJsonPath('rule_results.1.matched_values.rasi', 'MEENAM')
+            ->assertJsonPath('rule_results.1.matched_values.matched_year', '2014')
+            ->assertJsonPath('rule_results.1.result_value.0', 'PRED_2014');
     }
 
     public function test_same_lagnam_and_position_under_different_rasis_returns_correct_rasi_video(): void
@@ -145,6 +200,26 @@ class PredictionEnginePrepareTest extends TestCase
             ->assertOk()
             ->assertJsonPath('prediction_videos.0.video_ids.0', 'A_6152')
             ->assertJsonPath('prediction_videos.0.video_ids.1', 'B_6153')
+            ->assertJsonPath('yearly_predictions.0.playlist_items.0.video_id', 'A_6152')
+            ->assertJsonPath('yearly_predictions.0.playlist_items.1.video_id', 'B_6153');
+    }
+
+    public function test_rule002_video_id_parsing_preserves_comma_space_split_and_deduplication(): void
+    {
+        config(['prediction.debug_response' => true]);
+        $this->fakeNakshatraLagnamWorkbook('INTRO_001', 'Aries', 'Pisces', 'Swati');
+        $this->createAgeWorkbook('past', '51 TO 60.xlsx', 'VENUS', $this->hierarchyRows('2014', ['A_6152, B_6153', 'A_6152']));
+
+        $request = $this->requestForAgeTimeline();
+
+        $this->postJson('/api/predictions/past/prepare?debug=true', [
+            'prediction_request_id' => $request->id,
+            'prediction_type' => 'past',
+        ])
+            ->assertOk()
+            ->assertJsonPath('prediction_videos.0.video_ids.0', 'A_6152')
+            ->assertJsonPath('prediction_videos.0.video_ids.1', 'B_6153')
+            ->assertJsonMissingPath('prediction_videos.0.video_ids.2')
             ->assertJsonPath('yearly_predictions.0.playlist_items.0.video_id', 'A_6152')
             ->assertJsonPath('yearly_predictions.0.playlist_items.1.video_id', 'B_6153');
     }

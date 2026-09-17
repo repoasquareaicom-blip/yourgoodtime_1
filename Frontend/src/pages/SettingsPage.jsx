@@ -1,22 +1,56 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import HeaderAuthActions from '../components/common/HeaderAuthActions'
 import ygtLogo from '../assets/yt-logo.png'
-import { getStoredLanguageName, languageOptions, savePreferredLanguage } from '../data/languageOptions'
+import {
+  getLanguageByCode,
+  getStoredLanguage,
+  getStoredLanguageName,
+  LANGUAGE_CHANGE_EVENT,
+  languageOptions,
+  savePreferredLanguage,
+} from '../data/languageOptions'
+import { scrollPageToTop } from '../utils/scrollPageToTop'
 import './HomePage.css'
 import './SettingsPage.css'
 
 function SettingsPage() {
   const navigate = useNavigate()
   const [selectedLanguage, setSelectedLanguage] = useState(() => (
-    window.localStorage.getItem('ygtPreferredLanguage') || ''
+    getStoredLanguage()?.code || ''
   ))
   const [selectedLanguageName, setSelectedLanguageName] = useState(getStoredLanguageName)
 
+  useEffect(() => {
+    const syncSelectedLanguage = (event) => {
+      const changedLanguage = getLanguageByCode(event?.detail?.code)
+      const storedLanguage = changedLanguage || getStoredLanguage()
+
+      setSelectedLanguage(storedLanguage?.code || '')
+      setSelectedLanguageName(storedLanguage?.name || 'Not selected')
+    }
+
+    const handleStorage = (event) => {
+      if (event.key !== 'ygtPreferredLanguage') return
+      syncSelectedLanguage()
+    }
+
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, syncSelectedLanguage)
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      window.removeEventListener(LANGUAGE_CHANGE_EVENT, syncSelectedLanguage)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
+
   const handleLanguageSelect = (language) => {
-    savePreferredLanguage(language)
-    setSelectedLanguage(language.code)
-    setSelectedLanguageName(language.name)
+    const savedLanguage = savePreferredLanguage(language)
+
+    if (savedLanguage) {
+      setSelectedLanguage(savedLanguage.code)
+      setSelectedLanguageName(savedLanguage.name)
+    }
   }
 
   return (
@@ -68,40 +102,27 @@ function SettingsPage() {
         </section>
 
         <nav className="home-footer-nav" aria-label="Primary">
-          <button type="button" className="footer-nav-item" onClick={() => navigate('/home')}>
+          <button type="button" className="footer-nav-item" onClick={() => { navigate('/home'); scrollPageToTop() }}>
             <span className="footer-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>
             </span>
             <span className="footer-nav-label">Home</span>
           </button>
 
-          <button type="button" className="footer-nav-item" onClick={() => navigate('/account')}>
+          <button type="button" className="footer-nav-item" onClick={() => { navigate('/account'); scrollPageToTop() }}>
             <span className="footer-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12m0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14" /></svg>
             </span>
             <span className="footer-nav-label">My Account</span>
           </button>
 
-          <button type="button" className="footer-nav-item" onClick={() => navigate('/daily')}>
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9m1 9.4V7h-2v6.2l4.7 2.8 1-1.7z" /></svg>
-            </span>
-            <span className="footer-nav-label">Daily</span>
-          </button>
-
-          <button type="button" className="footer-nav-item" onClick={() => navigate('/videos')}>
+          <button type="button" className="footer-nav-item" onClick={() => { navigate('/videos'); scrollPageToTop() }}>
             <span className="footer-nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M4 6h5v5H4zm0 7h5v5H4zm7-7h9v5h-9zm0 7h9v5h-9z" /></svg>
             </span>
             <span className="footer-nav-label">Gallery</span>
           </button>
 
-          <button type="button" className="footer-nav-item is-active" aria-current="page">
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="m19.4 13.5 1.3-1.5-1.3-1.5-1.9.2a6 6 0 0 0-.8-.5l-.3-1.9-2-.3-.8 1.7a5 5 0 0 0-.9 0l-.8-1.7-2 .3-.3 1.9c-.3.1-.6.3-.8.5l-1.9-.2L3.3 12l1.3 1.5-.2 1.9 1.9.8.8 1.7 2-.3.8-1.7h.9l.8 1.7 2-.3.3-1.9.8-.5 1.9.2.9-1.9zM12 14.8a2.8 2.8 0 1 1 2.8-2.8 2.8 2.8 0 0 1-2.8 2.8" /></svg>
-            </span>
-            <span className="footer-nav-label">Settings</span>
-          </button>
         </nav>
       </section>
     </main>

@@ -1,11 +1,18 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import templeImage from '../assets/temple-transparent.png'
 import ytLogo from '../assets/yt-logo.png'
-import { languageOptions, savePreferredLanguage } from '../data/languageOptions'
+import { getStoredLanguage, languageOptions, savePreferredLanguage } from '../data/languageOptions'
 import './LanguageSelectionPage.css'
 
 function LanguageSelectionPage() {
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (getStoredLanguage()) {
+      navigate('/intro', { replace: true })
+    }
+  }, [navigate])
 
   const handleLanguageSelect = (language) => {
     savePreferredLanguage(language)

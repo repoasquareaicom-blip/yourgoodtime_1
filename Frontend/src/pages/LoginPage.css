@@ -435,6 +435,28 @@
   margin-top: 16px;
 }
 
+.auth-legal-links {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  margin-top: 12px;
+}
+
+.auth-legal-links a {
+  color: #f1cf96;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.auth-legal-links a:hover,
+.auth-legal-links a:focus-visible {
+  color: #ffe8bf;
+  text-decoration: underline;
+}
 
 .auth-link {
   border: none;

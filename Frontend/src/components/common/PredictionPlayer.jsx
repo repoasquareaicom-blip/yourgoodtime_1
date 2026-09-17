@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PredictionCountdown from './PredictionCountdown'
+import { getLanguageByCode, getStoredLanguage, LANGUAGE_CHANGE_EVENT } from '../../data/languageOptions'
 import { submitPredictionFeedback } from '../../services/feedbackService'
+import { fetchProtectedVideoPlaybackUrl } from '../../services/predictionResultService'
+import { isCurtainVideo } from '../../utils/curtainVideo'
+import './PredictionPlayer.css'
 
 const playerStates = {
+  MULTI_VIDEO_NOTICE: 'MULTI_VIDEO_NOTICE',
   COUNTDOWN: 'COUNTDOWN',
   PLAYING: 'PLAYING',
   COMPLETED: 'COMPLETED',
   ERROR: 'ERROR',
+}
+
+const videoDebugEnabled = import.meta.env.VITE_VIDEO_DEBUG === 'true'
+const temporarilyUnavailableMessage = 'This video is temporarily unavailable. Please try again later.'
+
+function entryStateForGroup(group) {
+  return group?.type === 'PREDICTION' && group?.videos?.length > 1
+    ? playerStates.MULTI_VIDEO_NOTICE
+    : playerStates.COUNTDOWN
 }
 
 function groupDetails(group) {
@@ -19,7 +33,7 @@ function groupDetails(group) {
   }
 
   return [
-    group.ageLabel ? { label: 'Age', value: group.ageLabel } : null,
+    videoDebugEnabled && group.ageLabel ? { label: 'Age', value: group.ageLabel } : null,
     group.systemYearLabel ? { label: 'Calendar', value: group.systemYearLabel } : null,
     group.majorDasha ? { label: 'Mahadasha', value: group.majorDasha } : null,
     group.dashaLabel ? { label: 'Dasha period', value: group.dashaLabel } : null,
@@ -50,6 +64,49 @@ function videoProgressLabel(group, currentVideoIndex) {
   return `Video ${currentVideoIndex + 1} of ${totalVideos}${ids}`
 }
 
+function groupTitle(group) {
+  if (group?.type === 'IDENTITY') return 'Astrological Identity'
+  if (!group) return 'Past Journey'
+
+  if (videoDebugEnabled && group.ageLabel) {
+    return `${group.systemYearLabel || 'Prediction'} | Age ${group.ageLabel}`
+  }
+
+  return group.systemYearLabel || 'Past Journey'
+}
+
+function VideoDebugInfo({ debug }) {
+  if (!videoDebugEnabled || !debug) return null
+
+  const paddedCandidate = Array.isArray(debug.filename_candidates) ? debug.filename_candidates[0] : null
+  const rawCandidate = Array.isArray(debug.filename_candidates) ? debug.filename_candidates[1] : null
+
+  return (
+    <div className="prediction-player__debug">
+      <strong>DEBUG</strong>
+      <span>Video Role: {debug.video_role || '-'}</span>
+      <span>Video ID: {debug.video_id || '-'}</span>
+      <span>Prediction Type: {debug.prediction_type || debug.prediction_period || '-'}</span>
+      <span>Language: {debug.language || '-'}</span>
+      <span>Prediction Result ID: {debug.prediction_result_id || '-'}</span>
+      <span>Prediction Request UUID: {debug.request_uuid || '-'}</span>
+      <span>Playback URL Status: {debug.playback_url_status || debug.status || '-'}</span>
+      <span>Stream Status: {debug.stream_status || '-'}</span>
+      <span>Stored Video ID: {debug.stored_video_id || '-'}</span>
+      <span>Final Video ID: {debug.final_video_id || '-'}</span>
+      <span>Video ID Source: {debug.video_id_source || '-'}</span>
+      {paddedCandidate ? (
+        <span>Padded Candidate: {paddedCandidate.filename || '-'} / Exists: {paddedCandidate.exists ? 'true' : 'false'}</span>
+      ) : null}
+      {rawCandidate ? (
+        <span>Raw Candidate: {rawCandidate.filename || '-'} / Exists: {rawCandidate.exists ? 'true' : 'false'}</span>
+      ) : null}
+      <span>Resolved File: {debug.resolved_filename || debug.filename || '-'}</span>
+      <span>Excel Source: {debug.excel_file_path || '-'}</span>
+    </div>
+  )
+}
+
 function PredictionPlayer({
   playlist,
   onClose,
@@ -66,7 +123,7 @@ function PredictionPlayer({
   const navRefs = useRef([])
   const pendingResumeTimeRef = useRef(null)
   const [state, setState] = useState({
-    playerState: playerStates.COUNTDOWN,
+    playerState: entryStateForGroup(playlist[0]),
     currentGroupIndex: 0,
     currentVideoIndex: 0,
     countdownKey: 0,
@@ -83,10 +140,34 @@ function PredictionPlayer({
   const [feedbackError, setFeedbackError] = useState('')
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [hasSubmittedFeedback, setHasSubmittedFeedback] = useState(false)
+  const [playbackSource, setPlaybackSource] = useState({
+    key: '',
+    url: '',
+    isLoading: false,
+    error: '',
+    debug: null,
+  })
+  const [playbackRefreshKey, setPlaybackRefreshKey] = useState(0)
+  const [selectedPlaybackLanguage, setSelectedPlaybackLanguage] = useState(() => (
+    getStoredLanguage()?.code || 'ta'
+  ))
 
   const currentGroup = playlist[state.currentGroupIndex]
   const currentVideo = currentGroup?.videos[state.currentVideoIndex]
   const isCompleted = state.playerState === playerStates.COMPLETED
+  const currentVideoKey = `${state.currentGroupIndex}-${state.currentVideoIndex}-${currentVideo?.videoId || ''}`
+  const currentPeriodVideoCount = currentGroup?.type === 'PREDICTION' ? currentGroup.videos.length : 0
+  const curtainVideo = currentGroup?.type === 'PREDICTION' && isCurtainVideo(currentVideo?.videoId)
+  const shouldShowDubbedDisclosure = selectedPlaybackLanguage !== 'ta'
+  const visibleDebug = {
+    ...(playbackSource.debug || {}),
+    video_role: playbackSource.debug?.video_role || currentGroup?.type || '',
+    video_id: playbackSource.debug?.video_id || currentVideo?.videoId || '',
+    prediction_type: playbackSource.debug?.prediction_type || predictionType,
+    language: playbackSource.debug?.language || selectedPlaybackLanguage,
+    prediction_result_id: playbackSource.debug?.prediction_result_id || predictionResultId || '',
+    request_uuid: playbackSource.debug?.request_uuid || predictionRequestAccess?.requestUuid || '',
+  }
 
   const introSubtitle = currentGroup?.type === 'IDENTITY'
     ? 'Let us begin by understanding your astrological identity.'
@@ -116,6 +197,28 @@ function PredictionPlayer({
   }, [])
 
   useEffect(() => {
+    const syncPlaybackLanguage = (event) => {
+      const changedLanguage = getLanguageByCode(event?.detail?.code)
+      const storedLanguage = changedLanguage || getStoredLanguage()
+
+      setSelectedPlaybackLanguage(storedLanguage?.code || 'ta')
+    }
+
+    const handleStorage = (event) => {
+      if (event.key !== 'ygtPreferredLanguage') return
+      syncPlaybackLanguage()
+    }
+
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, syncPlaybackLanguage)
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      window.removeEventListener(LANGUAGE_CHANGE_EVENT, syncPlaybackLanguage)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
+
+  useEffect(() => {
     if (state.playerState === playerStates.PLAYING && !state.feedbackOpen) {
       playCurrentVideo()
     }
@@ -129,15 +232,120 @@ function PredictionPlayer({
     })
   }, [state.currentGroupIndex])
 
+  useEffect(() => {
+    if (state.playerState !== playerStates.MULTI_VIDEO_NOTICE) return undefined
+
+    const timer = window.setTimeout(() => {
+      setState((current) => (
+        current.playerState === playerStates.MULTI_VIDEO_NOTICE
+          ? { ...current, countdownKey: current.countdownKey + 1, playerState: playerStates.COUNTDOWN }
+          : current
+      ))
+    }, 2000)
+
+    return () => window.clearTimeout(timer)
+  }, [state.currentGroupIndex, state.playerState])
+
+  useEffect(() => {
+    const videoId = currentVideo?.videoId
+
+    if (!videoId) {
+      setPlaybackSource({ key: currentVideoKey, url: '', isLoading: false, error: '', debug: null })
+      return undefined
+    }
+
+    if (!predictionRequestAccess?.predictionRequestId || !predictionRequestAccess?.requestUuid) {
+      setPlaybackSource({ key: currentVideoKey, url: currentVideo?.url || '', isLoading: false, error: '', debug: null })
+      return undefined
+    }
+
+    const controller = new AbortController()
+    setPlaybackSource((current) => ({
+      key: currentVideoKey,
+      url: current.key === currentVideoKey ? current.url : '',
+      isLoading: true,
+      error: '',
+      debug: current.key === currentVideoKey ? current.debug : null,
+    }))
+
+    fetchProtectedVideoPlaybackUrl({
+      ...predictionRequestAccess,
+      predictionType,
+      predictionResultId,
+      videoId,
+      videoRole: currentGroup?.type,
+      language: selectedPlaybackLanguage,
+      signal: controller.signal,
+    })
+      .then(async (data) => {
+        let debug = data?.debug ? { ...data.debug, playback_url_status: data.status } : { playback_url_status: data?.status }
+        let streamOk = true
+
+        if (videoDebugEnabled && data?.url) {
+          try {
+            const streamResponse = await fetch(data.url, {
+              headers: { Range: 'bytes=0-0' },
+              signal: controller.signal,
+            })
+            debug = { ...debug, stream_status: streamResponse.status }
+            streamOk = streamResponse.ok || streamResponse.status === 206
+          } catch (streamError) {
+            if (streamError?.name === 'AbortError') return
+            debug = { ...debug, stream_status: 'NETWORK_ERROR' }
+            streamOk = false
+          }
+        }
+
+        setPlaybackSource({
+          key: currentVideoKey,
+          url: streamOk ? data?.url || '' : '',
+          isLoading: false,
+          error: streamOk ? '' : temporarilyUnavailableMessage,
+          debug,
+        })
+      })
+      .catch((error) => {
+        if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
+
+        setPlaybackSource({
+          key: currentVideoKey,
+          url: '',
+          isLoading: false,
+          error: temporarilyUnavailableMessage,
+          debug: error?.response?.data?.data?.debug
+            ? { ...error.response.data.data.debug, playback_url_status: error.response.status }
+            : { playback_url_status: error?.response?.status || 'NETWORK_ERROR' },
+        })
+      })
+
+    return () => controller.abort()
+  }, [
+    currentGroup?.type,
+    currentVideo?.url,
+    currentVideo?.videoId,
+    currentVideoKey,
+    predictionRequestAccess,
+    predictionResultId,
+    predictionType,
+    playbackRefreshKey,
+    selectedPlaybackLanguage,
+  ])
+
   const handleCountdownComplete = useCallback(() => {
-    if (!currentVideo?.url) {
-      setPlaybackError('This video is not available right now.')
+    if (playbackSource.isLoading) {
+      setPlaybackError(temporarilyUnavailableMessage)
+      setState((current) => ({ ...current, playerState: playerStates.ERROR }))
+      return
+    }
+
+    if (!playbackSource.url) {
+      setPlaybackError(playbackSource.error || temporarilyUnavailableMessage)
       setState((current) => ({ ...current, playerState: playerStates.ERROR }))
       return
     }
 
     setState((current) => ({ ...current, playerState: playerStates.PLAYING }))
-  }, [currentVideo?.url])
+  }, [playbackSource.error, playbackSource.isLoading, playbackSource.url])
 
   const advance = useCallback(() => {
     if (!currentGroup) return
@@ -153,12 +361,15 @@ function PredictionPlayer({
     }
 
     if (state.currentGroupIndex < playlist.length - 1) {
+      const nextGroupIndex = state.currentGroupIndex + 1
+      const nextGroup = playlist[nextGroupIndex]
+
       setState((current) => ({
         ...current,
-        currentGroupIndex: current.currentGroupIndex + 1,
+        currentGroupIndex: nextGroupIndex,
         currentVideoIndex: 0,
         countdownKey: current.countdownKey + 1,
-        playerState: playerStates.COUNTDOWN,
+        playerState: entryStateForGroup(nextGroup),
         completedGroupIndexes: Array.from(new Set([...current.completedGroupIndexes, current.currentGroupIndex])),
       }))
       setPlaybackError('')
@@ -188,10 +399,10 @@ function PredictionPlayer({
       currentGroupIndex: index,
       currentVideoIndex: 0,
       countdownKey: current.countdownKey + 1,
-      playerState: playerStates.COUNTDOWN,
+      playerState: entryStateForGroup(playlist[index]),
       savedPlaybackTime: 0,
     }))
-  }, [])
+  }, [playlist])
 
   const openFeedback = () => {
     const video = videoRef.current
@@ -285,35 +496,44 @@ function PredictionPlayer({
 
         <header className="prediction-player__header">
           <span>{isCompleted ? 'Complete' : progressText}</span>
-          <strong>{currentGroup?.type === 'IDENTITY' ? 'Astrological Identity' : currentGroup?.ageLabel ? `${currentGroup.systemYearLabel || 'Prediction'} | Age ${currentGroup.ageLabel}` : 'Past Journey'}</strong>
+          <strong>{groupTitle(currentGroup)}</strong>
         </header>
 
-        <nav className="prediction-player__timeline" aria-label="Prediction year navigation">
-          {playlist.map((group, index) => (
-            <button
-              key={`${group.type}-${group.systemYearLabel || index}`}
-              ref={(element) => {
-                navRefs.current[index] = element
-              }}
-              type="button"
-              className={[
-                index === state.currentGroupIndex && !isCompleted ? 'is-active' : '',
-                (isCompleted || state.completedGroupIndexes.includes(index)) ? 'is-complete' : '',
-              ].filter(Boolean).join(' ')}
-              onClick={() => handleSelectGroup(index)}
-            >
-              <span>{navLabel(group)}</span>
-              {group.type === 'PREDICTION' && group.ageLabel ? <small>Age {group.ageLabel}</small> : null}
-              {group.type === 'PREDICTION' && group.majorDasha ? <small>{group.majorDasha}</small> : null}
-            </button>
-          ))}
-        </nav>
+        {videoDebugEnabled ? (
+          <nav className="prediction-player__timeline" aria-label="Prediction year navigation">
+            {playlist.map((group, index) => (
+              <button
+                key={`${group.type}-${group.systemYearLabel || index}`}
+                ref={(element) => {
+                  navRefs.current[index] = element
+                }}
+                type="button"
+                className={[
+                  index === state.currentGroupIndex && !isCompleted ? 'is-active' : '',
+                  (isCompleted || state.completedGroupIndexes.includes(index)) ? 'is-complete' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => handleSelectGroup(index)}
+              >
+                <span>{navLabel(group)}</span>
+                {group.type === 'PREDICTION' && group.ageLabel ? <small>Age {group.ageLabel}</small> : null}
+                {group.type === 'PREDICTION' && group.majorDasha ? <small>{group.majorDasha}</small> : null}
+              </button>
+            ))}
+          </nav>
+        ) : null}
 
         <div className="prediction-player__stage">
+          {state.playerState === playerStates.MULTI_VIDEO_NOTICE ? (
+            <div className="prediction-player__period-notice">
+              <span>{currentGroup?.systemYearLabel || currentGroup?.title || 'Prediction'}</span>
+              <strong>{currentPeriodVideoCount} videos for this period</strong>
+            </div>
+          ) : null}
+
           {state.playerState === playerStates.COUNTDOWN ? (
             <PredictionCountdown
               key={`${state.currentGroupIndex}-${state.countdownKey}`}
-              seconds={3}
+              seconds={2}
               title={currentGroup?.title}
               subtitle={introSubtitle}
               details={groupDetails(currentGroup)}
@@ -325,9 +545,9 @@ function PredictionPlayer({
             <div className="prediction-player__video-wrap">
               <video
                 ref={videoRef}
-                key={`${state.currentGroupIndex}-${state.currentVideoIndex}-${currentVideo?.videoId}`}
-                className="prediction-player__video"
-                src={currentVideo?.url}
+                key={`${state.currentGroupIndex}-${state.currentVideoIndex}-${currentVideo?.videoId}-${playbackSource.url}`}
+                className={curtainVideo ? 'prediction-player__video prediction-video--curtain' : 'prediction-player__video'}
+                src={playbackSource.url}
                 controls
                 autoPlay
                 playsInline
@@ -340,14 +560,25 @@ function PredictionPlayer({
                 }}
                 onEnded={advance}
                 onError={() => {
-                  setPlaybackError('This video could not play. You can retry or skip to the next part.')
+                  setPlaybackError(temporarilyUnavailableMessage)
+                  setPlaybackSource((current) => ({
+                    ...current,
+                    debug: {
+                      ...(current.debug || {}),
+                      stream_status: current.debug?.stream_status || 'BROWSER_PLAYBACK_ERROR',
+                    },
+                  }))
                   setState((current) => ({ ...current, playerState: playerStates.ERROR }))
                 }}
               />
+              {shouldShowDubbedDisclosure ? (
+                <p className="prediction-player__dubbed-disclosure">AI-dubbed in your selected language</p>
+              ) : null}
               <div className="prediction-player__caption">
                 <strong>{videoProgressLabel(currentGroup, state.currentVideoIndex)}</strong>
                 <span>{currentVideo?.videoId ? `Video ID ${currentVideo.videoId}` : ''}</span>
               </div>
+              <VideoDebugInfo debug={visibleDebug} />
               {needsTapToContinue ? (
                 <button type="button" className="prediction-player__tap" onClick={playCurrentVideo}>
                   Tap to Continue
@@ -360,9 +591,19 @@ function PredictionPlayer({
             <div className="prediction-player__empty">
               <h2>Playback Paused</h2>
               <p>{playbackError || 'We could not play this video right now.'}</p>
+              <VideoDebugInfo debug={visibleDebug} />
               <div className="prediction-player__actions">
-                <button type="button" onClick={() => setState((current) => ({ ...current, playerState: playerStates.PLAYING }))}>Retry Video</button>
-                <button type="button" onClick={advance}>Skip This Video</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlaybackError('')
+                    setPlaybackRefreshKey((current) => current + 1)
+                    setState((current) => ({ ...current, countdownKey: current.countdownKey + 1, playerState: playerStates.COUNTDOWN }))
+                  }}
+                >
+                  Retry Video
+                </button>
+                <button type="button" onClick={onClose}>Close</button>
               </div>
             </div>
           ) : null}

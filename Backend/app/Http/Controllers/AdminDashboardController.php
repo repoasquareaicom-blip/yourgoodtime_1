@@ -9,8 +9,9 @@ use App\Models\PredictionFeedback;
 use App\Models\PredictionResult;
 use App\Models\TempleRemedyRequest;
 use App\Models\User;
-use App\Services\Prediction\PredictionEngineService;
-use App\Services\Prediction\PredictionResponseBuilder;
+use App\Services\Prediction\IdentityVideoRecoveryService;
+use App\Services\Prediction\PredictionRegenerationService;
+use App\Support\PredictionViewerSignature;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -253,6 +254,7 @@ class AdminDashboardController extends Controller
             ], 404);
         }
 
+        $result = app(IdentityVideoRecoveryService::class)->ensureIdentityVideo($result);
         $entitlement = $result->prediction_entitlement_id
             ? PredictionEntitlement::query()->find($result->prediction_entitlement_id)
             : null;
@@ -268,7 +270,7 @@ class AdminDashboardController extends Controller
                 'period' => $period,
                 'rating' => $this->feedbackPayload($feedback),
                 'last_visited_at' => $feedback?->submitted_at?->toJSON(),
-                'viewer_url' => $this->predictionResponseViewerUrl($predictionRequest),
+                'astrology' => $this->storedAstrologyPayload($predictionRequest),
                 'identity_video' => $this->identityVideoRows($result),
                 'prediction_data' => $this->predictionDataRows($result),
                 'videos' => $this->predictionVideoRows($result),
@@ -279,8 +281,7 @@ class AdminDashboardController extends Controller
     public function regeneratePastPrediction(
         Request $request,
         PredictionRequest $predictionRequest,
-        PredictionEngineService $predictionEngineService,
-        PredictionResponseBuilder $predictionResponseBuilder
+        PredictionRegenerationService $predictionRegenerationService
     ): JsonResponse {
         if ($predictionRequest->prediction_type !== 'past') {
             return response()->json([
@@ -289,51 +290,13 @@ class AdminDashboardController extends Controller
             ], 422);
         }
 
-        $existingResult = PredictionResult::query()
-            ->where('prediction_request_id', $predictionRequest->id)
-            ->where('prediction_type', 'past')
-            ->latest('id')
-            ->first();
-
         try {
-            $timeline = $predictionEngineService->preparePredictionTimeline($predictionRequest->id, 'past');
-            $result = $predictionResponseBuilder->buildTimeline($timeline);
-            $warnings = collect($result['prediction_videos'] ?? [])
-                ->pluck('warning')
-                ->filter()
-                ->values()
-                ->all();
-            $payload = [
-                'prediction_request_id' => $result['prediction_request_id'] ?? $predictionRequest->id,
-                'type' => $result['prediction_type'] ?? 'past',
-                'identity_video' => $result['identity_video'] ?? null,
-                'prediction_videos' => $result['prediction_videos'] ?? [],
-                'summary' => $result['summary'] ?? [],
-                'warnings' => $warnings,
-            ];
-
-            if ($payload['prediction_videos'] === []) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Past prediction regeneration did not produce any prediction videos.',
-                ], 422);
-            }
-
-            $savedResult = PredictionResult::query()->updateOrCreate(
-                [
-                    'prediction_request_id' => $predictionRequest->id,
-                    'prediction_type' => 'past',
-                ],
-                [
-                    'user_id' => $existingResult?->user_id ?? $this->userIdForEmail($predictionRequest->email),
-                    'prediction_entitlement_id' => null,
-                    'identity_video_id' => data_get($payload, 'identity_video.video_id'),
-                    'result_payload' => $payload,
-                    'summary_payload' => $payload['summary'] ?? [],
-                    'warnings_payload' => $payload['warnings'] ?? [],
-                    'status' => 'completed',
-                    'generated_at' => now(),
-                ]
+            $savedResult = $predictionRegenerationService->regenerate(
+                $predictionRequest,
+                'past',
+                null,
+                $predictionRegenerationService->currentVersion('past'),
+                true
             );
         } catch (\Throwable $exception) {
             Log::warning('Admin past prediction regeneration failed.', [
@@ -348,6 +311,7 @@ class AdminDashboardController extends Controller
         }
 
         $predictionRequest->loadMissing('results');
+        $savedResult = app(IdentityVideoRecoveryService::class)->ensureIdentityVideo($savedResult);
         $feedback = $this->feedbackForResult($savedResult);
         $period = $this->predictionPeriod($predictionRequest, $savedResult, null);
 
@@ -361,11 +325,45 @@ class AdminDashboardController extends Controller
                 'period' => $period,
                 'rating' => $this->feedbackPayload($feedback),
                 'last_visited_at' => $feedback?->submitted_at?->toJSON(),
-                'viewer_url' => $this->predictionResponseViewerUrl($predictionRequest),
+                'astrology' => $this->storedAstrologyPayload($predictionRequest),
                 'identity_video' => $this->identityVideoRows($savedResult),
                 'prediction_data' => $this->predictionDataRows($savedResult),
                 'videos' => $this->predictionVideoRows($savedResult),
             ],
+        ]);
+    }
+
+    public function predictionRegenerationSettings(PredictionRegenerationService $predictionRegenerationService): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $predictionRegenerationService->settings(),
+        ]);
+    }
+
+    public function markPredictionRegeneration(
+        Request $request,
+        string $predictionType,
+        PredictionRegenerationService $predictionRegenerationService
+    ): JsonResponse {
+        $validator = Validator::make(['prediction_type' => $predictionType], [
+            'prediction_type' => ['required', Rule::in(['past', 'future'])],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid prediction type.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $setting = $predictionRegenerationService->markAll($predictionType, $request->user()?->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => ucfirst($predictionType).' predictions marked for lazy regeneration.',
+            'data' => $predictionRegenerationService->settingPayload($setting),
         ]);
     }
 
@@ -596,6 +594,7 @@ class AdminDashboardController extends Controller
             'prediction_entitlement_id' => $result->prediction_entitlement_id,
             'prediction_type' => $result->prediction_type,
             'status' => $result->status,
+            'regeneration_version' => (int) $result->regeneration_version,
             'created_at' => $result->created_at?->toJSON(),
             'generated_at' => $result->generated_at?->toJSON(),
             'last_visited_at' => $feedback?->submitted_at?->toJSON(),
@@ -708,8 +707,7 @@ class AdminDashboardController extends Controller
     private function predictionResponseViewerUrl(PredictionRequest $predictionRequest): string
     {
         $expires = now()->addMinutes(30)->timestamp;
-        $payload = implode('|', [$predictionRequest->id, 1, $expires]);
-        $signature = hash_hmac('sha256', $payload, (string) config('app.key'));
+        $signature = PredictionViewerSignature::sign($predictionRequest->id, true, $expires, (string) config('app.key'));
 
         return url('/view-prediction-response.php').'?'.http_build_query([
             'id' => $predictionRequest->id,
@@ -723,9 +721,10 @@ class AdminDashboardController extends Controller
     {
         $normalized = $request->normalized_astrology_data;
         $value = is_array(data_get($normalized, 'value')) ? data_get($normalized, 'value') : (is_array($normalized) ? $normalized : []);
+        $storedIdentity = is_array(data_get($value, 'identity')) ? data_get($value, 'identity') : [];
 
         return [
-            'identity' => $this->identityPayload($request),
+            'identity' => array_merge($this->identityPayload($request), $storedIdentity),
             'summary' => $this->astrologyPayload($request),
             'birth' => data_get($value, 'birth', []),
             'chart' => data_get($value, 'chart', []),
@@ -856,13 +855,22 @@ class AdminDashboardController extends Controller
     private function identityVideoRows(PredictionResult $result): array
     {
         $identity = data_get($result->result_payload, 'identity_video');
+        $storedIdentity = data_get($result->predictionRequest?->normalized_astrology_data, 'value.identity', []);
 
         if (! is_array($identity)) {
-            return [];
+            if (! filled($result->identity_video_id)) {
+                return [];
+            }
+
+            $identity = [
+                'video_id' => (string) $result->identity_video_id,
+                'source' => [
+                    'file' => config('prediction.files.nakshatra_lagnam', 'nakshatra_lagnam.xlsx'),
+                ],
+            ];
         }
 
         $source = is_array($identity['source'] ?? null) ? $identity['source'] : [];
-        $storedIdentity = data_get($result->predictionRequest?->normalized_astrology_data, 'value.identity', []);
 
         return [[
             'excel_file' => $source['file'] ?? 'Not recorded',
@@ -1003,7 +1011,9 @@ class AdminDashboardController extends Controller
 
     private function astrologyPayload(PredictionRequest $request): array
     {
-        $identity = data_get($request->normalized_astrology_data, 'identity', []);
+        $normalized = $request->normalized_astrology_data;
+        $value = is_array(data_get($normalized, 'value')) ? data_get($normalized, 'value') : (is_array($normalized) ? $normalized : []);
+        $identity = data_get($value, 'identity', []);
 
         return array_filter([
             'rasi' => data_get($identity, 'rasi'),

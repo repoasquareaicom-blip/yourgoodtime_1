@@ -149,9 +149,21 @@ class Rule001NakshatraLagnam implements BusinessRuleInterface
 
     private function rowMatches(array $row, array $columns, array $lookupValues): bool
     {
-        return $this->matches($row[$columns['lagnam']] ?? null, $lookupValues['lagnam'], 'signs')
-            && $this->matches($row[$columns['rasi']] ?? null, $lookupValues['rasi'], 'signs')
-            && $this->matches($row[$columns['nakshatra']] ?? null, $lookupValues['nakshatra'], 'nakshatras');
+        return $this->matches(
+                $row[$columns['lagnam']] ?? null,
+                $lookupValues['lagnam'],
+                'workbook_lagnams'
+            )
+            && $this->matches(
+                $row[$columns['rasi']] ?? null,
+                $lookupValues['rasi'],
+                'workbook_lagnams'
+            )
+            && $this->matches(
+                $row[$columns['nakshatra']] ?? null,
+                $lookupValues['nakshatra'],
+                'nakshatras'
+            );
     }
 
     private function matches(mixed $actual, mixed $expected, string $domain): bool
@@ -162,8 +174,15 @@ class Rule001NakshatraLagnam implements BusinessRuleInterface
     private function matchedValues(array $lookupValues): array
     {
         return [
-            'lagnam' => $this->nameMapper->excelValue($lookupValues['lagnam'] ?? null, 'signs'),
-            'rasi' => $this->nameMapper->excelValue($lookupValues['rasi'] ?? null, 'signs'),
+            'lagnam' => $this->nameMapper->excelValue(
+                $lookupValues['lagnam'] ?? null,
+                'workbook_lagnams'
+            ),
+
+            'rasi' => $this->nameMapper->excelValue(
+                $lookupValues['rasi'] ?? null,
+                'workbook_lagnams'
+            ),
             'nakshatra' => $this->nameMapper->excelValue($lookupValues['nakshatra'] ?? null, 'nakshatras'),
         ];
     }

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\PredictionRequest;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -10,6 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 class RegistrationPredictionRequestService
 {
+    public const MIN_SIGNUP_AGE = 16;
+
+    public const SIGNUP_AGE_ERROR = 'You must be 16 years or older to create an account.';
+
     public function __construct(
         private readonly AstrologyApiService $astrologyApiService,
         private readonly PredictionCacheService $predictionCacheService,
@@ -45,7 +50,24 @@ class RegistrationPredictionRequestService
         $validated = Validator::make($input, [
             'full_name' => ['required', 'string', 'max:160'],
             'gender' => ['nullable', 'string', 'in:male,female,other'],
-            'date_of_birth' => ['required', 'date_format:Y-m-d'],
+            'date_of_birth' => ['required', 'date_format:Y-m-d', function (string $attribute, mixed $value, \Closure $fail): void {
+                try {
+                    $dob = CarbonImmutable::createFromFormat('Y-m-d', (string) $value);
+                } catch (\Throwable) {
+                    $fail('Enter a valid date of birth.');
+                    return;
+                }
+
+                if ($dob === false || $dob->format('Y-m-d') !== $value) {
+                    $fail('Enter a valid date of birth.');
+                    return;
+                }
+
+                $minimumDob = CarbonImmutable::now(config('app.timezone'))->startOfDay()->subYears(self::MIN_SIGNUP_AGE);
+                if ($dob->startOfDay()->greaterThan($minimumDob)) {
+                    $fail(self::SIGNUP_AGE_ERROR);
+                }
+            }],
             'time_of_birth' => ['required', 'date_format:H:i'],
             'timezone' => ['nullable', 'timezone'],
             'place_of_birth' => ['required', 'string', 'max:255'],

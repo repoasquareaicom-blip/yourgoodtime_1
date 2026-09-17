@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\OtpRecord;
-use App\Models\PredictionRequest;
 use App\Models\PredictionProduct;
+use App\Models\PredictionRequest;
 use App\Models\User;
+use App\Services\RegistrationPredictionRequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -18,6 +20,13 @@ use Tests\TestCase;
 class RegistrationOtpTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        \Carbon\CarbonImmutable::setTestNow();
+        parent::tearDown();
+    }
 
     public function test_existing_email_cannot_request_another_registration_otp(): void
     {
@@ -59,6 +68,91 @@ class RegistrationOtpTest extends TestCase
         $this->assertSame('person@example.com', $record->pending_payload['email']);
         $this->assertSame('Test User', $record->pending_payload['full_name']);
         $this->assertNull($record->used_at);
+    }
+
+    public function test_signup_rejects_date_of_birth_under_sixteen(): void
+    {
+        $this->freezeSignupAgeDate();
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', $this->registrationPayload([
+            'email' => 'young@example.com',
+            'date_of_birth' => '2010-09-17',
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.date_of_birth.0', RegistrationPredictionRequestService::SIGNUP_AGE_ERROR);
+
+        $this->assertDatabaseCount('otp_records', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_signup_allows_date_of_birth_exactly_sixteen(): void
+    {
+        $this->freezeSignupAgeDate();
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', $this->registrationPayload([
+            'email' => 'exactly16@example.com',
+            'date_of_birth' => '2010-09-16',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('code', 'OTP_SENT');
+
+        $this->assertDatabaseHas('otp_records', [
+            'email' => 'exactly16@example.com',
+            'purpose' => 'signup',
+        ]);
+    }
+
+    public function test_signup_allows_date_of_birth_sixteen_and_one_day(): void
+    {
+        $this->freezeSignupAgeDate();
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', $this->registrationPayload([
+            'email' => 'over16@example.com',
+            'date_of_birth' => '2010-09-15',
+        ]))->assertOk();
+    }
+
+    public function test_signup_rejects_future_date_of_birth(): void
+    {
+        $this->freezeSignupAgeDate();
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', $this->registrationPayload([
+            'email' => 'future@example.com',
+            'date_of_birth' => '2026-09-17',
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.date_of_birth.0', RegistrationPredictionRequestService::SIGNUP_AGE_ERROR);
+
+        $this->assertDatabaseCount('otp_records', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_login_otp_does_not_require_signup_age(): void
+    {
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', [
+            'email' => 'login@example.com',
+            'purpose' => 'login',
+        ])
+            ->assertOk()
+            ->assertJsonPath('code', 'OTP_SENT');
+    }
+
+    public function test_forgot_password_otp_does_not_require_signup_age(): void
+    {
+        $this->fakeMailGateway();
+
+        $this->postJson('/api/auth/send-otp', [
+            'email' => 'reset@example.com',
+            'purpose' => 'password_reset',
+        ])
+            ->assertOk()
+            ->assertJsonPath('code', 'OTP_SENT');
     }
 
     public function test_generic_registration_otp_creates_user_without_prediction_request(): void
@@ -337,6 +431,13 @@ class RegistrationOtpTest extends TestCase
 
         $this->assertDatabaseCount('prediction_requests', 1);
         $this->assertNull($record->refresh()->used_at);
+    }
+
+    private function freezeSignupAgeDate(): void
+    {
+        $frozen = Carbon::parse('2026-09-16 12:00:00', 'Asia/Kolkata');
+        Carbon::setTestNow($frozen);
+        \Carbon\CarbonImmutable::setTestNow($frozen);
     }
 
     private function fakeMailGateway(): void

@@ -47,6 +47,20 @@ return [
             'report' => false,
         ],
 
+        'protected_videos' => [
+            'driver' => 'local',
+            'root' => env('PROTECTED_VIDEO_PATH', storage_path('app/protected-videos')),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'gallery_temp' => [
+            'driver' => 'local',
+            'root' => storage_path('app/gallery'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

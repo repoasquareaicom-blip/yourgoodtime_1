@@ -2,20 +2,23 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import templeImage from '../assets/temple-transparent.png'
 import ytLogo from '../assets/yt-logo.png'
+import { getStoredLanguage } from '../data/languageOptions'
 import './SplashPage.css'
 
 function SplashPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    const nextRoute = getStoredLanguage() ? '/intro' : '/language'
+
     const timer = window.setTimeout(() => {
-      navigate('/language', { replace: true })
+      navigate(nextRoute, { replace: true })
     }, 5000)
 
     const handleKeyDown = (event) => {
       if (event.key === 'Enter') {
         window.clearTimeout(timer)
-        navigate('/language', { replace: true })
+        navigate(nextRoute, { replace: true })
       }
     }
 

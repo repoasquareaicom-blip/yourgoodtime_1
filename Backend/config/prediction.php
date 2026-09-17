@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'past_years' => 40,
+    'past_years' => 10,
 
     // Safety window only. The Future purchase block itself is defined by the matched Excel year/range.
     'future_years' => 1,
@@ -33,7 +33,37 @@ return [
     'files' => [
         'nakshatra_lagnam' => 'nakshatra_lagnam.xlsx',
     ],
-
+    'canonical_names' => [
+        'nakshatras' => [
+            'Ashwini',
+            'Bharani',
+            'Kritika',
+            'Rohini',
+            'Mrigasira',
+            'Ardra',
+            'Punarvasu',
+            'Pushya',
+            'Ashlesha',
+            'Makha',
+            'Purva Phalguni',
+            'Uttra Phalguni',
+            'Hastha',
+            'Chitra',
+            'Swathi',
+            'Vishakha',
+            'Anuradha',
+            'Jyestha',
+            'Mool',
+            'Purva Ashadha',
+            'Uttara Ashadha',
+            'Sravana',
+            'Dhanistha',
+            'Satabhisha',
+            'Purva Bhadrapad',
+            'Uttra Bhadrapad',
+            'Revathi',
+        ],
+    ],
     'name_mappings' => [
         'signs' => [
             'aries' => 'Mesha',
@@ -93,6 +123,8 @@ return [
         'nakshatras' => [
             'ashwini' => 'Aswini',
             'kritika' => 'Krittika',
+            'swati' => 'Swathi',
+            'svati' => 'Swathi',
             'purva phalguni' => 'Poorvaphalguni',
             'poorva phalguni' => 'Poorvaphalguni',
             'poorvaphalguni' => 'Poorvaphalguni',
@@ -102,6 +134,7 @@ return [
             'moola' => 'Mool',
             'purva ashadha' => 'Purva Shadha',
             'purvashada' => 'Purva Shadha',
+            'poorvashada' => 'Purva Shadha',
             'uttara ashadha' => 'Uttarashada',
             'uttarashada' => 'Uttarashada',
             'purva bhadrapada' => 'Poorvabhadrapada',

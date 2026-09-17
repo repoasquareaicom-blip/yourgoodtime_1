@@ -19,21 +19,73 @@ $dbConfig = [
     'charset' => 'utf8mb4',
 ];
 
+const VIEWER_CODE_VERSION = '20260915-appkey-parser-debug';
+
+foreach ([
+    __DIR__.'/../app/Support/PredictionViewerSignature.php',
+    __DIR__.'/app/Support/PredictionViewerSignature.php',
+    __DIR__.'/../Backend/app/Support/PredictionViewerSignature.php',
+    __DIR__.'/../../Backend/app/Support/PredictionViewerSignature.php',
+] as $signatureHelperPath) {
+    if (is_file($signatureHelperPath)) {
+        require_once $signatureHelperPath;
+        break;
+    }
+}
+
+function trimEnvWhitespace(string $value): string
+{
+    return preg_replace('/^[\s\x{FEFF}\x{00A0}]+|[\s\x{FEFF}\x{00A0}]+$/u', '', $value) ?? trim($value);
+}
+
+function parseLocalEnvLine(string $line): ?array
+{
+    $line = preg_replace('/^\xEF\xBB\xBF/', '', $line) ?? $line;
+    $trimmedLine = trimEnvWhitespace($line);
+
+    if ($trimmedLine === '' || str_starts_with($trimmedLine, '#') || ! str_contains($trimmedLine, '=')) {
+        return null;
+    }
+
+    [$key, $value] = explode('=', $line, 2);
+    $key = preg_replace('/^\s*export\s+/i', '', $key) ?? $key;
+    $key = trimEnvWhitespace($key);
+    $value = trimEnvWhitespace($value);
+
+    if ($key === '') {
+        return null;
+    }
+
+    if (
+        strlen($value) >= 2
+        && (($value[0] === '"' && $value[strlen($value) - 1] === '"')
+            || ($value[0] === "'" && $value[strlen($value) - 1] === "'"))
+    ) {
+        $value = substr($value, 1, -1);
+    } else {
+        $value = preg_replace('/\s+#.*$/', '', $value) ?? $value;
+        $value = trimEnvWhitespace($value);
+    }
+
+    return [$key, $value];
+}
+
 function loadLocalEnv(string $path): array
 {
-    if (! is_file($path)) {
+    if (! is_file($path) || ! is_readable($path)) {
         return [];
     }
 
     $values = [];
-    foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
-        $line = trim($line);
-        if ($line === '' || str_starts_with($line, '#') || ! str_contains($line, '=')) {
+    foreach (file($path, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+        $parsed = parseLocalEnvLine((string) $line);
+
+        if ($parsed === null) {
             continue;
         }
 
-        [$key, $value] = explode('=', $line, 2);
-        $values[trim($key)] = trim(trim($value), "\"'");
+        [$key, $value] = $parsed;
+        $values[$key] = $value;
     }
 
     return $values;
@@ -117,19 +169,138 @@ function valueText(mixed $value): string
 
 function appKeyForSignature(array $env): string
 {
-    return (string) ($env['APP_KEY'] ?? '');
+    return \App\Support\PredictionViewerSignature::normalizeAppKey((string) ($env['APP_KEY'] ?? getenv('APP_KEY') ?: ''));
+}
+
+function envHasAppKey(string $path): bool
+{
+    $env = loadLocalEnv($path);
+
+    return array_key_exists('APP_KEY', $env) && trim((string) $env['APP_KEY']) !== '';
+}
+
+function appKeyLineDiagnostics(string $path): array
+{
+    $diagnostics = [
+        'app_key_line_found' => false,
+        'app_key_line_number' => null,
+        'app_key_name_exact_match' => false,
+        'app_key_has_spaces_before_equals' => false,
+        'app_key_value_quoted' => false,
+        'app_key_value_length' => 0,
+        'app_key_has_base64_prefix' => false,
+    ];
+
+    if (! is_file($path) || ! is_readable($path)) {
+        return $diagnostics;
+    }
+
+    foreach (file($path, FILE_IGNORE_NEW_LINES) ?: [] as $index => $line) {
+        $line = preg_replace('/^\xEF\xBB\xBF/', '', (string) $line) ?? (string) $line;
+        $trimmedLine = trimEnvWhitespace($line);
+
+        if ($trimmedLine === '' || str_starts_with($trimmedLine, '#') || ! str_contains($line, '=')) {
+            continue;
+        }
+
+        [$rawKey, $rawValue] = explode('=', $line, 2);
+        $keyWithoutExport = preg_replace('/^\s*export\s+/i', '', $rawKey) ?? $rawKey;
+        $normalizedKey = trimEnvWhitespace($keyWithoutExport);
+
+        if ($normalizedKey !== 'APP_KEY' && ! str_contains($rawKey, 'APP_KEY')) {
+            continue;
+        }
+
+        $trimmedValue = trimEnvWhitespace($rawValue);
+        $valueQuoted = strlen($trimmedValue) >= 2
+            && (($trimmedValue[0] === '"' && $trimmedValue[strlen($trimmedValue) - 1] === '"')
+                || ($trimmedValue[0] === "'" && $trimmedValue[strlen($trimmedValue) - 1] === "'"));
+        $parsed = parseLocalEnvLine($line);
+        $parsedValue = $parsed[1] ?? '';
+
+        return [
+            'app_key_line_found' => true,
+            'app_key_line_number' => $index + 1,
+            'app_key_name_exact_match' => $keyWithoutExport === 'APP_KEY',
+            'app_key_has_spaces_before_equals' => $keyWithoutExport !== rtrim($keyWithoutExport),
+            'app_key_value_quoted' => $valueQuoted,
+            'app_key_value_length' => strlen((string) $parsedValue),
+            'app_key_has_base64_prefix' => str_starts_with((string) $parsedValue, 'base64:'),
+        ];
+    }
+
+    return $diagnostics;
+}
+
+function viewerEnvDiagnostics(string $expectedEnvPath): array
+{
+    $env = loadLocalEnv($expectedEnvPath);
+    $filesize = is_file($expectedEnvPath) ? filesize($expectedEnvPath) : null;
+
+    return [
+        'viewer_file_basename' => basename(__FILE__),
+        'expected_env_path_basename' => basename(dirname($expectedEnvPath)).'/'.basename($expectedEnvPath),
+        'expected_env_exists' => file_exists($expectedEnvPath),
+        'expected_env_is_file' => is_file($expectedEnvPath),
+        'expected_env_readable' => is_readable($expectedEnvPath),
+        'expected_env_filesize' => $filesize === false ? null : $filesize,
+        'env_has_app_key' => array_key_exists('APP_KEY', $env) && trim((string) $env['APP_KEY']) !== '',
+        'env_parse_succeeded' => is_file($expectedEnvPath) && is_readable($expectedEnvPath),
+    ] + appKeyLineDiagnostics($expectedEnvPath);
+}
+
+function selectViewerEnv(): array
+{
+    $expectedEnvPath = dirname(__DIR__).'/.env';
+    $candidates = [
+        'laravel_project_env' => $expectedEnvPath,
+    ];
+
+    $selectedSource = 'process_env';
+    $selectedPath = null;
+    $env = [];
+
+    foreach ($candidates as $source => $path) {
+        if (envHasAppKey($path)) {
+            $selectedSource = $source;
+            $selectedPath = $path;
+            $env = loadLocalEnv($path);
+            break;
+        }
+    }
+
+    if ($env === []) {
+        viewerLog('ENV_FALLBACK_TO_PROCESS', viewerEnvDiagnostics($expectedEnvPath));
+
+        $processAppKey = getenv('APP_KEY');
+
+        if (is_string($processAppKey) && $processAppKey !== '') {
+            $env['APP_KEY'] = $processAppKey;
+        }
+    }
+
+    return [
+        'env' => $env,
+        'source' => $selectedSource,
+        'path' => $selectedPath,
+    ];
+}
+
+function viewerLog(string $code, array $context = []): void
+{
+    $context = ['viewer_code_version' => VIEWER_CODE_VERSION] + $context;
+
+    error_log('Prediction viewer '.$code.' '.json_encode($context, JSON_UNESCAPED_SLASHES));
+}
+
+function embeddedSignatureFailureReason(int $id, bool $embedded, int $expires, ?string $signature, array $env): ?string
+{
+    return \App\Support\PredictionViewerSignature::failureReason($id, $embedded, $expires, $signature, appKeyForSignature($env));
 }
 
 function validEmbeddedSignature(int $id, bool $embedded, int $expires, ?string $signature, array $env): bool
 {
-    if (! $embedded || $id < 1 || $expires < time() || ! is_string($signature) || $signature === '') {
-        return false;
-    }
-
-    $payload = implode('|', [$id, 1, $expires]);
-    $expected = hash_hmac('sha256', $payload, appKeyForSignature($env));
-
-    return hash_equals($expected, $signature);
+    return embeddedSignatureFailureReason($id, $embedded, $expires, $signature, $env) === null;
 }
 
 function decodeJson(mixed $json): array
@@ -462,7 +633,8 @@ function renderAccordionItem(string $parentId, string $id, string $title, callab
     echo '</div></div></div>';
 }
 
-$env = loadLocalEnv(__DIR__.'/../.env');
+$selectedEnv = selectViewerEnv();
+$env = $selectedEnv['env'];
 $driver = $dbConfig['driver'] ?: ($env['DB_CONNECTION'] ?? 'mysql');
 $host = $dbConfig['host'] ?: ($env['DB_HOST'] ?? '127.0.0.1');
 $port = $dbConfig['port'] ?: ($env['DB_PORT'] ?? '3306');
@@ -479,7 +651,11 @@ $requiresSignedLink = (($env['APP_ENV'] ?? 'production') !== 'local') || (bool) 
 $record = null;
 $error = null;
 
-if ($id && (! $requiresSignedLink || validEmbeddedSignature((int) $id, true, (int) $expires, $signature, $env))) {
+$signatureFailureReason = $requiresSignedLink
+    ? embeddedSignatureFailureReason((int) ($id ?: 0), true, (int) $expires, $signature, $env)
+    : null;
+
+if ($id && (! $requiresSignedLink || $signatureFailureReason === null)) {
     try {
         $dsn = $driver === 'sqlite'
             ? 'sqlite:'.$database
@@ -493,11 +669,44 @@ if ($id && (! $requiresSignedLink || validEmbeddedSignature((int) $id, true, (in
         $statement = $pdo->prepare('SELECT * FROM prediction_requests WHERE id = :id LIMIT 1');
         $statement->execute(['id' => $id]);
         $record = $statement->fetch() ?: null;
+
+        if (! $record) {
+            viewerLog('RESULT_NOT_FOUND', [
+                'prediction_request_id' => $id,
+                'embedded' => $embedded,
+            ]);
+        }
     } catch (Throwable $exception) {
+        viewerLog('INVALID_REQUEST', [
+            'prediction_request_id' => $id,
+            'embedded' => $embedded,
+            'database_error' => $exception->getMessage(),
+        ]);
         $error = $exception->getMessage();
     }
 } elseif ($id && $requiresSignedLink) {
     http_response_code(403);
+    $appKey = appKeyForSignature($env);
+    $canonicalInput = \App\Support\PredictionViewerSignature::canonicalInput((int) $id, true, (int) $expires);
+    $calculatedSignature = $appKey !== ''
+        ? \App\Support\PredictionViewerSignature::sign((int) $id, true, (int) $expires, $appKey)
+        : '';
+
+    viewerLog($signatureFailureReason ?: 'INVALID_REQUEST', [
+        'prediction_request_id' => $id,
+        'embedded' => $embedded,
+        'expires' => $expires,
+        'now' => time(),
+        'key_source' => $selectedEnv['source'] ?? 'unknown',
+        'key_path' => $selectedEnv['path'] ? basename(dirname((string) $selectedEnv['path'])).'/'.basename((string) $selectedEnv['path']) : null,
+        'has_signature' => is_string($signature) && $signature !== '',
+        'key_present' => $appKey !== '',
+        'key_has_base64_prefix' => \App\Support\PredictionViewerSignature::keyHasBase64Prefix($appKey),
+        'signing_algorithm' => \App\Support\PredictionViewerSignature::ALGORITHM,
+        'canonical_input' => $canonicalInput,
+        'provided_signature_length' => is_string($signature) ? strlen($signature) : 0,
+        'calculated_signature_length' => strlen($calculatedSignature),
+    ]);
     $error = 'This prediction viewer link is invalid or expired.';
 }
 

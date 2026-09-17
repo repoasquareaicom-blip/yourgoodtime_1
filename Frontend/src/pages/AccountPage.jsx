@@ -55,6 +55,21 @@ function accessFromWatch(watch) {
   return {
     predictionRequestId: watch.prediction_request_id,
     requestUuid: watch.request_uuid,
+    identityVideoId: watch.identity_video_id || null,
+  }
+}
+
+function ensureIdentityVideo(result, access) {
+  if (result?.identity_video?.video_id || !access?.identityVideoId) return result
+
+  return {
+    ...(result || {}),
+    identity_video: {
+      video_id: String(access.identityVideoId),
+      source: {
+        file: 'nakshatra_lagnam.xlsx',
+      },
+    },
   }
 }
 
@@ -631,28 +646,34 @@ function AccountPage() {
           result = await fetchPredictionResult({ ...access, type: 'future', entitlementId })
         }
       } else {
-        result = await fetchPredictionResult({ ...access, type: 'past' })
+        try {
+          result = await fetchStoredPredictionResult({ ...access, type: 'past' })
+        } catch {
+          result = await fetchPredictionResult({ ...access, type: 'past' })
+        }
       }
 
-      const playlist = buildPredictionPlaylist(result, type)
+      const playableResult = type === 'past' ? ensureIdentityVideo(result, access) : result
+      const playlist = buildPredictionPlaylist(playableResult, type)
 
       if (!playlist.length) {
         setActionMessage(type === 'future'
           ? 'Your Future Prediction is not playable yet. Please try again shortly.'
           : 'Your Past Prediction is not playable yet. Please try again shortly.')
+        setIsPreparing('')
         return
       }
 
       setPlayer({
         type,
         playlist,
-        resultId: result?.result_id,
+        resultId: playableResult?.result_id,
         access,
       })
-      await loadHistory({ force: true })
+      setIsPreparing('')
+      loadHistory({ force: true })
     } catch (playError) {
       setActionMessage(playError?.response?.data?.message || 'We could not open this prediction right now.')
-    } finally {
       setIsPreparing('')
     }
   }

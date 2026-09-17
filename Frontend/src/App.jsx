@@ -9,9 +9,11 @@ import LoginPage from './pages/LoginPage'
 import AccountPage from './pages/AccountPage'
 import AccountLoadingPage from './pages/AccountLoadingPage'
 import AdminPage from './pages/AdminPage'
+import AdminGalleryVideoPreviewPage from './pages/AdminGalleryVideoPreviewPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import DailyPage from './pages/DailyPage'
 import PastPredictionPage from './pages/PastPredictionPage'
+import LegalDocumentPage from './pages/LegalDocumentPage'
 import ProtectedRoute from './components/common/ProtectedRoute'
 import AdminProtectedRoute from './components/common/AdminProtectedRoute'
 import ChatbotWidget from './components/common/ChatbotWidget'
@@ -44,10 +46,17 @@ function App() {
         <Route path="/remedy" element={<ProtectedRoute><AccountPage initialSection="remedies" /></ProtectedRoute>} />
         <Route path="/appointment" element={<ProtectedRoute><AccountPage initialSection="appointments" /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminProtectedRoute><AdminPage /></AdminProtectedRoute>} />
+        <Route path="/admin/gallery-videos/:id/preview" element={<AdminProtectedRoute><AdminGalleryVideoPreviewPage /></AdminProtectedRoute>} />
         <Route path="/daily" element={<DailyPage />} />
+        <Route path="/videos/:videoId/:slug" element={<VideoLibraryPage />} />
+        <Route path="/videos/:videoId" element={<VideoLibraryPage />} />
         <Route path="/videos" element={<VideoLibraryPage />} />
         <Route path="/past-prediction" element={<PastPredictionPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/terms-and-conditions" element={<LegalDocumentPage type="terms" />} />
+        <Route path="/privacy-policy" element={<LegalDocumentPage type="privacy" />} />
+        <Route path="/refund-policy" element={<LegalDocumentPage type="refund" />} />
+        <Route path="/disclaimer" element={<LegalDocumentPage type="disclaimer" />} />
         <Route path="*" element={<Navigate to="/splash" replace />} />
       </Routes>
 

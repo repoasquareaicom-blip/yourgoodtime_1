@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import introBg from '../assets/intro-bg.png'
 import ytLogo from '../assets/yt-logo.png'
 import introVideo from '../assets/videos/intro-2.mp4'
-import { videoLibrary } from '../data/videoLibrary'
+import VideoModalPlayer from '../components/common/VideoModalPlayer'
+import { getGalleryVideos } from '../services/galleryVideoService'
 import './IntroPage.css'
+import './VideoLibraryPage.css'
 
-const galleryItems = videoLibrary.map((item) => item.thumbnail)
+const INTRO_DAILY_VIDEO_LIMIT = 4
 
 function IntroPage() {
   const navigate = useNavigate()
@@ -16,9 +18,11 @@ function IntroPage() {
   const [isIntroLoading, setIsIntroLoading] = useState(true)
   const [introProgress, setIntroProgress] = useState(6)
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false)
+  const [selectedGalleryVideo, setSelectedGalleryVideo] = useState(null)
+  const [homeVideos, setHomeVideos] = useState([])
   const [galleryPage, setGalleryPage] = useState(0)
   const [isLeaving, setIsLeaving] = useState(false)
-  const pageCount = useMemo(() => Math.ceil(galleryItems.length / 3), [])
+  const pageCount = useMemo(() => Math.ceil(homeVideos.length / INTRO_DAILY_VIDEO_LIMIT), [homeVideos.length])
 
   useEffect(() => {
     let isMounted = true
@@ -66,8 +70,24 @@ function IntroPage() {
   }, [])
 
   useEffect(() => {
+    let isMounted = true
+
+    getGalleryVideos({ recent_limit: 2, home_limit: INTRO_DAILY_VIDEO_LIMIT })
+      .then((data) => {
+        if (isMounted) setHomeVideos(data.home)
+      })
+      .catch(() => {
+        if (isMounted) setHomeVideos([])
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
     const gallery = galleryRef.current
-    if (!gallery) return undefined
+    if (!gallery || pageCount <= 1) return undefined
 
     const updatePage = () => {
       const currentPage = Math.round(gallery.scrollLeft / gallery.clientWidth)
@@ -140,7 +160,7 @@ function IntroPage() {
   }
 
   const handleViewAllVideos = () => {
-    navigate('/videos?source=intro')
+    navigate('/videos')
   }
 
   return (
@@ -170,28 +190,38 @@ function IntroPage() {
         </div>
       </section>
 
-      <section className="gallery-strip" aria-label="Video gallery">
-        <header className="video-library-top">
-          <h2>Daily Videos</h2>
-          <button type="button" className="video-library-view-all" onClick={handleViewAllVideos}>
-            View all
-          </button>
-        </header>
+      {homeVideos.length > 0 ? (
+        <section className="gallery-strip" aria-label="Video gallery">
+          <header className="video-library-top">
+            <h2>Daily Videos</h2>
+            <button type="button" className="video-library-view-all" onClick={handleViewAllVideos}>
+              View all
+            </button>
+          </header>
 
-        <div className="gallery-track" ref={galleryRef} role="list">
-          {galleryItems.map((src, index) => (
-            <article key={src} className="gallery-item" role="listitem">
-              <img src={src} alt={`Gallery item ${index + 1}`} className="gallery-image" />
-            </article>
-          ))}
-        </div>
+          <div className="gallery-track" ref={galleryRef} role="list">
+            {homeVideos.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                className="gallery-item"
+                role="listitem"
+                onClick={() => setSelectedGalleryVideo({ ...item, variant: item.videoType === 'SHORT' ? 'portrait' : 'landscape' })}
+              >
+                <img src={item.thumbnail} alt={`${item.title || `Gallery item ${index + 1}`} thumbnail`} className="gallery-image" />
+              </button>
+            ))}
+          </div>
 
-        <div className="gallery-pagination" aria-label="Gallery pagination">
-          {Array.from({ length: pageCount }, (_, index) => (
-            <span key={index} className={`gallery-page ${index === galleryPage ? 'is-active' : ''}`} aria-hidden="true" />
-          ))}
-        </div>
-      </section>
+          {pageCount > 1 ? (
+            <div className="gallery-pagination" aria-label="Gallery pagination">
+              {Array.from({ length: pageCount }, (_, index) => (
+                <span key={index} className={`gallery-page ${index === galleryPage ? 'is-active' : ''}`} aria-hidden="true" />
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="home-bottom">
         <section className="past-text-wrap" aria-label="Past prediction text">
@@ -254,6 +284,12 @@ function IntroPage() {
           </section>
         </div>
       ) : null}
+
+      <VideoModalPlayer
+        video={selectedGalleryVideo}
+        variant={selectedGalleryVideo?.variant}
+        onClose={() => setSelectedGalleryVideo(null)}
+      />
 
       {isIntroLoading ? (
         <div className="intro-loading-overlay" role="status" aria-live="polite">

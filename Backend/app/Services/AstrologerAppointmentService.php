@@ -14,6 +14,7 @@ use App\Models\PaymentMethodSetting;
 use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
 use App\Models\User;
+use App\Support\PredictionViewerSignature;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -942,8 +943,7 @@ class AstrologerAppointmentService
     private function predictionResponseViewerUrl(PredictionRequest $predictionRequest): string
     {
         $expires = now()->addMinutes(30)->timestamp;
-        $payload = implode('|', [$predictionRequest->id, 1, $expires]);
-        $signature = hash_hmac('sha256', $payload, (string) config('app.key'));
+        $signature = PredictionViewerSignature::sign($predictionRequest->id, true, $expires, (string) config('app.key'));
 
         return url('/view-prediction-response.php').'?'.http_build_query([
             'id' => $predictionRequest->id,

@@ -12,6 +12,62 @@ export async function fetchAdminUsers() {
   return response.data?.data || []
 }
 
+export async function fetchAdminGalleryVideos() {
+  const response = await adminApi.get('/admin/gallery-videos')
+
+  return response.data?.data || []
+}
+
+export async function fetchAdminGalleryVideo(videoId) {
+  const response = await adminApi.get(`/admin/gallery-videos/${videoId}`)
+
+  return response.data?.data
+}
+
+export async function uploadAdminGalleryVideoChunk(payload, options = {}) {
+  const response = await adminApi.post('/admin/gallery-videos/upload-chunk', payload, {
+    timeout: 30000,
+    ...options,
+  })
+
+  return response.data
+}
+
+export async function finalizeAdminGalleryVideoUpload(payload, options = {}) {
+  const response = await adminApi.post('/admin/gallery-videos/finalize-upload', payload, {
+    timeout: 120000,
+    ...options,
+  })
+
+  return response.data
+}
+
+export async function createAdminGalleryVideo(payload, options = {}) {
+  const response = await adminApi.post('/admin/gallery-videos', payload, options)
+
+  return response.data
+}
+
+export async function updateAdminGalleryVideo(videoId, payload, options = {}) {
+  const response = await adminApi.post(`/admin/gallery-videos/${videoId}`, payload, options)
+
+  return response.data
+}
+
+export async function updateAdminGalleryVideoVisibility(videoId, isActive) {
+  const response = await adminApi.patch(`/admin/gallery-videos/${videoId}/visibility`, {
+    is_active: isActive,
+  })
+
+  return response.data
+}
+
+export async function deleteAdminGalleryVideo(videoId) {
+  const response = await adminApi.delete(`/admin/gallery-videos/${videoId}`)
+
+  return response.data
+}
+
 export async function fetchAdminPredictionRequests(type = 'past') {
   const response = await adminApi.get('/admin/prediction-requests', {
     params: { type },
@@ -34,6 +90,24 @@ export async function regenerateAdminPastPrediction(requestId) {
   return response.data
 }
 
+export async function fetchAdminPredictionRegenerationSettings() {
+  const response = await adminApi.get('/admin/prediction-regeneration-settings')
+
+  return response.data?.data || []
+}
+
+export async function markAdminPredictionRegeneration(predictionType) {
+  const response = await adminApi.post(`/admin/prediction-regeneration-settings/${predictionType}/mark`)
+
+  return response.data
+}
+export async function validateAdminPredictionExcel(validator = 'rule001_nakshatra_lagnam') {
+  const response = await adminApi.post('/admin/prediction-excel-validator/validate', {
+    validator,
+  })
+
+  return response.data
+}
 export async function fetchAdminFeedback() {
   const response = await adminApi.get('/admin/feedback')
 

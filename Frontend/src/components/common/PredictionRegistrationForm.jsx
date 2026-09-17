@@ -1,4 +1,12 @@
+import { useEffect, useRef, useState } from 'react'
 import PlaceAutocomplete from './PlaceAutocomplete'
+import {
+  dateOfBirthEligibilityError,
+  formatTimeInput,
+  from24HourTime,
+  normalizeTimeDisplay,
+  to24HourTime,
+} from '../../utils/birthDetails'
 import './PredictionRegistrationForm.css'
 
 function PredictionRegistrationForm({
@@ -16,12 +24,52 @@ function PredictionRegistrationForm({
   onPlaceSelect,
   children,
   renderAsForm = true,
+  requireMinimumAge = false,
+  dateInputMax,
 }) {
+  const parsedTime = from24HourTime(values.timeOfBirth)
+  const [timeDisplay, setTimeDisplay] = useState(parsedTime.hhmm)
+  const [meridiem, setMeridiem] = useState(parsedTime.meridiem)
+  const lastEmittedTimeRef = useRef(values.timeOfBirth || '')
   const update = (field, value) => {
     onFieldChange?.(field, value)
   }
   const Shell = renderAsForm ? 'form' : 'div'
   const shellProps = renderAsForm ? { onSubmit } : {}
+  const dobError = requireMinimumAge
+    ? (dateOfBirthEligibilityError(values.dateOfBirth) || fieldErrors.date_of_birth)
+    : fieldErrors.date_of_birth
+
+  useEffect(() => {
+    const parentTime = values.timeOfBirth || ''
+    if (parentTime === (lastEmittedTimeRef.current || '')) return
+
+    lastEmittedTimeRef.current = parentTime
+    const nextParsed = from24HourTime(parentTime)
+    if (nextParsed.hhmm) {
+      setTimeDisplay(nextParsed.hhmm)
+      setMeridiem(nextParsed.meridiem)
+      return
+    }
+
+    setTimeDisplay('')
+    setMeridiem('AM')
+  }, [values.timeOfBirth])
+
+  const emitTime = (nextDisplay, nextMeridiem) => {
+    const trimmed = String(nextDisplay || '').trim()
+    if (!trimmed) {
+      lastEmittedTimeRef.current = ''
+      update('timeOfBirth', '')
+      return
+    }
+
+    const next24 = to24HourTime(normalizeTimeDisplay(trimmed), nextMeridiem)
+    if (!next24) return
+
+    lastEmittedTimeRef.current = next24
+    update('timeOfBirth', next24)
+  }
 
   return (
     <Shell className="past-form prediction-registration-form" {...shellProps}>
@@ -61,22 +109,54 @@ function PredictionRegistrationForm({
             type="date"
             value={values.dateOfBirth}
             disabled={disabled}
+            max={dateInputMax || undefined}
+            aria-invalid={Boolean(dobError)}
             onChange={(event) => update('dateOfBirth', event.target.value)}
             required
           />
-          {fieldErrors.date_of_birth ? <span className="past-field-error">{fieldErrors.date_of_birth}</span> : null}
+          {dobError ? <span className="past-field-error">{dobError}</span> : null}
         </label>
 
         <label>
           Time of birth
           <span className="past-field-caption">hh:mm AM/PM</span>
-          <input
-            type="time"
-            value={values.timeOfBirth}
-            disabled={disabled}
-            onChange={(event) => update('timeOfBirth', event.target.value)}
-            required
-          />
+          <div className="past-time-of-birth">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="hh:mm"
+              value={timeDisplay}
+              disabled={disabled}
+              aria-label="Time of birth hours and minutes"
+              maxLength={5}
+              required
+              onChange={(event) => {
+                const nextDisplay = formatTimeInput(event.target.value)
+                setTimeDisplay(nextDisplay)
+                emitTime(nextDisplay, meridiem)
+              }}
+              onBlur={() => {
+                const nextDisplay = normalizeTimeDisplay(timeDisplay)
+                setTimeDisplay(nextDisplay)
+                emitTime(nextDisplay, meridiem)
+              }}
+            />
+            <select
+              className="past-meridiem"
+              value={meridiem}
+              disabled={disabled}
+              aria-label="AM or PM"
+              onChange={(event) => {
+                const nextMeridiem = event.target.value
+                setMeridiem(nextMeridiem)
+                emitTime(timeDisplay, nextMeridiem)
+              }}
+            >
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
+          </div>
           {fieldErrors.time_of_birth ? <span className="past-field-error">{fieldErrors.time_of_birth}</span> : null}
         </label>
       </div>
@@ -118,7 +198,7 @@ function PredictionRegistrationForm({
       {error ? <p className="past-error">{error}</p> : null}
       {children}
 
-      <button type="submit" className="past-submit" disabled={disabled || isSubmitting}>
+      <button type="submit" className="past-submit" disabled={disabled || isSubmitting || Boolean(requireMinimumAge && dobError)}>
         {isSubmitting ? loadingLabel : submitLabel}
       </button>
     </Shell>

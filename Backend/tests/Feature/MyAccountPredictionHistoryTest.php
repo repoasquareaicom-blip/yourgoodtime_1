@@ -57,6 +57,17 @@ class MyAccountPredictionHistoryTest extends TestCase
             'email' => $user->email,
             'date_of_birth' => '1976-01-01',
         ]);
+        PredictionResult::query()->create([
+            'prediction_request_id' => $predictionRequest->id,
+            'user_id' => $user->id,
+            'prediction_type' => 'past',
+            'identity_video_id' => '34',
+            'result_payload' => ['prediction_videos' => [['video_ids' => ['443']]]],
+            'summary_payload' => [],
+            'warnings_payload' => [],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
 
         $timeline = app(PredictionTimelineGenerator::class)->generate('past', CarbonImmutable::now('Asia/Kolkata'), $predictionRequest->date_of_birth);
 
@@ -77,6 +88,7 @@ class MyAccountPredictionHistoryTest extends TestCase
             ->assertJsonPath('data.past.start_year', $timeline['from_year'])
             ->assertJsonPath('data.past.end_year', $timeline['to_year'])
             ->assertJsonPath('data.past.action', 'watch')
+            ->assertJsonPath('data.past.watch.identity_video_id', '34')
             ->assertJsonMissingPath('data.past.years')
             ->assertJsonMissingPath('data.past.video_count')
             ->assertJsonMissingPath('data.past.generated_at');
