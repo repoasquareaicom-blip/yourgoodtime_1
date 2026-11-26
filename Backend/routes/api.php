@@ -1,5 +1,7 @@
 <?php
+use App\Http\Controllers\AdminContactQueryController;
 use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ContactQueryController;
 use App\Http\Controllers\AdminChatbotController;
 use App\Http\Controllers\AstrologyController;
 use App\Http\Controllers\AdminDashboardController;
@@ -22,6 +24,9 @@ use App\Http\Controllers\ProtectedVideoController;
 use App\Http\Controllers\TempleRemedyController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminPredictionExcelValidationController;
+use App\Http\Controllers\AshtakavargaResearchController;
+
+Route::post('/contact-queries', [ContactQueryController::class, 'store'])->middleware('throttle:8,1');
 
 Route::get('/health', function () {
     return response()->json([
@@ -32,6 +37,7 @@ Route::get('/health', function () {
     ]);
 });
 
+Route::post('/research/ashtakavarga', [AshtakavargaResearchController::class, 'show'])->middleware('throttle:10,1');
 Route::get('/astrology/places', [AstrologyController::class, 'places']);
 Route::post('/astrology/sessions', [AstrologyController::class, 'startSession']);
 Route::post('/astrology/places/select', [AstrologyController::class, 'selectPlace']);
@@ -87,9 +93,14 @@ Route::prefix('admin')
             Route::get('/overview', [AdminDashboardController::class, 'overview']);
             Route::get('/users', [AdminDashboardController::class, 'users']);
             Route::get('/feedback', [AdminDashboardController::class, 'feedback']);
+            Route::get('/contact-queries', [AdminContactQueryController::class, 'index']);
+            Route::get('/contact-queries/{contactQuery}', [AdminContactQueryController::class, 'show']);
+            Route::get('/contact-queries/{contactQuery}/attachment', [AdminContactQueryController::class, 'attachment']);
+            Route::patch('/contact-queries/{contactQuery}/review', [AdminContactQueryController::class, 'markReviewed']);
             Route::get('/prediction-requests', [AdminDashboardController::class, 'predictionRequests']);
             Route::get('/prediction-requests/{predictionRequest}', [AdminDashboardController::class, 'predictionRequest']);
             Route::get('/prediction-requests/{predictionRequest}/details', [AdminDashboardController::class, 'predictionRequestDetails']);
+            Route::get('/prediction-requests/{predictionRequest}/inspect', [AdminDashboardController::class, 'inspectPredictionRequest']);
             Route::post('/prediction-requests/{predictionRequest}/regenerate-past', [AdminDashboardController::class, 'regeneratePastPrediction']);
             Route::get('/prediction-regeneration-settings', [AdminDashboardController::class, 'predictionRegenerationSettings']);
             Route::post('/prediction-regeneration-settings/{predictionType}/mark', [AdminDashboardController::class, 'markPredictionRegeneration']);
@@ -146,8 +157,9 @@ Route::prefix('admin')
     });
 
 Route::prefix('internal/mail')
-    ->middleware(['mail.gateway', 'throttle:internal-mail-otp'])
+    ->middleware(['mail.gateway'])
     ->group(function (): void {
-        Route::post('/send-otp', [InternalMailController::class, 'sendOtp']);
+        Route::post('/send-otp', [InternalMailController::class, 'sendOtp'])->middleware('throttle:internal-mail-otp');
+        Route::post('/send', [InternalMailController::class, 'send'])->middleware('throttle:internal-mail-send');
     });
 Route::post('/chatbot/message', [ChatbotController::class, 'message']);

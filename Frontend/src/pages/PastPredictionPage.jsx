@@ -28,6 +28,7 @@ import {
   verifyRazorpayPayment,
 } from '../services/paymentService'
 import { getUser, isLoggedIn, removeToken, removeUser, saveToken, saveUser } from '../utils/auth'
+import { from24HourTime } from '../utils/birthDetails'
 import templeImage from '../assets/temple-transparent.png'
 import './PastPredictionPage.css'
 
@@ -126,6 +127,23 @@ function clearPendingPredictionAction() {
   }
 }
 
+function formatReviewDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return value || ''
+  return `${match[3]}/${match[2]}/${match[1]}`
+}
+
+function formatReviewTime(value) {
+  const parsed = from24HourTime(value)
+  return parsed.hhmm ? `${parsed.hhmm} ${parsed.meridiem}` : (value || '')
+}
+
+function formatMarriageStatus(value) {
+  if (value === 'married') return 'Married'
+  if (value === 'unmarried') return 'Unmarried'
+  return value || ''
+}
+
 function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'past' }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -190,6 +208,10 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
   const [resendCountdown, setResendCountdown] = useState(0)
   const [isClaimedModalOpen, setIsClaimedModalOpen] = useState(false)
   const [otpShakeCount, setOtpShakeCount] = useState(0)
+  const [isCompactForm, setIsCompactForm] = useState(() => (
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 759px)').matches : false
+  ))
+  const [isReviewingDetails, setIsReviewingDetails] = useState(false)
   const otpValue = otp.join('')
   const isAuthTransitioning = authFlowStage === 'otpVerified'
   const isAuthLoading = isSendingOtp || isVerifyingOtp || isAuthTransitioning
@@ -209,6 +231,17 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
       window.clearTimeout(flowTimerRef.current)
     }
     clearPredictionTimers()
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 759px)')
+    const syncCompactForm = () => {
+      setIsCompactForm(mediaQuery.matches)
+    }
+
+    syncCompactForm()
+    mediaQuery.addEventListener('change', syncCompactForm)
+    return () => mediaQuery.removeEventListener('change', syncCompactForm)
   }, [])
 
   useEffect(() => {
@@ -446,6 +479,22 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
     }
   }
 
+  const submitValidatedPrediction = async () => {
+    if (isSubmittingPrediction || isAuthLoading || submissionInFlightRef.current) return
+
+    const payload = buildPredictionPayload()
+    if (!payload) return
+
+    latestPredictionPayloadRef.current = payload
+
+    if (isLoggedIn()) {
+      await submitPredictionPayload(payload)
+      return
+    }
+
+    await sendPastPredictionOtp()
+  }
+
   const handleBirthSubmit = async (event) => {
     event.preventDefault()
 
@@ -473,17 +522,12 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
     setMessage('')
     setFieldErrors({})
 
-    const payload = buildPredictionPayload()
-    if (!payload) return
+    setIsReviewingDetails(true)
+  }
 
-    latestPredictionPayloadRef.current = payload
-
-    if (isLoggedIn()) {
-      await submitPredictionPayload(payload)
-      return
-    }
-
-    await sendPastPredictionOtp()
+  const handleConfirmProceed = async () => {
+    setIsReviewingDetails(false)
+    await submitValidatedPrediction()
   }
 
   const hasSelectedBirthplace = () => {
@@ -1289,78 +1333,143 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
     </div>
   )
 
+  const closeIfBackdrop = (event) => {
+    if (!isModal) return
+    if (event.target === event.currentTarget) handleClose()
+  }
+
   return (
-    <main className={`past-modal-page ${isModal ? 'is-modal' : 'is-standalone'}`}>
+    <main
+      className={`past-modal-page ${isModal ? 'is-modal' : 'is-standalone'}`}
+      onPointerDown={closeIfBackdrop}
+      onClick={closeIfBackdrop}
+    >
+      <div
+        className="past-modal-frame"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
       <section
-        className={`past-modal-card ${isPreparingPrediction || isPredictionReady || isHydratingSession || isLoadingExistingResult ? 'is-processing' : ''} ${isReturningUserPrompt ? 'is-returning' : ''} past-flow-${authFlowStage}`}
+        className={`past-modal-card ${isPreparingPrediction || isPredictionReady || isHydratingSession || isLoadingExistingResult ? 'is-processing' : ''} ${isReturningUserPrompt ? 'is-returning' : ''} ${isCompactForm ? 'is-compact-mobile' : ''} ${isReviewingDetails ? 'is-reviewing' : ''} past-flow-${authFlowStage}`}
         role={isModal || isPredictionReady ? 'dialog' : undefined}
         aria-modal={isModal || isPredictionReady ? 'true' : undefined}
         aria-labelledby={isReturningUserPrompt ? 'past-returning-title' : isPredictionReady ? 'past-ready-title' : undefined}
-        aria-label={isReturningUserPrompt || isPredictionReady ? undefined : 'Get Past Prediction'}
+        aria-label={isReturningUserPrompt || isPredictionReady ? undefined : 'Share your details'}
       >
         <img src={templeImage} alt="" className="past-modal-temple" />
+        <button type="button" className="past-modal-close" aria-label="Close" onClick={handleClose}>
+          <span className="modal-close-icon" aria-hidden="true" />
+        </button>
 
         {isHydratingSession || isLoadingExistingResult ? renderStartupMessage() : null}
 
         {isReturningUserPrompt ? renderReturningUserPrompt() : null}
 
         {isEmailStage ? (
-          <>
-            <h1>{isFutureIntent ? 'Get Future Prediction' : 'Get Past Prediction'}</h1>
-            {sessionMessage ? <p className="past-note" role="status">{sessionMessage}</p> : null}
-            <p>{authFlowStage === 'sendingOtp' ? 'Sending your secure OTP...' : `Share your birth details so we can prepare your personalized ${isFutureIntent ? 'future checkout' : 'past video'}.`}</p>
-            {renderAuthStatusVisual()}
-
-            <PredictionRegistrationForm
-              values={{
-                fullName,
-                email,
-                dateOfBirth,
-                timeOfBirth,
-                marriageStatus,
-                placeOfBirth,
-              }}
-              disabled={isSendingOtp}
-              isSubmitting={isSubmittingPrediction || isSendingOtp}
-              loadingLabel={isSendingOtp ? 'Sending OTP...' : 'Submitting...'}
-              submitLabel={isFutureIntent ? 'Continue to Future' : 'See My Past'}
-              error={error}
-              fieldErrors={fieldErrors}
-              emailInputRef={emailInputRef}
-              onSubmit={handleBirthSubmit}
-              onFieldChange={(field, value) => {
-                if (field === 'fullName') {
-                  setFullName(toTitleCase(value))
-                  setFieldErrors((current) => ({ ...current, full_name: undefined }))
-                }
-                if (field === 'email') {
-                  setEmail(value)
-                  setFieldErrors((current) => ({ ...current, email: undefined }))
-                }
-                if (field === 'dateOfBirth') {
-                  setDateOfBirth(value)
-                  setFieldErrors((current) => ({ ...current, date_of_birth: undefined }))
-                }
-                if (field === 'timeOfBirth') {
-                  setTimeOfBirth(value)
-                  setFieldErrors((current) => ({ ...current, time_of_birth: undefined }))
-                }
-                if (field === 'marriageStatus') {
-                  setMarriageStatus(value)
-                  setFieldErrors((current) => ({ ...current, marriage_status: undefined }))
-                }
-                setError('')
-              }}
-              onPlaceChange={handlePlaceChange}
-              onPlaceSelect={handlePlaceSelect}
-            >
-              {isExistingEmailError ? (
-                <button type="button" className="past-auth-link" onClick={handleExistingEmailLogin}>
-                  Login to continue
+          isReviewingDetails ? (
+            <>
+              <h1>Confirm your details</h1>
+              <p className="past-review-lead">Please check your personal details before we continue.</p>
+              <dl className="past-review-details">
+                <div>
+                  <dt>Name</dt>
+                  <dd>{fullName}</dd>
+                </div>
+                <div>
+                  <dt>Email ID</dt>
+                  <dd>{email}</dd>
+                </div>
+                <div>
+                  <dt>Date of birth</dt>
+                  <dd>{formatReviewDate(dateOfBirth)}</dd>
+                </div>
+                <div>
+                  <dt>Time of birth</dt>
+                  <dd>{formatReviewTime(timeOfBirth)}</dd>
+                </div>
+                <div>
+                  <dt>Marriage status</dt>
+                  <dd>{formatMarriageStatus(marriageStatus)}</dd>
+                </div>
+                <div>
+                  <dt>Place of birth</dt>
+                  <dd>{placeOfBirth}</dd>
+                </div>
+              </dl>
+              <div className="past-review-actions">
+                <button type="button" className="past-returning-secondary" onClick={() => setIsReviewingDetails(false)}>
+                  Cancel
                 </button>
-              ) : null}
-            </PredictionRegistrationForm>
-          </>
+                <button type="button" className="past-submit" onClick={handleConfirmProceed}>
+                  Proceed
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="past-share-heading">Share your details</h1>
+              <p className="past-share-subtitle">
+                {authFlowStage === 'sendingOtp'
+                  ? 'Sending your secure OTP...'
+                  : isFutureIntent
+                    ? "We'll prepare your personalized future prediction."
+                    : "We'll prepare your personalized past video."}
+              </p>
+              {sessionMessage ? <p className="past-note" role="status">{sessionMessage}</p> : null}
+              {renderAuthStatusVisual()}
+
+              <PredictionRegistrationForm
+                values={{
+                  fullName,
+                  email,
+                  dateOfBirth,
+                  timeOfBirth,
+                  marriageStatus,
+                  placeOfBirth,
+                }}
+                disabled={isSendingOtp}
+                isSubmitting={isSubmittingPrediction || isSendingOtp}
+                loadingLabel={isSendingOtp ? 'Sending OTP...' : 'Submitting...'}
+                submitLabel={isFutureIntent ? 'Continue to Future' : 'See My Past'}
+                error={error}
+                fieldErrors={fieldErrors}
+                emailInputRef={emailInputRef}
+                compactLabels={isCompactForm}
+                onSubmit={handleBirthSubmit}
+                onFieldChange={(field, value) => {
+                  if (field === 'fullName') {
+                    setFullName(toTitleCase(value))
+                    setFieldErrors((current) => ({ ...current, full_name: undefined }))
+                  }
+                  if (field === 'email') {
+                    setEmail(value)
+                    setFieldErrors((current) => ({ ...current, email: undefined }))
+                  }
+                  if (field === 'dateOfBirth') {
+                    setDateOfBirth(value)
+                    setFieldErrors((current) => ({ ...current, date_of_birth: undefined }))
+                  }
+                  if (field === 'timeOfBirth') {
+                    setTimeOfBirth(value)
+                    setFieldErrors((current) => ({ ...current, time_of_birth: undefined }))
+                  }
+                  if (field === 'marriageStatus') {
+                    setMarriageStatus(value)
+                    setFieldErrors((current) => ({ ...current, marriage_status: undefined }))
+                  }
+                  setError('')
+                }}
+                onPlaceChange={handlePlaceChange}
+                onPlaceSelect={handlePlaceSelect}
+              >
+                {isExistingEmailError ? (
+                  <button type="button" className="past-auth-link" onClick={handleExistingEmailLogin}>
+                    Login to continue
+                  </button>
+                ) : null}
+              </PredictionRegistrationForm>
+            </>
+          )
         ) : null}
 
         {isOtpStage ? (
@@ -1468,11 +1577,8 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
             onContinue={handleContinue}
           />
         ) : null}
-
-        {!isHydratingSession && !isLoadingExistingResult && (!isPreparingPrediction || predictionStage === 'error') ? (
-          <button type="button" className="past-close-link" onClick={handleClose}>Close</button>
-        ) : null}
       </section>
+      </div>
 
       {isClaimedModalOpen ? (
         <ActionModal

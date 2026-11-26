@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { openYgtChatbot } from '../../utils/chatbotEvents'
 import { scrollPageToTop } from '../../utils/scrollPageToTop'
 
 const navItems = [
@@ -49,6 +50,18 @@ function PrimaryNav() {
           </button>
         )
       })}
+      <button
+        type="button"
+        className="footer-nav-item footer-nav-chat"
+        onClick={openYgtChatbot}
+      >
+        <span className="footer-nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h10.5A1.75 1.75 0 0 1 19 4.75v8.5A1.75 1.75 0 0 1 17.25 15H9.12L5.7 18.08A.8.8 0 0 1 4.4 17.5V4.75z" />
+          </svg>
+        </span>
+        <span className="footer-nav-label">Ask Me</span>
+      </button>
     </nav>
   )
 }

@@ -1,16 +1,14 @@
-import { useNavigate } from 'react-router-dom'
 import HeaderAuthActions from '../components/common/HeaderAuthActions'
+import PrimaryNav from '../components/common/PrimaryNav'
 import ygtLogo from '../assets/yt-logo.png'
 import thumb2 from '../assets/videos/2.jpg'
 import thumb3 from '../assets/videos/3.jpg'
 import thumb4 from '../assets/videos/4.jpg'
 import { videoLibrary } from '../data/videoLibrary'
-import { scrollPageToTop } from '../utils/scrollPageToTop'
 import './HomePage.css'
 import './DailyPage.css'
 
 function DailyPage() {
-  const navigate = useNavigate()
   const featuredVideo = videoLibrary[0]
 
   return (
@@ -88,29 +86,7 @@ function DailyPage() {
           </section>
         </section>
 
-        <nav className="home-footer-nav" aria-label="Primary">
-          <button type="button" className="footer-nav-item" onClick={() => { navigate('/home'); scrollPageToTop() }}>
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg>
-            </span>
-            <span className="footer-nav-label">Home</span>
-          </button>
-
-          <button type="button" className="footer-nav-item" onClick={() => { navigate('/account'); scrollPageToTop() }}>
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12m0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14" /></svg>
-            </span>
-            <span className="footer-nav-label">My Account</span>
-          </button>
-
-          <button type="button" className="footer-nav-item" onClick={() => { navigate('/videos'); scrollPageToTop() }}>
-            <span className="footer-nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 6h5v5H4zm0 7h5v5H4zm7-7h9v5h-9zm0 7h9v5h-9z" /></svg>
-            </span>
-            <span className="footer-nav-label">Gallery</span>
-          </button>
-
-        </nav>
+        <PrimaryNav />
       </section>
     </main>
   )

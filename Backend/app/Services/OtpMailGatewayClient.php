@@ -3,37 +3,27 @@
 namespace App\Services;
 
 use App\Exceptions\MailGatewayException;
+use App\Mail\GatewayMail;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use RuntimeException;
 use Throwable;
 
 class OtpMailGatewayClient extends BaseService
 {
     public function __construct(
-        private readonly OtpMailService $otpMailService
+        private readonly OtpMailService $otpMailService,
+        private readonly ZeptoMailOtpService $zeptoMailOtpService
     ) {
     }
 
     public function sendOtp(string $email, string $otp, int $expiresMinutes, string $purpose): void
     {
-        $url = (string) config('services.mail_gateway.url', '');
-        $key = (string) config('services.mail_gateway.key', '');
-        $timeout = (int) config('services.mail_gateway.timeout', 10);
+        $system = strtolower(trim((string) config('services.otp_mail.system', 'local')));
 
-        $payload = [
-            'email' => $email,
-            'otp' => $otp,
-            'expires_minutes' => $expiresMinutes,
-            'purpose' => $purpose,
-        ];
-
-        Log::info('Sending OTP through production mail gateway.', [
-            'url' => $url,
-            'email' => $this->otpMailService->maskEmail($email),
-        ]);
-
-        if (app()->environment('local') && (bool) config('services.mail_gateway.use_local_mailer', true)) {
+        if ($system === 'local') {
             Log::info('Using local mailer for OTP delivery.', [
                 'email' => $this->otpMailService->maskEmail($email),
                 'purpose' => $purpose,
@@ -43,6 +33,97 @@ class OtpMailGatewayClient extends BaseService
 
             return;
         }
+
+        if ($system === 'zeptoapi') {
+            Log::info('Using ZeptoMail API for OTP delivery.', [
+                'email' => $this->otpMailService->maskEmail($email),
+                'purpose' => $purpose,
+            ]);
+
+            $this->zeptoMailOtpService->send($email, $otp, $expiresMinutes, $purpose);
+
+            return;
+        }
+
+        Log::error('Unsupported OTP mail system configured.', [
+            'system' => $system,
+            'email' => $this->otpMailService->maskEmail($email),
+            'purpose' => $purpose,
+        ]);
+
+        throw new RuntimeException('Unsupported OTP mail system: '.$system);
+    }
+
+    public function sendMail(
+        string $to,
+        string $subject,
+        string $html,
+        string $text,
+        ?string $replyTo = null,
+        array $attachments = [],
+    ): void {
+        $payload = array_filter([
+            'to' => $to,
+            'subject' => $subject,
+            'html' => $html,
+            'text' => $text,
+            'reply_to' => $replyTo,
+            'attachments' => $attachments === [] ? null : $attachments,
+        ], static fn (mixed $value): bool => $value !== null && $value !== '');
+
+        Log::info('Sending mail through production mail gateway.', [
+            'url' => $this->sendUrl(),
+            'email' => $this->otpMailService->maskEmail($to),
+        ]);
+
+        if ($this->shouldUseLocalMailer()) {
+            Log::info('Using local mailer for transactional delivery.', [
+                'email' => $this->otpMailService->maskEmail($to),
+            ]);
+
+            Mail::to($to)->send(new GatewayMail(
+                htmlBody: $html,
+                textBody: $text,
+                subjectLine: $subject,
+                replyToAddress: $replyTo,
+                fileAttachments: $attachments,
+            ));
+
+            return;
+        }
+
+        $this->postToGateway($this->sendUrl(), $payload, $to, 'mail');
+    }
+
+    public function shouldUseLocalMailer(): bool
+    {
+        return app()->environment('local') && (bool) config('services.mail_gateway.use_local_mailer', true);
+    }
+
+    private function otpUrl(): string
+    {
+        return (string) config('services.mail_gateway.url', '');
+    }
+
+    private function sendUrl(): string
+    {
+        $explicit = trim((string) config('services.mail_gateway.send_url', ''));
+
+        if ($explicit !== '') {
+            return $explicit;
+        }
+
+        $otpUrl = $this->otpUrl();
+
+        return str_ends_with($otpUrl, '/send-otp')
+            ? substr($otpUrl, 0, -strlen('/send-otp')).'/send'
+            : rtrim($otpUrl, '/').'/send';
+    }
+
+    private function postToGateway(string $url, array $payload, string $email, string $kind): void
+    {
+        $key = (string) config('services.mail_gateway.key', '');
+        $timeout = (int) config('services.mail_gateway.timeout', 10);
 
         if ($url === '') {
             throw new MailGatewayException('Mail gateway URL is not configured.');
@@ -61,7 +142,7 @@ class OtpMailGatewayClient extends BaseService
                 ])
                 ->post($url, $payload);
 
-            Log::info('Production mail gateway OTP response received.', [
+            Log::info('Production mail gateway '.$kind.' response received.', [
                 'url' => $url,
                 'email' => $this->otpMailService->maskEmail($email),
                 'status' => $response->status(),
@@ -76,7 +157,7 @@ class OtpMailGatewayClient extends BaseService
                 );
             }
         } catch (ConnectionException $exception) {
-            Log::error('Production mail gateway OTP request failed.', [
+            Log::error('Production mail gateway '.$kind.' request failed.', [
                 'url' => $url,
                 'email' => $this->otpMailService->maskEmail($email),
                 'exception_class' => $exception::class,
@@ -85,7 +166,7 @@ class OtpMailGatewayClient extends BaseService
 
             throw new MailGatewayException('Unable to connect to production mail gateway.', null, null, previous: $exception);
         } catch (MailGatewayException $exception) {
-            Log::warning('Production mail gateway OTP request was unsuccessful.', [
+            Log::warning('Production mail gateway '.$kind.' request was unsuccessful.', [
                 'url' => $url,
                 'email' => $this->otpMailService->maskEmail($email),
                 'status' => $exception->responseStatus(),
@@ -95,7 +176,7 @@ class OtpMailGatewayClient extends BaseService
 
             throw $exception;
         } catch (Throwable $exception) {
-            Log::error('Unexpected production mail gateway OTP failure.', [
+            Log::error('Unexpected production mail gateway '.$kind.' failure.', [
                 'url' => $url,
                 'email' => $this->otpMailService->maskEmail($email),
                 'exception_class' => $exception::class,

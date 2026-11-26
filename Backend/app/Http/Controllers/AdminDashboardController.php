@@ -10,6 +10,7 @@ use App\Models\PredictionResult;
 use App\Models\TempleRemedyRequest;
 use App\Models\User;
 use App\Services\Prediction\IdentityVideoRecoveryService;
+use App\Services\Prediction\PredictionInspectService;
 use App\Services\Prediction\PredictionRegenerationService;
 use App\Support\PredictionViewerSignature;
 use Illuminate\Http\JsonResponse;
@@ -275,6 +276,61 @@ class AdminDashboardController extends Controller
                 'prediction_data' => $this->predictionDataRows($result),
                 'videos' => $this->predictionVideoRows($result),
             ],
+        ]);
+    }
+
+    public function inspectPredictionRequest(
+        Request $request,
+        PredictionRequest $predictionRequest,
+        PredictionInspectService $predictionInspectService
+    ): JsonResponse {
+        $type = strtolower((string) $request->query('type', $predictionRequest->prediction_type ?: 'past'));
+        $entitlementId = $request->integer('entitlement_id') ?: null;
+        $resultId = $request->integer('result_id') ?: null;
+
+        $query = PredictionResult::query()
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('prediction_type', $type);
+
+        if ($resultId) {
+            $query->whereKey($resultId);
+        }
+
+        if ($type === 'future' && $entitlementId) {
+            $query->where('prediction_entitlement_id', $entitlementId);
+        }
+
+        $result = $query->latest('generated_at')->latest('id')->first();
+
+        if (! $result) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to inspect prediction request.',
+            ], 404);
+        }
+
+        $entitlement = $result->prediction_entitlement_id
+            ? PredictionEntitlement::query()->find($result->prediction_entitlement_id)
+            : null;
+
+        try {
+            $data = $predictionInspectService->inspect($predictionRequest, $result, $entitlement);
+        } catch (\Throwable $exception) {
+            Log::warning('Admin prediction inspect failed.', [
+                'prediction_request_id' => $predictionRequest->id,
+                'prediction_result_id' => $result->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to inspect this prediction against the current Excel files.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
         ]);
     }
 

@@ -443,15 +443,17 @@ class RegistrationOtpTest extends TestCase
     private function fakeMailGateway(): void
     {
         config([
-            'services.mail_gateway.url' => 'https://api.yourgoodtime.in/api/internal/mail/send-otp',
-            'services.mail_gateway.key' => 'configured-test-key',
+            'services.otp_mail.system' => 'zeptoapi',
+            'services.zeptomail_api.url' => 'https://api.zeptomail.in/v1.1/email',
+            'services.zeptomail_api.token' => 'test-zepto-token',
+            'services.zeptomail_api.from_address' => 'support@yourgoodtime.in',
+            'services.zeptomail_api.from_name' => 'Your Good Time',
         ]);
 
         Http::fake([
-            'https://api.yourgoodtime.in/api/internal/mail/send-otp' => Http::response([
-                'success' => true,
-                'message' => 'OTP email sent successfully.',
-            ]),
+            'https://api.zeptomail.in/v1.1/email' => Http::response([
+                'message' => 'OK',
+            ], 200),
         ]);
     }
 

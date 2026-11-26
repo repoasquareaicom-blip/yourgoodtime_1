@@ -32,12 +32,23 @@ function groupDetails(group) {
     ]
   }
 
+  if (!videoDebugEnabled) {
+    return group.systemYearLabel
+      ? [{ label: 'Year', value: group.systemYearLabel }]
+      : []
+  }
+
   return [
-    videoDebugEnabled && group.ageLabel ? { label: 'Age', value: group.ageLabel } : null,
+    group.ageLabel ? { label: 'Age', value: group.ageLabel } : null,
     group.systemYearLabel ? { label: 'Calendar', value: group.systemYearLabel } : null,
     group.majorDasha ? { label: 'Mahadasha', value: group.majorDasha } : null,
     group.dashaLabel ? { label: 'Dasha period', value: group.dashaLabel } : null,
   ].filter(Boolean)
+}
+
+function dubbedDisclosureText(languageCode) {
+  const languageName = getLanguageByCode(languageCode)?.name || 'English'
+  return `Original version is Tamil. You are watching dubbed ${languageName} version`
 }
 
 const accuracyOptions = [
@@ -57,7 +68,7 @@ function videoProgressLabel(group, currentVideoIndex) {
   }
 
   const totalVideos = group?.videos.length || 0
-  const ids = Array.isArray(group?.videoIds) && group.videoIds.length > 1
+  const ids = videoDebugEnabled && Array.isArray(group?.videoIds) && group.videoIds.length > 1
     ? ` (${group.videoIds.join(', ')})`
     : ''
 
@@ -572,11 +583,13 @@ function PredictionPlayer({
                 }}
               />
               {shouldShowDubbedDisclosure ? (
-                <p className="prediction-player__dubbed-disclosure">AI-dubbed in your selected language</p>
+                <p className="prediction-player__dubbed-disclosure">
+                  {dubbedDisclosureText(selectedPlaybackLanguage)}
+                </p>
               ) : null}
               <div className="prediction-player__caption">
                 <strong>{videoProgressLabel(currentGroup, state.currentVideoIndex)}</strong>
-                <span>{currentVideo?.videoId ? `Video ID ${currentVideo.videoId}` : ''}</span>
+                {videoDebugEnabled && currentVideo?.videoId ? <span>Video ID {currentVideo.videoId}</span> : null}
               </div>
               <VideoDebugInfo debug={visibleDebug} />
               {needsTapToContinue ? (

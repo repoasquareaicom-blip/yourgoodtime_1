@@ -131,6 +131,12 @@
   visibility: visible !important;
 }
 
+@media (min-width: 760px) {
+  .account-page .home-footer-nav .footer-nav-chat {
+    display: none !important;
+  }
+}
+
 .account-page .home-footer-nav .footer-nav-item.is-active {
   color: #ffffff !important;
 }

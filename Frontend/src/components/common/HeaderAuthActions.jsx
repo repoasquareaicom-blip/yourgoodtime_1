@@ -28,15 +28,21 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
   const triggerRef = useRef(null)
   const dialogRef = useRef(null)
   const firstMenuItemRef = useRef(null)
+  const languageTriggerRef = useRef(null)
   const [loggedIn, setLoggedIn] = useState(isLoggedIn)
   const [user, setUser] = useState(getUser)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
+  const [languageMenuStyle, setLanguageMenuStyle] = useState({})
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
-  const [isMobileMenu, setIsMobileMenu] = useState(false)
+  const [isMobileMenu, setIsMobileMenu] = useState(() => (
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 560px)').matches : false
+  ))
   const [selectedLanguageCode, setSelectedLanguageCode] = useState(() => (
     getStoredLanguage()?.code || languageOptions[0].code
   ))
+  const selectedLanguage = getLanguageByCode(selectedLanguageCode) || languageOptions[0]
   const displayName = useMemo(() => {
     if (!user) return 'My Account'
     return user.name || user.email || user.phone_e164 || 'My Account'
@@ -46,7 +52,11 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 560px)')
-    const syncMobileMenu = () => setIsMobileMenu(mediaQuery.matches)
+    const syncMobileMenu = () => {
+      const isMobile = mediaQuery.matches
+      setIsMobileMenu(isMobile)
+      if (!isMobile) setIsLanguageMenuOpen(false)
+    }
 
     syncMobileMenu()
     mediaQuery.addEventListener('change', syncMobileMenu)
@@ -175,7 +185,15 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
   const toggleMenu = (event) => {
     event.preventDefault()
     event.stopPropagation()
+    setIsLanguageMenuOpen(false)
     setIsMenuOpen((open) => !open)
+  }
+
+  const toggleLanguageMenu = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsMenuOpen(false)
+    setIsLanguageMenuOpen((open) => !open)
   }
 
   const handleLanguageChange = (event) => {
@@ -186,9 +204,97 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
     }
   }
 
-  const languageSelectorMarkup = (
+  const selectLanguage = (code) => {
+    const savedLanguage = savePreferredLanguage(code)
+
+    if (savedLanguage) {
+      setSelectedLanguageCode(savedLanguage.code)
+    }
+
+    setIsLanguageMenuOpen(false)
+  }
+
+  useEffect(() => {
+    if (!isLanguageMenuOpen) return undefined
+
+    const updatePosition = () => {
+      const rect = languageTriggerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      setLanguageMenuStyle({
+        top: `${Math.round(rect.bottom + 8)}px`,
+        right: `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`,
+      })
+    }
+
+    const handlePointerDown = (event) => {
+      if (languageTriggerRef.current?.contains(event.target)) return
+      setIsLanguageMenuOpen(false)
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      setIsLanguageMenuOpen(false)
+    }
+
+    updatePosition()
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', updatePosition)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [isLanguageMenuOpen])
+
+  const languagePopoverMarkup = isLanguageMenuOpen ? createPortal(
+    <>
+      <div className="home-language-popover-backdrop" aria-hidden="true"></div>
+      <div
+        id="mobile-language-menu"
+        className="home-language-popover"
+        style={languageMenuStyle}
+        role="listbox"
+        aria-label="Select language"
+      >
+        {languageOptions.map((language) => (
+          <button
+            key={language.code}
+            type="button"
+            role="option"
+            aria-selected={language.code === selectedLanguageCode}
+            className={language.code === selectedLanguageCode ? 'is-selected' : ''}
+            onClick={() => selectLanguage(language.code)}
+          >
+            {language.nativeName}
+          </button>
+        ))}
+      </div>
+    </>,
+    document.body,
+  ) : null
+
+  const languageSelectorMarkup = isMobileMenu ? (
+    <div className="home-language-compact">
+      <button
+        ref={languageTriggerRef}
+        type="button"
+        className="home-language-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={isLanguageMenuOpen}
+        aria-controls="mobile-language-menu"
+        aria-label={`Language, ${selectedLanguage.nativeName}`}
+        onClick={toggleLanguageMenu}
+      >
+        <span>{selectedLanguage.nativeName}</span>
+        <span className="home-language-chevron" aria-hidden="true"></span>
+      </button>
+      {languagePopoverMarkup}
+    </div>
+  ) : (
     <label className="home-language-selector">
-      <span>Language</span>
       <select
         value={selectedLanguageCode}
         onChange={handleLanguageChange}
@@ -273,10 +379,15 @@ function HeaderAuthActions({ redirectTo = '/account' }) {
         {languageSelectorMarkup}
         <button
           type="button"
-          className="home-hero-login"
+          className={`home-hero-login${isMobileMenu ? ' is-icon' : ''}`}
+          aria-label="Login"
           onClick={() => navigate(`/login?mode=login&redirect=${encodeURIComponent(redirectTo)}`, { state: { backgroundLocation: location } })}
         >
-          Login
+          {isMobileMenu ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 12a4.2 4.2 0 1 0-4.2-4.2A4.2 4.2 0 0 0 12 12m0 2.2c-3.7 0-6.8 1.9-6.8 4.2V20h13.6v-1.6c0-2.3-3.1-4.2-6.8-4.2z" />
+            </svg>
+          ) : 'Login'}
         </button>
       </div>
     )

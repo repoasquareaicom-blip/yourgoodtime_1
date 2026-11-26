@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\GatewayMail;
 use App\Mail\OtpMail;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -9,6 +10,20 @@ use Tests\TestCase;
 class InternalMailGatewayTest extends TestCase
 {
     private const GATEWAY_KEY = 'configured-test-key';
+
+    public function test_zeptomail_mailer_is_configured_for_otp_delivery(): void
+    {
+        $mailer = config('mail.mailers.zeptomail');
+
+        $this->assertSame('smtp', $mailer['transport']);
+        $this->assertSame('smtp', $mailer['scheme']);
+        $this->assertSame('smtp.zeptomail.in', $mailer['host']);
+        $this->assertSame(587, (int) $mailer['port']);
+        $this->assertSame('emailapikey', $mailer['username']);
+        $this->assertTrue($mailer['auto_tls']);
+        $this->assertSame('support@yourgoodtime.in', $mailer['from']['address']);
+        $this->assertSame('Your Good Time', $mailer['from']['name']);
+    }
 
     public function test_missing_gateway_key_returns_unauthorized(): void
     {
@@ -82,11 +97,37 @@ class InternalMailGatewayTest extends TestCase
         Mail::assertSent(OtpMail::class, 1);
         Mail::assertSent(OtpMail::class, function (OtpMail $mail): bool {
             return $mail->hasTo('person@example.com')
+                && $mail->mailer !== 'zeptomail'
                 && $mail->otp === '123456'
                 && $mail->purpose === 'login'
                 && $mail->expiresMinutes === 5;
         });
         Mail::assertNotQueued(OtpMail::class);
+    }
+
+    public function test_correct_gateway_key_sends_transactional_mail(): void
+    {
+        $this->configureGateway();
+        Mail::fake();
+
+        $this->postJson('/api/internal/mail/send', [
+            'to' => 'client@example.com',
+            'subject' => 'Thank you for contacting Your Good Time',
+            'html' => '<p>We received your query.</p>',
+            'text' => 'We received your query.',
+            'reply_to' => 'support@yourgoodtime.in',
+        ], $this->headers())
+            ->assertOk()
+            ->assertExactJson([
+                'success' => true,
+                'message' => 'Email sent successfully.',
+            ]);
+
+        Mail::assertSent(GatewayMail::class, function (GatewayMail $mail): bool {
+            return $mail->hasTo('client@example.com')
+                && $mail->htmlBody === '<p>We received your query.</p>'
+                && $mail->replyToAddress === 'support@yourgoodtime.in';
+        });
     }
 
     public function test_invalid_email_returns_validation_error(): void

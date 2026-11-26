@@ -1,6 +1,5 @@
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import AuthPanel from '../components/common/AuthPanel'
-import templeImage from '../assets/temple-transparent.png'
 import './LoginPage.css'
 
 function LoginPage() {
@@ -28,10 +27,21 @@ function LoginPage() {
     navigate('/home')
   }
 
+  const closeIfBackdrop = (event) => {
+    if (event.target === event.currentTarget) handleClose()
+  }
+
   return (
-    <main className={`auth-page ${isModal ? 'is-modal' : 'is-standalone'}`}>
-      <div className="auth-shell-card">
-        <img src={templeImage} alt="" className="auth-temple" />
+    <main
+      className={`auth-page ${isModal ? 'is-modal' : 'is-standalone'}`}
+      onPointerDown={closeIfBackdrop}
+      onClick={closeIfBackdrop}
+    >
+      <div
+        className="auth-shell-card"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
         <AuthPanel initialMode={initialMode} onAuthenticated={handleAuthenticated} onClose={handleClose} />
       </div>
     </main>

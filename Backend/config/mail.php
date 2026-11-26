@@ -50,6 +50,22 @@ return [
             'auto_tls' => false,
         ],
 
+        'zeptomail' => [
+            'transport' => 'smtp',
+            'scheme' => env('ZEPTOMAIL_SCHEME', 'tls') === 'smtps' ? 'smtps' : 'smtp',
+            'host' => env('ZEPTOMAIL_HOST', 'smtp.zeptomail.in'),
+            'port' => env('ZEPTOMAIL_PORT', 587),
+            'username' => env('ZEPTOMAIL_USERNAME', 'emailapikey'),
+            'password' => env('ZEPTOMAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+            'auto_tls' => env('ZEPTOMAIL_SCHEME', 'tls') === 'tls',
+            'from' => [
+                'address' => env('ZEPTOMAIL_FROM_ADDRESS', 'support@yourgoodtime.in'),
+                'name' => env('ZEPTOMAIL_FROM_NAME', 'Your Good Time'),
+            ],
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],
@@ -110,8 +126,13 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', 'Example'),
+        'address' => env('MAIL_FROM_ADDRESS', 'noreply@yourgoodtime.in'),
+        'name' => env('MAIL_FROM_NAME', 'Your Good Time'),
+    ],
+
+    'support' => [
+        'address' => env('MAIL_SUPPORT_ADDRESS', 'support@yourgoodtime.in'),
+        'name' => env('MAIL_SUPPORT_NAME', 'Your Good Time Support'),
     ],
 
 ];

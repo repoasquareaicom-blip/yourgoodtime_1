@@ -9,12 +9,14 @@ import futureIcon from '../assets/future.png'
 import templeIcon from '../assets/temple.png'
 import callIcon from '../assets/call.png'
 import PastPredictionPage from './PastPredictionPage'
-import { isLoggedIn } from '../utils/auth'
+import { getUser, isLoggedIn } from '../utils/auth'
+import { submitContactQuery } from '../services/contactQueryService'
 import { scrollPageToTop } from '../utils/scrollPageToTop'
 import './HomePage.css'
 
 const TEMPLE_REMEDY_DRAFT_KEY = 'temple-remedy-draft'
 const TALK_TO_ASTROLOGER_PENDING_KEY = 'talk-to-astrologer-pending'
+const QUERY_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024
 
 function HomePage() {
   const navigate = useNavigate()
@@ -26,6 +28,14 @@ function HomePage() {
   const [isTalkToAstrologerOpen, setIsTalkToAstrologerOpen] = useState(false)
   const [templeProblem, setTempleProblem] = useState('')
   const [shouldReturnToAccount, setShouldReturnToAccount] = useState(false)
+  const [queryEmail, setQueryEmail] = useState(() => getUser()?.email || '')
+  const [queryPhone, setQueryPhone] = useState('')
+  const [queryMessage, setQueryMessage] = useState('')
+  const [queryAttachment, setQueryAttachment] = useState(null)
+  const [queryError, setQueryError] = useState('')
+  const [queryProgress, setQueryProgress] = useState(0)
+  const [isQuerySubmitting, setIsQuerySubmitting] = useState(false)
+  const [isQueryThanks, setIsQueryThanks] = useState(false)
   const cameFromIntro = Boolean(location.state?.fromIntro)
 
   useEffect(() => {
@@ -63,8 +73,82 @@ function HomePage() {
       setShouldReturnToAccount(Boolean(returnToAccount))
     }
   }, [location.search, location.state])
-  const handleQuerySubmit = (event) => {
+  const handleQuerySubmit = async (event) => {
     event.preventDefault()
+
+    if (isQuerySubmitting) return
+
+    const email = queryEmail.trim()
+    const message = queryMessage.trim()
+
+    if (!email) {
+      setQueryError('Please enter your registered email ID.')
+      return
+    }
+
+    if (!message || message.length < 8) {
+      setQueryError('Please enter a little more detail in your query.')
+      return
+    }
+
+    if (queryAttachment && queryAttachment.size > QUERY_ATTACHMENT_MAX_BYTES) {
+      setQueryError('Attachment must be 2 MB or smaller.')
+      return
+    }
+
+    setQueryError('')
+    setIsQuerySubmitting(true)
+    setQueryProgress(12)
+
+    const payload = new FormData()
+    payload.append('email', email)
+    payload.append('phone', queryPhone.trim())
+    payload.append('message', message)
+    if (queryAttachment) {
+      payload.append('attachment', queryAttachment)
+    }
+
+    const pulse = window.setInterval(() => {
+      setQueryProgress((current) => (current >= 86 ? current : Math.min(86, current + 8)))
+    }, 160)
+
+    try {
+      await submitContactQuery(payload, (event) => {
+        if (!event.total) return
+        setQueryProgress(Math.max(12, Math.min(88, Math.round((event.loaded / event.total) * 88))))
+      })
+      window.clearInterval(pulse)
+      setQueryProgress(100)
+      await new Promise((resolve) => window.setTimeout(resolve, 420))
+      setIsQueryThanks(true)
+      setQueryPhone('')
+      setQueryMessage('')
+      setQueryAttachment(null)
+    } catch (error) {
+      window.clearInterval(pulse)
+      const firstError = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat()[0]
+        : null
+      setQueryError(firstError || error.response?.data?.message || 'Unable to send your query. Please try again.')
+      setQueryProgress(0)
+    } finally {
+      window.clearInterval(pulse)
+      setIsQuerySubmitting(false)
+    }
+  }
+
+  const handleQueryAttachmentChange = (event) => {
+    const file = event.target.files?.[0] || null
+
+    if (file && file.size > QUERY_ATTACHMENT_MAX_BYTES) {
+      setQueryAttachment(null)
+      setQueryError('Attachment must be 2 MB or smaller.')
+      event.target.value = ''
+      return
+    }
+
+    setQueryError('')
+    setQueryAttachment(file)
   }
   const openAccountLoading = () => {
     navigate('/account-loading?redirect=/account')
@@ -320,22 +404,76 @@ function HomePage() {
                 <strong>Have a question?</strong>
                 <span>Submit your query and our team will guide you.</span>
               </div>
-              <form className="home-query-form" onSubmit={handleQuerySubmit}>
-                <input type="text" name="queryName" placeholder="Name" aria-label="Name" />
-                <input type="tel" name="queryPhone" placeholder="Phone" aria-label="Phone" />
-                <textarea name="queryMessage" placeholder="Your query" aria-label="Your query"></textarea>
-                <button type="submit">Submit Query</button>
-              </form>
+              {isQueryThanks ? (
+                <div className="home-query-thanks" role="status">
+                  <strong>Thank you</strong>
+                  <p>We received your query and sent a confirmation email. Our team will get back to you soon.</p>
+                  <button type="button" onClick={() => { setIsQueryThanks(false); setQueryProgress(0) }}>Send another query</button>
+                </div>
+              ) : (
+                <form className="home-query-form" onSubmit={handleQuerySubmit}>
+                  <input
+                    type="email"
+                    name="queryEmail"
+                    value={queryEmail}
+                    onChange={(event) => setQueryEmail(event.target.value)}
+                    placeholder="Registered email ID"
+                    aria-label="Registered email ID"
+                    autoComplete="email"
+                    required
+                  />
+                  <input
+                    type="tel"
+                    name="queryPhone"
+                    value={queryPhone}
+                    onChange={(event) => setQueryPhone(event.target.value)}
+                    placeholder="Phone (optional)"
+                    aria-label="Phone number, optional"
+                    autoComplete="tel"
+                  />
+                  <textarea
+                    name="queryMessage"
+                    value={queryMessage}
+                    onChange={(event) => setQueryMessage(event.target.value)}
+                    placeholder="Your query"
+                    aria-label="Your query"
+                    required
+                  />
+                  <label className="home-query-file">
+                    <input
+                      type="file"
+                      name="queryAttachment"
+                      accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.txt,image/*,application/pdf"
+                      onChange={handleQueryAttachmentChange}
+                    />
+                    <span>{queryAttachment ? queryAttachment.name : 'Attachment optional, max 2 MB'}</span>
+                  </label>
+                  {queryError ? <p className="home-query-error">{queryError}</p> : null}
+                  {isQuerySubmitting ? (
+                    <div className="home-query-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={queryProgress} aria-label="Sending query">
+                      <i style={{ width: `${queryProgress}%` }} />
+                      <em>Sending your query...</em>
+                    </div>
+                  ) : null}
+                  <button type="submit" disabled={isQuerySubmitting}>
+                    {isQuerySubmitting ? 'Submitting...' : 'Submit Query'}
+                  </button>
+                </form>
+              )}
             </section>
 
-            <section className="home-contact-panel">
+            <section className="home-contact-panel" aria-label="Contact Us">
+              <div className="home-contact-heading">
+                <strong>Contact Us</strong>
+                <span>Sri Chakra Services</span>
+              </div>
               <div className="home-contact-block">
                 <span>Email</span>
-                <a href="mailto:support@yourgoodtime.com">support@yourgoodtime.com</a>
+                <a href="mailto:support@yourgoodtime.in">support@yourgoodtime.in</a>
               </div>
               <div className="home-contact-block">
                 <span>Phone</span>
-                <a href="tel:+919043979797">+91 90439 79797</a>
+                <a href="tel:+917200222233">+91 7200 222233</a>
               </div>
             </section>
 

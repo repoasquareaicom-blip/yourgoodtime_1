@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import AuthenticationLoader from './AuthenticationLoader'
 import PredictionRegistrationForm from './PredictionRegistrationForm'
 import ygtCircle from '../../assets/ygt_circle.png'
+import templeImage from '../../assets/temple-transparent.png'
 import { loginWithPassword, sendOtp, validateOtp, verifyOtp } from '../../services/authService'
 import { saveToken, saveUser } from '../../utils/auth'
 import { dateOfBirthEligibilityError, dateYearsAgo, MIN_SIGNUP_AGE } from '../../utils/birthDetails'
-import { scrollPageToTop } from '../../utils/scrollPageToTop'
+import '../../pages/LoginPage.css'
 
 const emptyOtp = ['', '', '', '', '', '']
 const resendSeconds = 180
@@ -69,6 +69,9 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
   const [successName, setSuccessName] = useState('')
   const [otpPurpose, setOtpPurpose] = useState(initialMode === 'forgot' ? 'password_reset' : initialMode === 'register' ? 'signup' : 'login')
   const [accountState, setAccountState] = useState(null)
+  const [isCompactForm, setIsCompactForm] = useState(() => (
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 759px)').matches : false
+  ))
   const otpValue = otp.join('')
   const isLoading = status === 'sending' || status === 'verifying' || status === 'loggingIn'
   const isCenteredSending = status === 'sending' && mode === 'register' && step === 'details'
@@ -88,11 +91,20 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
     return () => window.clearInterval(timer)
   }, [isOtpMode, resendCountdown, step])
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 759px)')
+    const syncCompactForm = () => setIsCompactForm(mediaQuery.matches)
+
+    syncCompactForm()
+    mediaQuery.addEventListener('change', syncCompactForm)
+    return () => mediaQuery.removeEventListener('change', syncCompactForm)
+  }, [])
+
   const heading = useMemo(() => {
     if (step === 'success') return 'Welcome to Your Good Time'
     if (accountState === 'EXISTING_WITH_PASSWORD' && step === 'otp') return 'Welcome Back'
     if (accountState === 'EXISTING_WITHOUT_PASSWORD' && step === 'password') return 'Create Password'
-    if (mode === 'register') return step === 'password' ? 'Create Password' : step === 'otp' ? 'Enter OTP' : 'Create Account'
+    if (mode === 'register') return step === 'password' ? 'Create Password' : step === 'otp' ? 'Enter OTP' : 'Share your details'
     if (mode === 'forgot') return step === 'password' ? 'Reset Password' : step === 'otp' ? 'Enter OTP' : 'Forgot Password'
     if (mode === 'otp-login') return step === 'otp' ? 'Enter OTP' : 'Login Using OTP'
     return 'Login'
@@ -465,16 +477,28 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
 
   return (
     <section className={`auth-card auth-state-${status}`} aria-label="Authentication">
-      <h1>{heading}</h1>
-      <p>{step === 'otp' ? `We sent a 6 digit OTP to ${email}.` : step === 'password' ? 'Choose a secure password to continue.' : 'Access your private guidance and predictions.'}</p>
+      <img src={templeImage} alt="" className="auth-temple" />
+      {onClose ? (
+        <button type="button" className="auth-modal-close" aria-label="Close" onClick={onClose}>
+          <span className="modal-close-icon" aria-hidden="true" />
+        </button>
+      ) : null}
+      <h1 className={mode === 'register' && step === 'details' ? 'auth-share-heading' : undefined}>{heading}</h1>
+      {mode === 'register' && step === 'details' ? (
+        <p className="auth-share-subtitle">We'll use these to set up your private account.</p>
+      ) : (
+        <p>{step === 'otp' ? `We sent a 6 digit OTP to ${email}.` : step === 'password' ? 'Choose a secure password to continue.' : 'Access your private guidance and predictions.'}</p>
+      )}
 
-      <div className="auth-benefits" aria-label="Authentication options">
-        <span>Private</span>
-        <span>Secure</span>
-        <span>Reusable</span>
-      </div>
+      {mode === 'register' && step === 'details' ? null : (
+        <div className="auth-benefits" aria-label="Authentication options">
+          <span>Private</span>
+          <span>Secure</span>
+          <span>Reusable</span>
+        </div>
+      )}
 
-      <form onSubmit={handleSubmit} className="auth-form">
+      <form onSubmit={handleSubmit} className="auth-form" autoComplete={mode === 'register' ? 'off' : undefined}>
         {step === 'details' ? (
           <>
             {mode === 'register' ? (
@@ -496,6 +520,7 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
                 requireMinimumAge
                 dateInputMax={dateYearsAgo(MIN_SIGNUP_AGE)}
                 renderAsForm={false}
+                compactLabels={isCompactForm}
                 onSubmit={(event) => {
                   event.preventDefault()
                   sendModeOtp()
@@ -623,17 +648,6 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
           </button>
         ) : null}
       </div>
-
-      <nav className="auth-legal-links" aria-label="Authentication legal links">
-        <Link to="/privacy-policy" onClick={scrollPageToTop}>Privacy Policy</Link>
-        <Link to="/terms-and-conditions" onClick={scrollPageToTop}>Terms & Conditions</Link>
-        <Link to="/disclaimer" onClick={scrollPageToTop}>Disclaimer</Link>
-        <Link to="/refund-policy" onClick={scrollPageToTop}>Refund & Cancellation Policy</Link>
-      </nav>
-
-      {onClose ? (
-        <button type="button" className="auth-close-link" onClick={onClose}>Close</button>
-      ) : null}
 
       {isCenteredSending ? (
         <div className="auth-card-loader-overlay" role="status" aria-live="polite">

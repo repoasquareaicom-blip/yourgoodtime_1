@@ -26,6 +26,7 @@ function PredictionRegistrationForm({
   renderAsForm = true,
   requireMinimumAge = false,
   dateInputMax,
+  compactLabels = false,
 }) {
   const parsedTime = from24HourTime(values.timeOfBirth)
   const [timeDisplay, setTimeDisplay] = useState(parsedTime.hhmm)
@@ -35,7 +36,7 @@ function PredictionRegistrationForm({
     onFieldChange?.(field, value)
   }
   const Shell = renderAsForm ? 'form' : 'div'
-  const shellProps = renderAsForm ? { onSubmit } : {}
+  const shellProps = renderAsForm ? { onSubmit, autoComplete: 'off' } : {}
   const dobError = requireMinimumAge
     ? (dateOfBirthEligibilityError(values.dateOfBirth) || fieldErrors.date_of_birth)
     : fieldErrors.date_of_birth
@@ -72,23 +73,26 @@ function PredictionRegistrationForm({
   }
 
   return (
-    <Shell className="past-form prediction-registration-form" {...shellProps}>
+    <Shell className={`past-form prediction-registration-form${compactLabels ? ' is-compact' : ''}`} {...shellProps}>
       <label>
-        Full name
         <input
           type="text"
           value={values.fullName}
           disabled={disabled}
           onChange={(event) => update('fullName', event.target.value)}
           placeholder="Full Name"
-          autoComplete="name"
+          aria-label="Full name"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="words"
+          spellCheck={false}
+          name="ygt-full-name"
           required
         />
         {fieldErrors.full_name ? <span className="past-field-error">{fieldErrors.full_name}</span> : null}
       </label>
 
       <label>
-        Email ID
         <input
           ref={emailInputRef}
           type="email"
@@ -96,7 +100,10 @@ function PredictionRegistrationForm({
           disabled={disabled}
           onChange={(event) => update('email', event.target.value)}
           placeholder="name@example.com"
-          autoComplete="email"
+          aria-label="Email ID"
+          autoComplete="off"
+          spellCheck={false}
+          name="ygt-email"
           required
         />
         {fieldErrors.email ? <span className="past-field-error">{fieldErrors.email}</span> : null}
@@ -111,6 +118,7 @@ function PredictionRegistrationForm({
             disabled={disabled}
             max={dateInputMax || undefined}
             aria-invalid={Boolean(dobError)}
+            autoComplete="off"
             onChange={(event) => update('dateOfBirth', event.target.value)}
             required
           />
@@ -162,14 +170,16 @@ function PredictionRegistrationForm({
       </div>
 
       <label>
-        Marriage status
         <select
           value={values.marriageStatus}
           disabled={disabled}
+          aria-label="Marriage status"
+          autoComplete="off"
+          data-empty={values.marriageStatus ? 'false' : 'true'}
           onChange={(event) => update('marriageStatus', event.target.value)}
           required
         >
-          <option value="">Select status</option>
+          <option value="">Marriage status</option>
           <option value="unmarried">Unmarried</option>
           <option value="married">Married</option>
         </select>
@@ -177,7 +187,7 @@ function PredictionRegistrationForm({
       </label>
 
       <label>
-        Place of birth
+        {compactLabels ? null : 'Place of birth'}
         <PlaceAutocomplete
           value={values.placeOfBirth}
           onChange={onPlaceChange}

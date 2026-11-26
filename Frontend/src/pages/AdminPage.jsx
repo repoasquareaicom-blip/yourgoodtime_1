@@ -8,6 +8,7 @@ import {
   fetchAdminAppointmentManualPaymentFile,
   fetchAdminPreferredSlotAvailability,
   fetchAdminPredictionRequestDetails,
+  inspectAdminPredictionRequest,
   fetchAdminPredictionRequests,
   fetchAdminPredictionRegenerationSettings,
   fetchAdminFeedback,
@@ -49,6 +50,9 @@ import {
   verifyAdminFutureVideoManualPayment,
   rejectAdminFutureVideoManualPayment,
   validateAdminPredictionExcel,
+  fetchAdminContactQueries,
+  reviewAdminContactQuery,
+  fetchAdminContactQueryAttachment,
 } from '../services/adminService'
 import { getAdminUser, removeAdminToken, removeAdminUser } from '../utils/auth'
 import { copyTextToClipboard, galleryVideoShareUrl } from '../services/galleryVideoService'
@@ -65,6 +69,7 @@ const tabs = [
   { id: 'paymentVerification', label: 'Payment Verification' },
   { id: 'galleryVideos', label: 'Video Gallery' },
   { id: 'feedback', label: 'Feedback' },
+  { id: 'queries', label: 'Queries' },
   { id: 'chatbot', label: 'Chatbot' },
   { id: 'excelValidator', label: 'Prediction Excel Validator' },
 
@@ -596,6 +601,10 @@ function AdminPage() {
   const [savingFutureManualPaymentId, setSavingFutureManualPaymentId] = useState(null)
   const [galleryVideos, setGalleryVideos] = useState([])
   const [galleryVideoStatus, setGalleryVideoStatus] = useState('idle')
+  const [contactQueries, setContactQueries] = useState([])
+  const [contactQueryStatus, setContactQueryStatus] = useState('idle')
+  const [selectedContactQuery, setSelectedContactQuery] = useState(null)
+  const [reviewingContactQueryId, setReviewingContactQueryId] = useState(null)
   const [galleryVideoDraft, setGalleryVideoDraft] = useState(emptyGalleryVideoDraft)
   const [savingGalleryVideo, setSavingGalleryVideo] = useState(false)
   const [galleryVideoUploadProgress, setGalleryVideoUploadProgress] = useState(null)
@@ -634,6 +643,24 @@ function AdminPage() {
       return userData
     } catch (error) {
       setMessage(error.response?.data?.message || 'Unable to load users.')
+      return []
+    } finally {
+      setTabLoading('')
+    }
+  }, [])
+
+  const loadContactQueries = useCallback(async () => {
+    setTabLoading('queries')
+    setContactQueryStatus('loading')
+    setMessage('')
+    try {
+      const data = await fetchAdminContactQueries()
+      setContactQueries(data)
+      setContactQueryStatus('ready')
+      return data
+    } catch (error) {
+      setContactQueryStatus('error')
+      setMessage(error.response?.data?.message || 'Unable to load queries.')
       return []
     } finally {
       setTabLoading('')
@@ -926,6 +953,10 @@ function AdminPage() {
       loadFeedback()
     }
 
+    if (tabId === 'queries' && contactQueryStatus === 'idle') {
+      loadContactQueries()
+    }
+
     if (tabId === 'chatbot' && chatbotStatus === 'idle') {
       loadChatbot(chatbotView)
     }
@@ -936,6 +967,7 @@ function AdminPage() {
     if (activeTab === 'past') return pastRequests.length
     if (activeTab === 'future') return futureRequests.length
     if (activeTab === 'feedback') return feedbackCategory === 'all' ? feedbackCounts.all : feedbackCounts[feedbackCategory] ?? 0
+    if (activeTab === 'queries') return contactQueries.length
     if (activeTab === 'appointments') return appointmentCounts[appointmentGroup] ?? appointments.length
     if (activeTab === 'paymentSettings') return paymentSettings.length
     if (activeTab === 'paymentVerification') return futureManualPaymentCounts[futureManualPaymentFilter] ?? futureManualPayments.length
@@ -947,7 +979,7 @@ function AdminPage() {
       return chatbotFaqs.length
     }
     return remedyCounts[remedyGroup] ?? remedies.length
-  }, [activeTab, appointmentCounts, appointmentGroup, appointments.length, chatbotFaqs.length, chatbotIntents.length, chatbotSettings, chatbotTopics.length, chatbotView, feedbackCategory, feedbackCounts, futureManualPaymentCounts, futureManualPaymentFilter, futureManualPayments.length, futureRequests.length, galleryVideos.length, pastRequests.length, paymentSettings.length, remedies.length, remedyCounts, remedyGroup, users.length])
+  }, [activeTab, appointmentCounts, appointmentGroup, appointments.length, chatbotFaqs.length, chatbotIntents.length, chatbotSettings, chatbotTopics.length, chatbotView, contactQueries.length, feedbackCategory, feedbackCounts, futureManualPaymentCounts, futureManualPaymentFilter, futureManualPayments.length, futureRequests.length, galleryVideos.length, pastRequests.length, paymentSettings.length, remedies.length, remedyCounts, remedyGroup, users.length])
   const ratingSummary = useMemo(() => {
     const backendSummary = overview?.cards?.ratings
     if (backendSummary?.overall?.count) return backendSummary
@@ -1911,6 +1943,43 @@ function AdminPage() {
               onClose={() => setSelectedFeedback(null)}
             />
           ) : null}
+          {status === 'ready' && !isActiveTabLoading && activeTab === 'queries' ? (
+            <ContactQueriesTable
+              queries={contactQueries}
+              selectedQuery={selectedContactQuery}
+              reviewingId={reviewingContactQueryId}
+              isError={contactQueryStatus === 'error'}
+              onSelect={setSelectedContactQuery}
+              onReview={async (query) => {
+                setReviewingContactQueryId(query.id)
+                try {
+                  const updated = await reviewAdminContactQuery(query.id)
+                  setContactQueries((current) => current.map((item) => item.id === updated.id ? updated : item))
+                  setSelectedContactQuery(updated)
+                  setMessage('Query marked as reviewed.')
+                } catch (error) {
+                  setMessage(error.response?.data?.message || 'Unable to mark this query as reviewed.')
+                } finally {
+                  setReviewingContactQueryId(null)
+                }
+              }}
+              onDownload={async (query) => {
+                try {
+                  const blob = await fetchAdminContactQueryAttachment(query.id)
+                  const url = URL.createObjectURL(blob)
+                  const link = document.createElement('a')
+                  link.href = url
+                  link.download = query.attachment_name || 'attachment'
+                  document.body.appendChild(link)
+                  link.click()
+                  link.remove()
+                  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+                } catch (error) {
+                  setMessage(error.response?.data?.message || 'Unable to download the attachment.')
+                }
+              }}
+            />
+          ) : null}
           {status === 'ready' && !isActiveTabLoading && activeTab === 'chatbot' ? (
             <ChatbotAdminPanel
               view={chatbotView}
@@ -2423,6 +2492,73 @@ function FeedbackDetailModal({ feedback, onClose }) {
         </footer>
       </div>
     </section>
+  )
+}
+
+function ContactQueriesTable({ queries, selectedQuery, reviewingId, isError, onSelect, onReview, onDownload }) {
+  if (isError) return <div className="admin-empty">Unable to load queries.</div>
+  if (!queries.length) return <div className="admin-empty">No website queries found.</div>
+
+  const selectedId = selectedQuery?.id
+
+  return (
+    <div className="admin-table-wrap">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Received</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Query</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {queries.map((query) => (
+            <tr key={query.id} className={selectedId === query.id ? 'is-selected' : ''}>
+              <td>{formatDate(query.created_at)}</td>
+              <td>
+                <div>{query.email}</div>
+                {query.registered_user ? <small>Registered: {query.registered_user.name}</small> : <small>Guest</small>}
+              </td>
+              <td>{query.phone || '—'}</td>
+              <td>
+                <p className="admin-query-preview">{query.message}</p>
+                {query.has_attachment ? (
+                  <button type="button" className="admin-link-button" onClick={() => onDownload(query)}>
+                    {query.attachment_name || 'Download attachment'}
+                  </button>
+                ) : <small>No attachment</small>}
+              </td>
+              <td>
+                <span className={`admin-badge ${query.status === 'REVIEWED' ? 'is-green' : 'is-muted'}`}>
+                  {query.status === 'REVIEWED' ? 'Reviewed' : 'New'}
+                </span>
+              </td>
+              <td>
+                <div className="admin-query-actions">
+                  <button type="button" onClick={() => onSelect(selectedId === query.id ? null : query)}>
+                    {selectedId === query.id ? 'Hide' : 'View'}
+                  </button>
+                  {query.status !== 'REVIEWED' ? (
+                    <button type="button" disabled={reviewingId === query.id} onClick={() => onReview(query)}>
+                      {reviewingId === query.id ? 'Saving...' : 'Mark reviewed'}
+                    </button>
+                  ) : null}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {selectedQuery ? (
+        <div className="admin-query-detail">
+          <h3>Query #{selectedQuery.id}</h3>
+          <p>{selectedQuery.message}</p>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -3006,7 +3142,7 @@ function PredictionRequestTable({ type, requests, loadingId, onOpen }) {
 
       {!filteredRequests.length ? <div className="admin-empty is-compact">No matching prediction requests.</div> : null}
       {filteredRequests.length ? (
-        <div className="admin-table-wrap">
+        <div className="admin-table-wrap admin-prediction-table-wrap">
           <table className="admin-table admin-prediction-grid">
             <thead>
               <tr>
@@ -3022,7 +3158,18 @@ function PredictionRequestTable({ type, requests, loadingId, onOpen }) {
             </thead>
             <tbody>
               {filteredRequests.map((request) => (
-                <tr key={`${type}-${request.prediction_result_id || request.id}`}>
+                <tr
+                  key={`${type}-${request.prediction_result_id || request.id}`}
+                  className={loadingId === request.id ? 'is-loading' : ''}
+                  tabIndex={0}
+                  onClick={() => onOpen(request, type)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onOpen(request, type)
+                    }
+                  }}
+                >
                   <td>
                     <strong>#{request.prediction_request_id || request.id}</strong>
                     {request.prediction_entitlement_id ? <span>Entitlement #{request.prediction_entitlement_id}</span> : null}
@@ -3041,7 +3188,10 @@ function PredictionRequestTable({ type, requests, loadingId, onOpen }) {
                       type="button"
                       className="admin-row-action"
                       disabled={loadingId === request.id}
-                      onClick={() => onOpen(request, type)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpen(request, type)
+                      }}
                     >
                       {loadingId === request.id ? 'Loading...' : 'Open'}
                     </button>
@@ -3061,11 +3211,45 @@ function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast,
   const result = detail?.result || {}
   const identity = detail?.astrology?.identity || header.identity || {}
   const requestId = header.id || result.prediction_request_id || '-'
+  const resultId = result.id || result.prediction_result_id
+  const entitlementId = detail?.entitlement?.id
   const createdAt = formatDate(header.submitted_at || header.created_at || result.generated_at)
   const lastVisitedAt = formatDate(detail?.last_visited_at)
   const ratingLabel = detail?.rating?.label || 'Not Rated'
   const statusLabel = labelFromKey(result.status || header.status)
   const periodLabelText = detail?.period?.label || 'Prediction period unavailable'
+  const [inspectStatus, setInspectStatus] = useState('idle')
+  const [inspectResult, setInspectResult] = useState(null)
+
+  useEffect(() => {
+    setInspectStatus('idle')
+    setInspectResult(null)
+  }, [requestId, type, resultId])
+
+  const inspectPrediction = async () => {
+    if (!requestId || requestId === '-' || inspectStatus === 'loading') return
+
+    setInspectStatus('loading')
+    setInspectResult(null)
+
+    try {
+      const data = await inspectAdminPredictionRequest(requestId, {
+        type,
+        result_id: resultId,
+        entitlement_id: entitlementId,
+      })
+      setInspectResult(data)
+      setInspectStatus('ready')
+    } catch (error) {
+      setInspectStatus('error')
+      setInspectResult({
+        summary: error.response?.data?.message || 'Unable to inspect this prediction against the current Excel files.',
+        issues: [],
+        identity: null,
+        years: [],
+      })
+    }
+  }
 
   return (
     <section className="admin-modal-overlay" role="dialog" aria-modal="true" aria-label={`${labelFromKey(type)} prediction details`}>
@@ -3082,6 +3266,16 @@ function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast,
             <span>Rating: {ratingLabel}</span>
           </div>
           <div className="admin-modal-status">
+            {detail ? (
+              <button
+                type="button"
+                className="admin-inspect-prediction-button"
+                onClick={inspectPrediction}
+                disabled={inspectStatus === 'loading' || status !== 'ready'}
+              >
+                {inspectStatus === 'loading' ? 'Inspecting...' : 'Inspect'}
+              </button>
+            ) : null}
             {type === 'past' && detail ? (
               <button
                 type="button"
@@ -3146,6 +3340,7 @@ function PredictionDetailView({ type, detail, status, onClose, onRegeneratePast,
                 </section>
                 <IdentityVideoTable rows={detail.identity_video || []} />
                 <PredictionDataTable rows={detail.prediction_data || []} />
+                <PredictionInspectPanel status={inspectStatus} result={inspectResult} />
               </div>
             </div>
           </>
@@ -3265,6 +3460,89 @@ function normalizeViewerRows(value) {
   return value
     .filter((row) => row && typeof row === 'object')
     .map((row) => ({ ...row }))
+}
+
+function PredictionInspectPanel({ status, result }) {
+  if (status === 'idle') {
+    return (
+      <section className="admin-report-card admin-inspect-card">
+        <h4>Inspect</h4>
+        <div className="admin-empty is-compact">Tap Inspect to re-check Identity Video and missing yearly videos against the current Excel files. This does not change the stored result.</div>
+      </section>
+    )
+  }
+
+  if (status === 'loading') {
+    return (
+      <section className="admin-report-card admin-inspect-card">
+        <h4>Inspect</h4>
+        <div className="admin-empty is-compact">Checking current Excel lookup...</div>
+      </section>
+    )
+  }
+
+  const identity = result?.identity || {}
+  const years = Array.isArray(result?.years) ? result.years : []
+  const issues = Array.isArray(result?.issues) ? result.issues : []
+
+  return (
+    <section className="admin-report-card admin-inspect-card">
+      <h4>Inspect</h4>
+      <div className="admin-inspect-body">
+        <p className={`admin-inspect-summary ${issues.length ? 'is-issue' : 'is-ok'}`}>{result?.summary || 'No inspect result.'}</p>
+        {issues.length ? (
+          <ul className="admin-inspect-issues">
+            {issues.map((issue, index) => <li key={`inspect-issue-${index}`}>{issue}</li>)}
+          </ul>
+        ) : null}
+        <div className="admin-inspect-identity">
+          <strong>Identity Video</strong>
+          <dl>
+            <div><dt>Lookup</dt><dd>{identityLabel(identity.lookup)}</dd></div>
+            <div><dt>Mapped</dt><dd>{identityLabel(identity.mapped)}</dd></div>
+            <div><dt>Stored video</dt><dd>{identity.stored_video_id || '-'}</dd></div>
+            <div><dt>Current video</dt><dd>{identity.current_video_id || '-'}</dd></div>
+            <div><dt>Excel</dt><dd>{[identity.excel_file, identity.sheet, identity.excel_row_number ? `row ${identity.excel_row_number}` : null, identity.excel_cell].filter(Boolean).join(' / ') || '-'}</dd></div>
+            <div><dt>Remarks</dt><dd>{identity.remarks || '-'}</dd></div>
+          </dl>
+        </div>
+        {years.length ? (
+          <ReportTable
+            title="Yearly lookup issues"
+            empty="No yearly lookup issues."
+            columns={[
+              ['age', 'Age'],
+              ['system_year', 'Year'],
+              ['stored_video_ids', 'Stored video'],
+              ['current_video_ids', 'Current video'],
+              ['excel_file', 'Excel File'],
+              ['sheet', 'Sheet'],
+              ['excel_cell', 'Cell'],
+              ['remarks', 'Remarks'],
+            ]}
+            rows={years.map((row) => ({
+              ...row,
+              stored_video_ids: formatInspectIds(row.stored_video_ids),
+              current_video_ids: formatInspectIds(row.current_video_ids),
+            }))}
+          />
+        ) : (
+          <div className="admin-empty is-compact">No yearly video issues in the stored result.</div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function identityLabel(values) {
+  if (!values || typeof values !== 'object') return '-'
+  return [values.lagnam, values.rasi, values.nakshatra].filter(Boolean).join(' / ') || '-'
+}
+
+function formatInspectIds(value) {
+  if (Array.isArray(value) && value.length) return value.join(', ')
+  if (typeof value === 'string' && value.trim()) return value
+  return '-'
 }
 
 function IdentityVideoTable({ rows }) {

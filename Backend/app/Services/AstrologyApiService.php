@@ -68,6 +68,16 @@ class AstrologyApiService extends BaseService
         return $responses;
     }
 
+    /**
+     * Isolated R&D lookup. Not used by Identity, Past, or Future prediction.
+     *
+     * @throws ConnectionException
+     */
+    public function fetchSarvashtak(array $birthPayload): array
+    {
+        return $this->post('sarvashtak', $birthPayload, 60);
+    }
+
     public function normalizePastPredictionData(array $rawResponse, array $meta): array
     {
         $astroDetails = $rawResponse['astro_details'] ?? [];

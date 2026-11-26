@@ -32,4 +32,14 @@ class AstrologyNameMapperTest extends TestCase
         $this->assertSame('swathi', $mapper->comparisonValue('Swati', 'nakshatras'));
         $this->assertSame('swathi', $mapper->comparisonValue('Swathi', 'nakshatras'));
     }
+
+    public function test_shravan_aliases_normalize_to_sravana(): void
+    {
+        $mapper = app(AstrologyNameMapper::class);
+
+        foreach (['Shravan', 'Shravana', 'Sravan', 'Sravana', 'shravan'] as $input) {
+            $this->assertSame('Sravana', $mapper->excelValue($input, 'nakshatras'), $input);
+            $this->assertSame('sravana', $mapper->comparisonValue($input, 'nakshatras'), $input);
+        }
+    }
 }

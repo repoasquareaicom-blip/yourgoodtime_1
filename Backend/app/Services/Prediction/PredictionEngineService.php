@@ -131,6 +131,56 @@ class PredictionEngineService
     }
 
     /**
+     * Re-run Rule001 and Rule002 for stored years without saving a result.
+     *
+     * @param  array<int, array{year:int, age:int}>  $yearTargets
+     * @return array{intro_playlist:array<int, array<string, mixed>>, rule001:RuleResult, years:array<int, array<string, mixed>>}
+     */
+    public function replayForInspect(PredictionRequest $predictionRequest, string $predictionType, array $yearTargets): array
+    {
+        $trace = (new DeveloperTrace())->start();
+        $normalizedPayload = $this->decodePayload($predictionRequest->normalized_astrology_data);
+        $rawPayload = $this->decodePayload($predictionRequest->raw_astrology_response);
+        $astrologyPayload = $normalizedPayload !== [] ? $normalizedPayload : $rawPayload;
+        $context = $this->buildContext($predictionRequest, $astrologyPayload, $predictionType);
+        $identityDate = $this->predictionDate($predictionRequest);
+
+        $introSession = $this->newSession($predictionRequest->id, $context, $trace, $identityDate);
+        $introResult = $this->executeRule($introSession, $this->rule001);
+
+        $years = [];
+
+        foreach ($yearTargets as $target) {
+            $year = (int) ($target['year'] ?? 0);
+            $age = (int) ($target['age'] ?? 0);
+
+            if ($year < 1900 || $age < 1) {
+                continue;
+            }
+
+            $session = $this->newSession($predictionRequest->id, $context, $trace, $identityDate->setYear($year), $age);
+            $result = $this->executeRule($session, $this->rule002);
+            $playlistItems = $session->getPlaylistBuilder()->getPlaylist();
+
+            $years[] = [
+                'year' => $year,
+                'age' => $age,
+                'status' => $this->publicYearStatus($playlistItems, [$result]),
+                'playlist_items' => $playlistItems,
+                'rule_results' => [$result],
+            ];
+        }
+
+        $trace->finish();
+
+        return [
+            'intro_playlist' => $introSession->getPlaylistBuilder()->getPlaylist(),
+            'rule001' => $introResult,
+            'years' => $years,
+        ];
+    }
+
+    /**
      * @return array{prediction:array<string, mixed>|null, rule_data:array<string, mixed>, timeline:PredictionTimeline}
      */
     public function previewFutureYear(int $requestId, int $targetSystemYear): array

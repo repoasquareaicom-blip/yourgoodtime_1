@@ -12,6 +12,7 @@ import AdminPage from './pages/AdminPage'
 import AdminGalleryVideoPreviewPage from './pages/AdminGalleryVideoPreviewPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import DailyPage from './pages/DailyPage'
+import AshtakavargaTestPage from './pages/AshtakavargaTestPage'
 import PastPredictionPage from './pages/PastPredictionPage'
 import LegalDocumentPage from './pages/LegalDocumentPage'
 import ProtectedRoute from './components/common/ProtectedRoute'
@@ -22,7 +23,7 @@ import './App.css'
 function App() {
   const location = useLocation()
   const backgroundLocation = location.state?.backgroundLocation
-  const chatbotHiddenPaths = ['/splash', '/language', '/intro', '/login', '/admin-login', '/admin']
+  const chatbotHiddenPaths = ['/splash', '/language', '/intro', '/login', '/admin-login', '/admin', '/ashtakavarga-test']
   const shouldShowChatbot = !backgroundLocation && !chatbotHiddenPaths.some((path) => (
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   ))
@@ -52,6 +53,7 @@ function App() {
         <Route path="/videos/:videoId" element={<VideoLibraryPage />} />
         <Route path="/videos" element={<VideoLibraryPage />} />
         <Route path="/past-prediction" element={<PastPredictionPage />} />
+        <Route path="/ashtakavarga-test" element={<AshtakavargaTestPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/terms-and-conditions" element={<LegalDocumentPage type="terms" />} />
         <Route path="/privacy-policy" element={<LegalDocumentPage type="privacy" />} />

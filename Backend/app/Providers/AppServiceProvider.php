@@ -46,5 +46,12 @@ class AppServiceProvider extends ServiceProvider
                     ->by('email:'.$emailKey),
             ];
         });
+
+        RateLimiter::for('internal-mail-send', function (Request $request): array {
+            return [
+                Limit::perMinute(40)
+                    ->by('ip:'.$request->ip()),
+            ];
+        });
     }
 }

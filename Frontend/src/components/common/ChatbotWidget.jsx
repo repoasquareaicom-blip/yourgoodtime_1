@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { sendChatbotMessage } from '../../services/chatbotService'
+import { OPEN_YGT_CHATBOT_EVENT } from '../../utils/chatbotEvents'
 import './ChatbotWidget.css'
 
 const quickActions = [
@@ -60,6 +61,13 @@ function ChatbotWidget() {
     })
   }, [isOpen, messages, isSending])
 
+  useEffect(() => {
+    const handleOpenChat = () => setIsOpen(true)
+
+    window.addEventListener(OPEN_YGT_CHATBOT_EVENT, handleOpenChat)
+    return () => window.removeEventListener(OPEN_YGT_CHATBOT_EVENT, handleOpenChat)
+  }, [])
+
   const closePanel = () => {
     setIsOpen(false)
   }
@@ -111,9 +119,8 @@ function ChatbotWidget() {
         <div className={`ygt-chatbot-panel ${isClosing ? 'is-closing' : 'is-opening'}`} role="dialog" aria-label="YGT Assistant" aria-modal="false">
           <header className="ygt-chatbot-header">
             <div className="ygt-chatbot-title">
-              <span className="ygt-chatbot-header-icon" aria-hidden="true">AI</span>
               <div>
-                <span>Ask YGT</span>
+                <span>Ask Me</span>
                 <h2>YGT Assistant</h2>
                 <small>Online</small>
               </div>
@@ -172,16 +179,12 @@ function ChatbotWidget() {
       <button
         type="button"
         className={`ygt-chatbot-launcher ${isOpen ? 'is-active' : ''}`}
-        aria-label={isOpen ? 'YGT Assistant is open' : 'Open YGT Assistant'}
+        aria-label={isOpen ? 'Ask Me is open' : 'Ask Me'}
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
       >
         <span className="ygt-chatbot-launcher-ring" aria-hidden="true" />
-        <span className="ygt-chatbot-launcher-icon" aria-hidden="true">
-          <span>AI</span>
-          <i />
-        </span>
-        <span className="ygt-chatbot-launcher-label">Ask YGT</span>
+        <span className="ygt-chatbot-launcher-label">Ask Me</span>
       </button>
     </section>
   )

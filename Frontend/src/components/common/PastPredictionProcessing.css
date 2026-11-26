@@ -1675,13 +1675,16 @@
 .prediction-player__dubbed-disclosure {
   justify-self: center;
   margin: -2px auto 0;
+  max-width: min(92%, 520px);
   border: 1px solid rgba(255, 207, 124, 0.32);
-  border-radius: 999px;
-  padding: 7px 14px;
+  border-radius: 12px;
+  padding: 8px 14px;
   background: rgba(3, 8, 22, 0.74);
   color: #ffe8bf;
-  font-size: 0.86rem;
-  font-weight: 900;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
   pointer-events: none;
 }
 

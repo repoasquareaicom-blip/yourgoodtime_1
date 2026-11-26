@@ -84,6 +84,14 @@ export async function fetchAdminPredictionRequestDetails(requestId, params = {})
   return response.data?.data
 }
 
+export async function inspectAdminPredictionRequest(requestId, params = {}) {
+  const response = await adminApi.get(`/admin/prediction-requests/${requestId}/inspect`, {
+    params,
+  })
+
+  return response.data?.data
+}
+
 export async function regenerateAdminPastPrediction(requestId) {
   const response = await adminApi.post(`/admin/prediction-requests/${requestId}/regenerate-past`)
 
@@ -415,6 +423,26 @@ export async function getCurrentAdmin() {
 
 export async function logoutAdmin() {
   const response = await adminApi.post('/admin/auth/logout')
+
+  return response.data
+}
+
+export async function fetchAdminContactQueries() {
+  const response = await adminApi.get('/admin/contact-queries')
+
+  return response.data?.data || []
+}
+
+export async function reviewAdminContactQuery(queryId) {
+  const response = await adminApi.patch(`/admin/contact-queries/${queryId}/review`)
+
+  return response.data?.data
+}
+
+export async function fetchAdminContactQueryAttachment(queryId) {
+  const response = await adminApi.get(`/admin/contact-queries/${queryId}/attachment`, {
+    responseType: 'blob',
+  })
 
   return response.data
 }

@@ -409,9 +409,24 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
   const isBusy = ['loadingProduct', 'checkingAccess', 'creatingOrder', 'verifyingPayment', 'preparingFuture', 'loadingFuture', 'checkoutOpen'].includes(stage)
   const paymentAvailability = futurePaymentAvailability(paymentSettings)
 
+  const closeIfBackdrop = (event) => {
+    if (event.target === event.currentTarget) onClose?.()
+  }
+
   return (
-    <section className="future-purchase-overlay" role="dialog" aria-modal="true" aria-label="Future Prediction purchase">
-      <div className="future-purchase-panel">
+    <section
+      className="future-purchase-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Future Prediction purchase"
+      onPointerDown={closeIfBackdrop}
+      onClick={closeIfBackdrop}
+    >
+      <div
+        className="future-purchase-panel"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
         {stage === 'auth' ? (
           <AuthPanel initialMode="register" onAuthenticated={handleAuthenticated} onClose={() => setStage('product')} />
         ) : null}

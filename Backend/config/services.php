@@ -36,9 +36,38 @@ return [
 
     'mail_gateway' => [
         'url' => env('MAIL_GATEWAY_URL', 'https://api.yourgoodtime.in/api/internal/mail/send-otp'),
+        'send_url' => env('MAIL_GATEWAY_SEND_URL'),
         'key' => env('MAIL_GATEWAY_KEY'),
         'timeout' => (int) env('MAIL_GATEWAY_TIMEOUT', 10),
         'use_local_mailer' => env('MAIL_GATEWAY_USE_LOCAL_MAILER', false),
+    ],
+
+    'otp_mail' => [
+        'system' => env('OTP_MAIL_SYSTEM', 'local'),
+    ],
+
+    'zeptomail_api' => [
+        'url' => env(
+            'ZEPTOMAIL_API_URL',
+            'https://api.zeptomail.in/v1.1/email'
+        ),
+        'token' => env('ZEPTOMAIL_TOKEN'),
+        'from_address' => env(
+            'ZEPTOMAIL_FROM_ADDRESS',
+            'support@yourgoodtime.in'
+        ),
+        'from_name' => env(
+            'ZEPTOMAIL_FROM_NAME',
+            'Your Good Time'
+        ),
+        'connect_timeout' => (int) env(
+            'ZEPTOMAIL_API_CONNECT_TIMEOUT',
+            5
+        ),
+        'timeout' => (int) env(
+            'ZEPTOMAIL_API_TIMEOUT',
+            10
+        ),
     ],
 
     'razorpay' => [

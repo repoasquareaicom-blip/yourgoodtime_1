@@ -28,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/admin/*',
             'api/astrology/sessions',
             'api/astrology/places/select',
+            'api/research/ashtakavarga',
             'api/predictions/past',
             'api/predictions/result',
             'api/predictions/*/feedback',
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/auth/verify-otp',
             'api/chatbot/message',
             'api/internal/mail/send-otp',
+            'api/internal/mail/send',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

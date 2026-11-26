@@ -1,0 +1,293 @@
+.ashtaka-test-page {
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(248, 185, 74, 0.16), transparent 28%),
+    linear-gradient(180deg, #110804 0%, #251007 54%, #0b0503 100%);
+  color: #ffe8bf;
+}
+
+.ashtaka-test-shell {
+  min-height: 100svh;
+  padding-bottom: 48px;
+}
+
+.ashtaka-test-page .home-hero-header {
+  z-index: 180;
+}
+
+.ashtaka-test-badge {
+  padding: 7px 10px;
+  border: 1px solid rgba(124, 73, 10, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 176, 46, 0.18);
+  color: #8a4a00;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ashtaka-test-page .past-submit {
+  min-height: 50px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffb22a, #ff7a00);
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ashtaka-test-page .past-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.ashtaka-test-page .past-error {
+  margin: 0;
+  color: #ff9f8f;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.ashtaka-test-content {
+  display: grid;
+  gap: 18px;
+  padding: 4px 0 0;
+}
+
+.ashtaka-test-title {
+  display: grid;
+  gap: 6px;
+}
+
+.ashtaka-test-title span {
+  margin: 0;
+  color: #ffd48a;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ashtaka-test-title h2 {
+  margin: 0;
+  color: #fff1c9;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.8rem, 7vw, 2.4rem);
+  line-height: 1.05;
+}
+
+.ashtaka-test-title p,
+.ashtaka-test-note,
+.ashtaka-test-endpoint {
+  margin: 0;
+  color: rgba(255, 230, 186, 0.78);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.ashtaka-test-form {
+  padding: 16px;
+  border: 1px solid rgba(255, 216, 145, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 221, 154, 0.12), rgba(51, 22, 6, 0.68)),
+    rgba(18, 9, 4, 0.88);
+}
+
+.ashtaka-test-geo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.ashtaka-test-geo div {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 216, 145, 0.18);
+  border-radius: 8px;
+  background: rgba(18, 9, 4, 0.62);
+}
+
+.ashtaka-test-geo dt {
+  color: rgba(255, 212, 138, 0.72);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ashtaka-test-geo dd {
+  margin: 4px 0 0;
+  color: #fff1c9;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.ashtaka-test-results {
+  display: grid;
+  gap: 16px;
+}
+
+.ashtaka-test-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 216, 145, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 221, 154, 0.12), rgba(51, 22, 6, 0.68)),
+    rgba(18, 9, 4, 0.88);
+}
+
+.ashtaka-test-card h3 {
+  margin: 0;
+  color: #fff0c2;
+  font-size: 1.15rem;
+}
+
+.ashtaka-test-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.ashtaka-test-summary div {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 216, 145, 0.18);
+  border-radius: 8px;
+  background: rgba(18, 9, 4, 0.62);
+}
+
+.ashtaka-test-summary dt {
+  color: rgba(255, 212, 138, 0.72);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ashtaka-test-summary dd {
+  margin: 4px 0 0;
+  color: #fff1c9;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.ashtaka-test-json {
+  max-height: 360px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(8, 4, 2, 0.82);
+  color: #f6e3b8;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ashtaka-test-raw summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ashtaka-test-raw summary::-webkit-details-marker {
+  display: none;
+}
+
+.ashtaka-test-raw summary h3::after {
+  content: 'Show';
+  margin-left: 10px;
+  color: rgba(255, 212, 138, 0.72);
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ashtaka-test-raw[open] summary h3::after {
+  content: 'Hide';
+}
+
+.ashtaka-test-table-wrap {
+  overflow: auto;
+}
+
+.ashtaka-test-table-wrap table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.ashtaka-test-sav-table,
+.ashtaka-test-rank-table {
+  min-width: 360px;
+}
+
+.ashtaka-test-table-wrap th,
+.ashtaka-test-table-wrap td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 216, 145, 0.16);
+  text-align: left;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ashtaka-test-table-wrap th {
+  color: #ffd48a;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ashtaka-test-table-wrap tfoot th,
+.ashtaka-test-table-wrap tfoot td {
+  border-bottom: 0;
+  border-top: 1px solid rgba(255, 216, 145, 0.28);
+  background: rgba(255, 198, 97, 0.08);
+  color: #fff1c9;
+  font-weight: 800;
+}
+
+.ashtaka-test-sav-table tr.is-highest {
+  background: rgba(255, 198, 97, 0.16);
+}
+
+.ashtaka-test-sav-table tr.is-lowest {
+  background: rgba(120, 168, 214, 0.12);
+}
+
+.ashtaka-test-sav-table tr.is-highest.is-lowest {
+  background: rgba(255, 198, 97, 0.12);
+}
+
+.ashtaka-test-bar {
+  width: 100%;
+  min-width: 88px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(18, 9, 4, 0.72);
+}
+
+.ashtaka-test-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d7a24a, #ffd48a);
+}
+
+@media (max-width: 720px) {
+  .ashtaka-test-geo,
+  .ashtaka-test-summary {
+    grid-template-columns: 1fr;
+  }
+}

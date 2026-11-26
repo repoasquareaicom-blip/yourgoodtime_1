@@ -25,6 +25,7 @@ function PlaceAutocomplete({
   const [errorMessage, setErrorMessage] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [blockBrowserHistory, setBlockBrowserHistory] = useState(true)
 
   useEffect(() => {
     setQuery(value || '')
@@ -205,7 +206,14 @@ function PlaceAutocomplete({
     onSelect(selectedPlace)
   }
 
-  const handleFocus = () => {
+  const unlockBrowserHistory = (event) => {
+    if (!blockBrowserHistory) return
+    event?.currentTarget?.removeAttribute?.('readonly')
+    setBlockBrowserHistory(false)
+  }
+
+  const handleFocus = (event) => {
+    unlockBrowserHistory(event)
     const normalizedQuery = query.trim().toLowerCase()
 
     if (!normalizedQuery || normalizedQuery === selectedNormalizedRef.current) {
@@ -223,7 +231,7 @@ function PlaceAutocomplete({
 
   const handleKeyDown = (event) => {
     if (!isOpen && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
-      handleFocus()
+      handleFocus(event)
       return
     }
 
@@ -261,10 +269,21 @@ function PlaceAutocomplete({
           value={query}
           disabled={disabled}
           onChange={handleInputChange}
+          onMouseDown={unlockBrowserHistory}
+          onTouchStart={unlockBrowserHistory}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder="Select exact birth address"
+          name={`ygt-birth-place-${listboxId}`}
           autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          readOnly={blockBrowserHistory}
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-form-type="other"
+          aria-label="Place of birth"
           required={required}
           role="combobox"
           aria-expanded={shouldShowPanel}
