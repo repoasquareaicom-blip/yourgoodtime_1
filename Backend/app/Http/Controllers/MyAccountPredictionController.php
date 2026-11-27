@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PredictionEntitlement;
+use App\Models\FutureVideoManualPayment;
 use App\Models\AstrologerAppointment;
 use App\Models\PredictionRequest;
 use App\Models\PredictionResult;
@@ -12,9 +13,11 @@ use App\Models\User;
 use App\Services\FuturePredictionAccessService;
 use App\Services\AstrologerAppointmentService;
 use App\Services\Prediction\PredictionTimelineSummaryService;
+use App\Services\ProtectedVideoService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 
 class MyAccountPredictionController extends Controller
 {
@@ -24,20 +27,130 @@ class MyAccountPredictionController extends Controller
         FuturePredictionAccessService $futureAccessService,
         AstrologerAppointmentService $appointmentService
     ): JsonResponse {
-        $user = $request->user();
+        return response()->json([
+            'success' => true,
+            'data' => $this->dashboard($request->user(), $timelineSummaryService, $futureAccessService, $appointmentService),
+        ]);
+    }
+
+    public function adminShow(
+        User $user,
+        PredictionTimelineSummaryService $timelineSummaryService,
+        FuturePredictionAccessService $futureAccessService,
+        AstrologerAppointmentService $appointmentService
+    ): JsonResponse {
+        $data = $this->dashboard($user, $timelineSummaryService, $futureAccessService, $appointmentService);
+        unset($data['past']['watch']);
+        $data['future']['ranges'] = $data['future']['ranges']->map(fn (array $range): array => [
+            ...Arr::except($range, ['watch']),
+            'can_open' => $range['watch'] !== null,
+        ]);
+        $data['temple_remedies'] = collect($data['temple_remedies'])->map(fn (array $remedy): array => [
+            ...Arr::only($remedy, ['id', 'remedy_option', 'status', 'status_label', 'payment_status', 'payment_method',
+                'submitted_at', 'amount_minor', 'currency', 'can_pay', 'admin_note']),
+            'remedy' => Arr::only($remedy['remedy'], ['available']),
+            'feedback' => Arr::only($remedy['feedback'], ['submitted']),
+        ]);
+        $data['appointments'] = [
+            'groups' => array_map(fn ($items) => $items->map(fn (array $appointment): array => [
+                ...Arr::only($appointment, ['id', 'appointment_number', 'status', 'status_label', 'questions_count',
+                    'payment_status', 'payment_status_label', 'submitted_at', 'confirmed_start_at', 'preferred_date',
+                    'preferred_time', 'amount_minor', 'currency', 'can_pay']),
+                'has_meeting_link' => filled($appointment['meeting_link']),
+            ]), $data['appointments']['groups']),
+        ];
+        $data['user'] = ['id' => $user->id];
+
+        return response()->json(['success' => true, 'data' => $data])->header('Cache-Control', 'no-store');
+    }
+
+    public function adminPrediction(Request $request, User $user): JsonResponse
+    {
+        $validated = $request->validate([
+            'type' => ['required', 'in:past,future'],
+            'entitlement_id' => ['required_if:type,future', 'integer'],
+        ]);
+        $result = $this->previewPrediction($user, $validated['type'], $validated['entitlement_id'] ?? null);
+
+        return response()->json(['success' => true, 'data' => [
+            'result_id' => $result->id,
+            'identity_video' => data_get($result->result_payload, 'identity_video'),
+            'identity_video_id' => $result->identity_video_id,
+            'prediction_videos' => data_get($result->result_payload, 'prediction_videos', []),
+        ]])->header('Cache-Control', 'no-store');
+    }
+
+    public function adminPlaybackUrl(Request $request, User $user, ProtectedVideoService $videoService): JsonResponse
+    {
+        $validated = $request->validate([
+            'prediction_type' => ['required', 'in:past,future'],
+            'entitlement_id' => ['required_if:prediction_type,future', 'integer'],
+            'prediction_result_id' => ['required', 'integer'],
+            'video_id' => ['required', 'string', 'max:160'],
+            'video_role' => ['required', 'in:IDENTITY,PREDICTION'],
+            'language' => ['required', 'in:ta,en,hi'],
+        ]);
+        $result = $this->previewPrediction($user, $validated['prediction_type'], $validated['entitlement_id'] ?? null);
+        abort_unless($result->id === (int) $validated['prediction_result_id'], 404);
+
+        try {
+            $url = $videoService->createPlaybackUrl($user, [
+                ...$validated,
+                'prediction_request_id' => $result->prediction_request_id,
+                'request_uuid' => $result->predictionRequest->request_uuid,
+            ]);
+        } catch (\RuntimeException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This prediction video is unavailable.',
+            ], method_exists($exception, 'status') ? $exception->status() : 403);
+        }
+
+        return response()->json(['success' => true, 'data' => ['url' => $url]])->header('Cache-Control', 'no-store');
+    }
+
+    private function previewPrediction(User $user, string $type, ?int $entitlementId): PredictionResult
+    {
+        $query = PredictionResult::query()->with('predictionRequest')
+            ->where('prediction_type', $type)
+            ->where('status', 'completed');
+
+        if ($type === 'future') {
+            $currentYear = (int) now(config('services.prediction_billing.business_timezone', 'Asia/Kolkata'))->format('Y');
+            $entitlement = PredictionEntitlement::query()->where('user_id', $user->id)
+                ->where('prediction_type', 'future')->where('status', 'ACTIVE')
+                ->where('access_end_year', '>', $currentYear)
+                ->findOrFail($entitlementId);
+            $query->where('prediction_entitlement_id', $entitlement->id)
+                ->where('prediction_request_id', $entitlement->prediction_request_id);
+        } else {
+            $profile = $this->latestCompletedPastRequest($user->email);
+            abort_if($profile === null, 404, 'This prediction is not ready to watch.');
+            $query->where('prediction_request_id', $profile->id);
+        }
+
+        $result = $query->latest('generated_at')->latest('id')->first();
+        abort_unless($result?->hasReadingVideos(), 404, 'This prediction is not ready to watch.');
+
+        return $result;
+    }
+
+    private function dashboard(
+        User $user,
+        PredictionTimelineSummaryService $timelineSummaryService,
+        FuturePredictionAccessService $futureAccessService,
+        AstrologerAppointmentService $appointmentService
+    ): array {
         $pastRequest = $this->latestCompletedPastRequest((string) $user->email);
         $purchaseRequest = $this->futurePurchaseRequest((string) $user->email, $user->id);
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'identity' => $this->identityPayload($user, $pastRequest ?? $purchaseRequest),
-                'past' => $this->pastPayload($pastRequest, $timelineSummaryService),
-                'future' => $this->futurePayload($user, $purchaseRequest, $futureAccessService),
-                'temple_remedies' => $this->templeRemedyPayload($user),
-                'appointments' => $this->appointmentPayload($user, $appointmentService),
-            ],
-        ]);
+        return [
+            'identity' => $this->identityPayload($user, $pastRequest ?? $purchaseRequest),
+            'past' => $this->pastPayload($pastRequest, $timelineSummaryService, $user),
+            'future' => $this->futurePayload($user, $purchaseRequest, $futureAccessService),
+            'temple_remedies' => $this->templeRemedyPayload($user),
+            'appointments' => $this->appointmentPayload($user, $appointmentService),
+        ];
     }
 
     private function latestCompletedPastRequest(string $email): ?PredictionRequest
@@ -48,20 +161,7 @@ class MyAccountPredictionController extends Controller
             return null;
         }
 
-        return PredictionRequest::query()
-            ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
-            ->where('status', 'completed')
-            ->whereNotNull('date_of_birth')
-            ->whereNotNull('time_of_birth')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->whereNotNull('timezone')
-            ->whereNotNull('birth_payload')
-            ->whereNotNull('raw_astrology_response')
-            ->whereNotNull('normalized_astrology_data')
-            ->latest('completed_at')
-            ->latest('id')
-            ->first();
+        return PredictionRequest::query()->completedBirthProfile($normalizedEmail)->first();
     }
 
     private function futurePurchaseRequest(string $email, int $userId): ?PredictionRequest
@@ -80,7 +180,7 @@ class MyAccountPredictionController extends Controller
         return $this->latestCompletedPastRequest($email);
     }
 
-    private function pastPayload(?PredictionRequest $predictionRequest, PredictionTimelineSummaryService $timelineSummaryService): array
+    private function pastPayload(?PredictionRequest $predictionRequest, PredictionTimelineSummaryService $timelineSummaryService, User $user): array
     {
         if ($predictionRequest === null) {
             return [
@@ -88,6 +188,16 @@ class MyAccountPredictionController extends Controller
                 'action' => 'get',
                 'message' => 'Complete your birth details to prepare your Past Prediction.',
             ];
+        }
+
+        $manualPayment = FutureVideoManualPayment::query()
+            ->where('user_id', $user->id)
+            ->where('prediction_request_id', $predictionRequest->id)
+            ->where('service_type', FutureVideoManualPayment::PAST_SERVICE_TYPE)
+            ->where('status', FutureVideoManualPayment::VERIFIED)
+            ->latest('id')->first();
+        if (data_get($manualPayment?->metadata, 'activation_pending')) {
+            return ['available' => false, 'action' => 'preparing'];
         }
 
         $birthDate = $predictionRequest->date_of_birth;
@@ -113,9 +223,12 @@ class MyAccountPredictionController extends Controller
             ];
         }
 
+        $result = $predictionRequest->results()->where('prediction_type', 'past')->where('status', 'completed')->first();
+
         return [
             'available' => true,
             'action' => 'watch',
+            'watch_ready' => (bool) $result?->hasReadingVideos(),
             'start_year' => $range['start_year'],
             'end_year' => $range['end_year'],
             'watch' => $this->watchPayload($predictionRequest),
@@ -133,31 +246,52 @@ class MyAccountPredictionController extends Controller
             ->orderBy('access_start_year')
             ->get();
 
-        $ranges = $entitlements->map(function (PredictionEntitlement $entitlement) use ($currentYear): array {
-            $hasResult = PredictionResult::query()
+        $payments = FutureVideoManualPayment::query()
+            ->where('user_id', $user->id)
+            ->where('service_type', FutureVideoManualPayment::SERVICE_TYPE)
+            ->whereIn('status', [FutureVideoManualPayment::AWAITING, FutureVideoManualPayment::PENDING, FutureVideoManualPayment::VERIFIED])
+            ->latest('id')->get();
+        $manualPayments = $payments->keyBy('id');
+        $ranges = $entitlements->load('paymentTransaction')->map(function (PredictionEntitlement $entitlement) use ($currentYear, $manualPayments): array {
+            $result = PredictionResult::query()
                 ->where('prediction_entitlement_id', $entitlement->id)
                 ->where('prediction_type', 'future')
                 ->where('status', 'completed')
-                ->exists();
+                ->first();
 
             $sourceRequest = PredictionRequest::query()->find($entitlement->prediction_request_id);
+            $manualPayment = $manualPayments->get(data_get($entitlement->paymentTransaction?->metadata, 'future_video_manual_payment_id'));
+            $preparing = data_get($manualPayment?->metadata, 'source') === 'manual_admin'
+                && (bool) data_get($manualPayment?->metadata, 'activation_pending');
 
             return [
                 'entitlement_id' => $entitlement->id,
                 'start_year' => max((int) $entitlement->access_start_year, $currentYear + 1),
                 'end_year' => $entitlement->access_end_year,
-                'has_result' => $hasResult,
-                'watch' => $sourceRequest ? $this->watchPayload($sourceRequest) : null,
+                'has_result' => $result !== null,
+                'watch_ready' => ! $preparing && (bool) $result?->hasReadingVideos(),
+                'watch' => $sourceRequest && ! $preparing ? $this->watchPayload($sourceRequest) : null,
             ];
         })->values();
 
         $nextPurchase = $predictionRequest
             ? $futureAccessService->nextPurchaseBlock($user, $predictionRequest)
             : null;
+        $resume = $payments->firstWhere('status', FutureVideoManualPayment::AWAITING);
 
         return [
             'purchased' => $ranges->isNotEmpty(),
             'ranges' => $ranges,
+            'payment_pending' => $payments->contains('status', FutureVideoManualPayment::PENDING),
+            'activation_pending' => $payments->contains(fn (FutureVideoManualPayment $payment): bool => (bool) data_get($payment->metadata, 'activation_pending')),
+            'resume_payment' => $resume ? [
+                'id' => $resume->id,
+                'status' => $resume->status,
+                'amount_minor' => $resume->amount_minor,
+                'currency' => $resume->currency,
+                'product_name' => $resume->product?->name,
+                'period' => data_get($resume->metadata, 'next_purchase'),
+            ] : null,
             'next_purchase' => $nextPurchase ? [
                 'available' => (bool) ($nextPurchase['can_purchase'] ?? false),
                 'start_year' => $nextPurchase['start_year'] ?? null,

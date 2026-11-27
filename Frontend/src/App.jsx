@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage'
 import AccountPage from './pages/AccountPage'
 import AccountLoadingPage from './pages/AccountLoadingPage'
 import AdminPage from './pages/AdminPage'
+import AdminUserAccountPage from './pages/AdminUserAccountPage'
 import AdminGalleryVideoPreviewPage from './pages/AdminGalleryVideoPreviewPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import DailyPage from './pages/DailyPage'
@@ -47,6 +48,7 @@ function App() {
         <Route path="/remedy" element={<ProtectedRoute><AccountPage initialSection="remedies" /></ProtectedRoute>} />
         <Route path="/appointment" element={<ProtectedRoute><AccountPage initialSection="appointments" /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminProtectedRoute><AdminPage /></AdminProtectedRoute>} />
+        <Route path="/admin/users/:userId/account" element={<AdminProtectedRoute><AdminUserAccountPage /></AdminProtectedRoute>} />
         <Route path="/admin/gallery-videos/:id/preview" element={<AdminProtectedRoute><AdminGalleryVideoPreviewPage /></AdminProtectedRoute>} />
         <Route path="/daily" element={<DailyPage />} />
         <Route path="/videos/:videoId/:slug" element={<VideoLibraryPage />} />

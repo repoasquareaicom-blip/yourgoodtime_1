@@ -283,10 +283,11 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
         return
       }
 
-      const response = await sendOtp(mode === 'register' ? registrationPayload : {
+      const payload = registrationPayload ?? {
         email: trimmedEmail,
         purpose,
-      })
+      }
+      const response = await sendOtp(payload)
       const nextAction = response?.next_action
       const nextAccountState = response?.account_state || null
 
@@ -301,7 +302,7 @@ function AuthPanel({ initialMode = 'login', onAuthenticated, onClose }) {
         setAccountState(nextAccountState || 'EXISTING_WITHOUT_PASSWORD')
         setMessage('We found your existing account. Verify the OTP sent to your email, then create your password.')
       } else {
-        setOtpPurpose('signup')
+        setOtpPurpose(payload.purpose)
         setAccountState(null)
         setMessage(response?.message || 'OTP sent successfully.')
       }

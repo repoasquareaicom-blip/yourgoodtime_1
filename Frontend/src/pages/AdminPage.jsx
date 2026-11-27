@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
+import AdminManualPredictionForm from '../components/common/AdminManualPredictionForm'
 import {
   fetchAdminOverview,
   fetchAdminAppointments,
@@ -48,6 +49,7 @@ import {
   fetchAdminFutureVideoManualPayments,
   fetchAdminFutureVideoManualPaymentProof,
   verifyAdminFutureVideoManualPayment,
+  retryAdminManualPredictionActivation,
   rejectAdminFutureVideoManualPayment,
   validateAdminPredictionExcel,
   fetchAdminContactQueries,
@@ -95,7 +97,8 @@ const paymentServiceMeta = {
   TEMPLE_REMEDY: { icon: 'temple', tone: 'green' },
 }
 const futureManualPaymentFilters = [
-  { id: 'PENDING', label: 'Pending' },
+  { id: 'PENDING', label: 'Pending Verification' },
+  { id: 'AWAITING_SUBMISSION', label: 'Awaiting Payment Submission' },
   { id: 'VERIFIED', label: 'Verified' },
   { id: 'REJECTED', label: 'Rejected' },
   { id: 'ALL', label: 'All' },
@@ -598,6 +601,7 @@ function AdminPage() {
   const [futureManualPaymentFilter, setFutureManualPaymentFilter] = useState('PENDING')
   const [futureManualPaymentSearch, setFutureManualPaymentSearch] = useState('')
   const [selectedFuturePaymentProof, setSelectedFuturePaymentProof] = useState(null)
+  const [manualPredictionType, setManualPredictionType] = useState(null)
   const [savingFutureManualPaymentId, setSavingFutureManualPaymentId] = useState(null)
   const [galleryVideos, setGalleryVideos] = useState([])
   const [galleryVideoStatus, setGalleryVideoStatus] = useState('idle')
@@ -925,7 +929,7 @@ function AdminPage() {
       loadPredictionRequests('past')
     }
 
-    if (tabId === 'future' && futureRequests.length === 0) {
+    if (tabId === 'future') {
       loadPredictionRequests('future')
     }
 
@@ -1699,21 +1703,41 @@ function AdminPage() {
     }
   }
 
-  const verifyFutureManualPayment = async (payment) => {
-    if (!window.confirm('Confirm this GPay QR payment has been received? Future Video access will be enabled after verification.')) return
+  const verifyFutureManualPayment = async (payment, retry = false) => {
+    let remarks = ''
+    if (!retry) {
+      if (!window.confirm('I have verified that the payment has been received.')) return
+      remarks = window.prompt('Admin remarks (optional, e.g. payment proof received via WhatsApp)', '')
+      if (remarks === null) return
+    }
 
     setSavingFutureManualPaymentId(payment.id)
-    setMessage('Verifying Future Video payment...')
+    setMessage(retry ? 'Retrying prediction activation?' : 'Verifying prediction payment?')
 
     try {
-      const response = await verifyAdminFutureVideoManualPayment(payment.id)
-      setMessage(response.message || 'Payment verified and Future Video enabled.')
-      await loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch)
+      const response = retry
+        ? await retryAdminManualPredictionActivation(payment.id)
+        : await verifyAdminFutureVideoManualPayment(payment.id, remarks.trim())
+      await Promise.all([
+        loadFutureManualPayments(futureManualPaymentFilter, futureManualPaymentSearch),
+        loadOverview().catch(() => {}),
+      ])
+      setMessage(response.message)
     } catch (error) {
-      setMessage(error.response?.data?.message || 'Unable to verify payment.')
+      setMessage(error.response?.data?.message || 'Unable to update payment.')
     } finally {
       setSavingFutureManualPaymentId(null)
     }
+  }
+
+  const manualPredictionCreated = async (response) => {
+    setManualPredictionType(null)
+    const type = response.data.prediction_type
+    setFutureManualPaymentFilter('VERIFIED')
+    setActiveTab('paymentVerification')
+    await Promise.all([loadPredictionRequests(type), loadFutureManualPayments('VERIFIED', '')])
+    setFutureManualPaymentSearch('')
+    setMessage(response.message)
   }
 
   const rejectFutureManualPayment = async (payment) => {
@@ -1809,9 +1833,21 @@ function AdminPage() {
               <p>{activeCount} records</p>
               <h2>{activeTabLabel}</h2>
             </div>
+            {status === 'ready' && ['past', 'future', 'paymentVerification'].includes(activeTab) && (
+              <button className="admin-row-action" type="button" onClick={() => setManualPredictionType(activeTab === 'past' ? 'past' : 'future')}>
+                + Add Manual Prediction Request
+              </button>
+            )}
             {message ? <span className="admin-message">{message}</span> : null}
           </div>
 
+          {manualPredictionType && (
+            <AdminManualPredictionForm
+              initialType={manualPredictionType}
+              onClose={() => setManualPredictionType(null)}
+              onCreated={manualPredictionCreated}
+            />
+          )}
           {status === 'loading' ? <AdminProgress label="Loading admin data..." /> : null}
           {status === 'error' ? <div className="admin-empty">{message}</div> : null}
           {status === 'ready' && isActiveTabLoading ? <AdminProgress label={`Loading ${activeTabLabel}...`} /> : null}
@@ -1909,6 +1945,7 @@ function AdminPage() {
               onRefresh={refreshFutureManualPayments}
               onViewProof={openFuturePaymentProof}
               onVerify={verifyFutureManualPayment}
+              onRetry={(payment) => verifyFutureManualPayment(payment, true)}
               onReject={rejectFutureManualPayment}
             />
           ) : null}
@@ -2574,6 +2611,7 @@ function UsersTable({ users }) {
             <th>Email</th>
             <th>Status</th>
             <th>Last Login</th>
+            <th>Dashboard</th>
           </tr>
         </thead>
         <tbody>
@@ -2583,6 +2621,7 @@ function UsersTable({ users }) {
               <td>{user.email}</td>
               <td><span className={`admin-badge ${user.is_active ? 'is-green' : 'is-muted'}`}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
               <td>{formatDate(user.last_login_at)}</td>
+              <td><Link className="admin-row-action" to={`/admin/users/${user.id}/account`}>View Dashboard</Link></td>
             </tr>
           ))}
         </tbody>
@@ -3157,47 +3196,50 @@ function PredictionRequestTable({ type, requests, loadingId, onOpen }) {
               </tr>
             </thead>
             <tbody>
-              {filteredRequests.map((request) => (
-                <tr
-                  key={`${type}-${request.prediction_result_id || request.id}`}
-                  className={loadingId === request.id ? 'is-loading' : ''}
-                  tabIndex={0}
-                  onClick={() => onOpen(request, type)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      onOpen(request, type)
-                    }
-                  }}
-                >
-                  <td>
-                    <strong>#{request.prediction_request_id || request.id}</strong>
-                    {request.prediction_entitlement_id ? <span>Entitlement #{request.prediction_entitlement_id}</span> : null}
-                  </td>
-                  <td>
-                    <strong>{request.identity?.name || 'User'}</strong>
-                    <span>{request.identity?.email || request.email || '-'}</span>
-                  </td>
-                  <td>{formatDate(request.submitted_at || request.created_at || request.generated_at)}</td>
-                  <td>{formatDate(request.last_visited_at)}</td>
-                  <td>{request.rating?.label || 'Not Rated'}</td>
-                  <td>{request.period?.label || 'Not available'}</td>
-                  <td><span className="admin-badge is-blue">{labelFromKey(request.status)}</span></td>
-                  <td>
-                    <button
-                      type="button"
-                      className="admin-row-action"
-                      disabled={loadingId === request.id}
-                      onClick={(event) => {
-                        event.stopPropagation()
+              {filteredRequests.map((request) => {
+                const canOpen = type !== 'future' || Boolean(request.prediction_result_id)
+                return (
+                  <tr
+                    key={`${type}-${request.prediction_result_id || request.id}`}
+                    className={loadingId === request.id ? 'is-loading' : ''}
+                    tabIndex={canOpen ? 0 : undefined}
+                    onClick={canOpen ? () => onOpen(request, type) : undefined}
+                    onKeyDown={canOpen ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
                         onOpen(request, type)
-                      }}
-                    >
-                      {loadingId === request.id ? 'Loading...' : 'Open'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      }
+                    } : undefined}
+                  >
+                    <td>
+                      <strong>#{request.prediction_request_id || request.id}</strong>
+                      {request.prediction_entitlement_id ? <span>Entitlement #{request.prediction_entitlement_id}</span> : null}
+                    </td>
+                    <td>
+                      <strong>{request.identity?.name || 'User'}</strong>
+                      <span>{request.identity?.email || request.email || '-'}</span>
+                    </td>
+                    <td>{formatDate(request.submitted_at || request.created_at || request.generated_at)}</td>
+                    <td>{formatDate(request.last_visited_at)}</td>
+                    <td>{request.rating?.label || 'Not Rated'}</td>
+                    <td>{request.period?.label || 'Not available'}</td>
+                    <td><span className="admin-badge is-blue">{canOpen ? labelFromKey(request.status) : 'Paid · Preparing'}</span></td>
+                    <td>
+                      {canOpen ? <button
+                        type="button"
+                        className="admin-row-action"
+                        disabled={loadingId === request.id}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onOpen(request, type)
+                        }}
+                      >
+                        {loadingId === request.id ? 'Loading...' : 'Open'}
+                      </button> : <span className="admin-muted-cell">Result pending</span>}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -4292,6 +4334,7 @@ function FutureVideoPaymentVerificationPanel({
   onRefresh,
   onViewProof,
   onVerify,
+  onRetry,
   onReject,
 }) {
   const isLoading = status === 'loading'
@@ -4300,7 +4343,7 @@ function FutureVideoPaymentVerificationPanel({
   return (
     <div className="admin-future-payment-verification">
       <div className="admin-verification-toolbar">
-        <div className="admin-remedy-tabs admin-verification-tabs" aria-label="Future Video payment status filters">
+        <div className="admin-remedy-tabs admin-verification-tabs" aria-label="Prediction payment status filters">
           {futureManualPaymentFilters.map((tab) => (
             <button
               key={tab.id}
@@ -4328,7 +4371,7 @@ function FutureVideoPaymentVerificationPanel({
 
       {isLoading ? <AdminProgress label="Loading payment submissions..." /> : null}
       {isError ? <div className="admin-empty is-compact">Unable to load payment submissions.</div> : null}
-      {!isLoading && !isError && !payments.length ? <div className="admin-empty">No Future Video manual payments found.</div> : null}
+      {!isLoading && !isError && !payments.length ? <div className="admin-empty">No prediction payments found.</div> : null}
 
       {!isLoading && !isError && payments.length ? (
         <div className="admin-table-wrap">
@@ -4336,7 +4379,7 @@ function FutureVideoPaymentVerificationPanel({
             <thead>
               <tr>
                 <th>User</th>
-                <th>Future Video</th>
+                <th>Prediction</th>
                 <th>Amount</th>
                 <th>Payment Method</th>
                 <th>Submitted</th>
@@ -4353,18 +4396,28 @@ function FutureVideoPaymentVerificationPanel({
                     <small>{payment.user?.email || payment.prediction_request?.email || 'No email'}</small>
                   </td>
                   <td>
-                    <strong>{payment.product?.name || 'Future Video'}</strong>
-                    <small>{payment.purchase_reference}</small>
+                    <strong>{payment.prediction_type === 'past' ? 'Past Prediction' : 'Future Prediction'}</strong>
+                    {payment.manual_entry && <small>Manual Entry</small>}
+                    <small>{payment.period?.start_year && payment.period?.end_year
+                      ? [payment.period.start_year, payment.period.end_year].join('?')
+                      : payment.purchase_reference}</small>
                   </td>
                   <td>{payment.amount_label || formatMoney(payment.amount_minor, payment.currency)}</td>
-                  <td>{payment.payment_method_label || 'GPay QR'}</td>
+                  <td>
+                    {payment.payment_method_label}
+                    {payment.transaction_reference && <small>{payment.transaction_reference}</small>}
+                    {payment.payment_received_on && <small>Received {payment.payment_received_on}</small>}
+                  </td>
                   <td>{formatDate(payment.submitted_at)}</td>
                   <td><FutureManualPaymentStatusBadge status={payment.status} /></td>
                   <td>
-                    <button type="button" className="admin-row-action" onClick={() => onViewProof(payment)}>
-                      View Proof
-                    </button>
-                    <small>{payment.payment_proof?.file_name || 'Uploaded image'}</small>
+                    {payment.payment_proof ? (
+                      <>
+                        <button type="button" className="admin-row-action" onClick={() => onViewProof(payment)}>View Proof</button>
+                        <small>{payment.payment_proof.file_name || 'Uploaded image'}</small>
+                      </>
+                    ) : 'Not Uploaded'}
+                    {payment.admin_remarks && <small>{payment.admin_remarks}</small>}
                   </td>
                   <td>
                     {payment.status === 'PENDING' ? (
@@ -4387,7 +4440,11 @@ function FutureVideoPaymentVerificationPanel({
                         </button>
                       </div>
                     ) : (
-                      <span className="admin-muted-cell">{payment.status === 'VERIFIED' ? `Verified ${formatDate(payment.verified_at)}` : 'No action'}</span>
+                      payment.activation_pending ? (
+                        <button type="button" className="admin-row-action" disabled={savingPaymentId === payment.id} onClick={() => onRetry(payment)}>
+                          {savingPaymentId === payment.id ? 'Retrying?' : 'Retry Activation'}
+                        </button>
+                      ) : <span className="admin-muted-cell">{payment.status === 'VERIFIED' ? `Verified ${formatDate(payment.verified_at)}` : 'No action'}</span>
                     )}
                   </td>
                 </tr>
@@ -4404,7 +4461,7 @@ function FutureManualPaymentStatusBadge({ status }) {
   const normalized = String(status || '').toUpperCase()
   const badgeClass = normalized === 'VERIFIED' ? 'is-green' : normalized === 'REJECTED' ? 'is-muted' : 'is-gold'
 
-  return <span className={`admin-badge ${badgeClass}`}>{labelFromKey(normalized || 'PENDING')}</span>
+  return <span className={`admin-badge ${badgeClass}`}>{futureManualPaymentFilters.find((filter) => filter.id === normalized)?.label || labelFromKey(normalized || 'PENDING')}</span>
 }
 
 function PredictionRegenerationPanel({ settings, markingType, onMark }) {

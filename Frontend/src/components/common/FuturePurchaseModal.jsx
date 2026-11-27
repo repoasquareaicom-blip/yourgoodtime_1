@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './AuthPanel'
 import AuthenticationLoader from './AuthenticationLoader'
 import PredictionPlayer from './PredictionPlayer'
+import PredictionQrPayment from './PredictionQrPayment'
+import { predictionPaymentText as t } from '../../data/predictionPaymentCopy'
 import {
   createFuturePredictionOrder,
   fetchActiveFutureProduct,
@@ -9,7 +11,6 @@ import {
   fetchFuturePaymentSettings,
   fetchFutureQrPaymentStatus,
   loadRazorpayScript,
-  submitFutureQrPayment,
   verifyRazorpayPayment,
 } from '../../services/paymentService'
 import { buildPredictionPlaylist, fetchPredictionResult, fetchStoredPredictionResult } from '../../services/predictionResultService'
@@ -40,8 +41,8 @@ function clearPendingFuturePurchase() {
   }
 }
 
-function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
-  const [stage, setStage] = useState('loadingProduct')
+function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated, resumePayment }) {
+  const [stage, setStage] = useState(resumePayment ? 'qrPayment' : 'loadingProduct')
   const [product, setProduct] = useState(null)
   const [error, setError] = useState('')
   const [access, setAccess] = useState(null)
@@ -51,12 +52,16 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
   const [paymentSettings, setPaymentSettings] = useState(null)
   const [manualPayment, setManualPayment] = useState(null)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
-  const [paymentProof, setPaymentProof] = useState(null)
   const orderInFlightRef = useRef(false)
   const user = getUser()
   const predictionSession = useMemo(() => loadPredictionSession(), [stage])
 
   useEffect(() => {
+    if (resumePayment) {
+      fetchFuturePaymentSettings().then(setPaymentSettings).catch(() => {})
+      return
+    }
+
     let isMounted = true
 
     setStage('loadingProduct')
@@ -91,6 +96,13 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
     // Initial load intentionally hydrates product and current access once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (stage === 'qrPayment' || stage === 'playing') return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [stage])
 
   const closeFlow = () => {
     clearPendingFuturePurchase()
@@ -259,6 +271,7 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
               return
             }
             setAccess((current) => ({ ...(current || {}), entitlement: verification.entitlement, future_prediction_enabled: true }))
+            onUpdated?.()
             await prepareFuturePrediction()
           } catch {
             setStage('checkout')
@@ -318,6 +331,11 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
     const availability = futurePaymentAvailability(paymentSettings)
     setError('')
 
+    if (manualPayment?.status === 'AWAITING_SUBMISSION' || manualPayment?.status === 'PENDING') {
+      setStage('qrPayment')
+      return
+    }
+
     if (!availability.hasAny) {
       setError('Payment options are currently unavailable. Please try again later.')
       return
@@ -329,10 +347,6 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
     }
 
     if (!availability.gateway && availability.qr) {
-      if (manualPayment?.status === 'PENDING' || manualPayment?.status === 'VERIFIED') {
-        setStage('qrSubmitted')
-        return
-      }
       setSelectedPaymentMethod('gpay_qr')
       setStage('qrPayment')
       return
@@ -340,48 +354,6 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
 
     setSelectedPaymentMethod(selectedPaymentMethod || 'payment_gateway')
     setStage('paymentMethod')
-  }
-
-  const submitQrPayment = async (event) => {
-    event.preventDefault()
-
-    const session = loadPredictionSession()
-    if (!session?.predictionRequestId || !session?.requestUuid) {
-      setStage('birthDetails')
-      return
-    }
-
-    if (!activeProduct?.product_id) {
-      setError('Future prediction checkout is not available right now.')
-      return
-    }
-
-    if (!paymentProof) {
-      setError('Upload the payment proof screenshot.')
-      return
-    }
-
-    setIsPaying(true)
-    setError('')
-
-    try {
-      const response = await submitFutureQrPayment({
-        predictionRequestId: session.predictionRequestId,
-        requestUuid: session.requestUuid,
-        productId: activeProduct.product_id,
-        paymentProof,
-      })
-      setManualPayment(response.data)
-      setPaymentProof(null)
-      setStage('qrSubmitted')
-      setError('')
-    } catch (qrError) {
-      const existingPayment = qrError?.response?.data?.data
-      if (existingPayment) setManualPayment(existingPayment)
-      setError(qrError?.response?.data?.message || 'Unable to submit payment proof.')
-    } finally {
-      setIsPaying(false)
-    }
   }
 
   const handleAuthenticated = async () => {
@@ -406,27 +378,42 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
   }
 
   const activeProduct = access?.product || product
+  const nextPurchase = access?.next_purchase
+  const isAccessSummary = stage === 'accessSummary'
   const isBusy = ['loadingProduct', 'checkingAccess', 'creatingOrder', 'verifyingPayment', 'preparingFuture', 'loadingFuture', 'checkoutOpen'].includes(stage)
   const paymentAvailability = futurePaymentAvailability(paymentSettings)
 
-  const closeIfBackdrop = (event) => {
-    if (event.target === event.currentTarget) onClose?.()
+  if (stage === 'qrPayment') {
+    return (
+      <PredictionQrPayment
+        context={predictionSession && activeProduct?.product_id ? { ...predictionSession, productId: activeProduct.product_id } : null}
+        initialPayment={resumePayment || manualPayment}
+        product={activeProduct}
+        qrUrl={paymentSettings?.gpay_qr_enabled ? paymentSettings.qr_image_url : null}
+        onClose={closeFlow}
+        onChange={(payment) => {
+          setManualPayment(payment)
+          onUpdated?.(payment)
+        }}
+      />
+    )
   }
 
   return (
     <section
-      className="future-purchase-overlay"
+      className="future-purchase-overlay future-purchase-fullscreen"
       role="dialog"
       aria-modal="true"
-      aria-label="Future Prediction purchase"
-      onPointerDown={closeIfBackdrop}
-      onClick={closeIfBackdrop}
+      aria-label={isAccessSummary ? 'Purchased Future Predictions' : 'Future Prediction purchase'}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }}
     >
-      <div
-        className="future-purchase-panel"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className={isAccessSummary ? 'future-purchase-panel future-access-panel' : 'future-purchase-panel'}>
+        <button type="button" className="future-payment-close" onClick={closeFlow} aria-label={t('close')}>?</button>
         {stage === 'auth' ? (
           <AuthPanel initialMode="register" onAuthenticated={handleAuthenticated} onClose={() => setStage('product')} />
         ) : null}
@@ -483,46 +470,46 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
               </>
             ) : null}
 
-            {!isBusy && stage === 'accessSummary' ? (
+            {isAccessSummary ? (
               <>
                 <h2>Purchased Future Predictions</h2>
-                <p>Your purchased future periods remain available. You can watch them again or buy the next available period.</p>
                 {access?.purchased_blocks?.length ? (
-                  <div className="future-product-summary">
+                  <ul className="future-purchased-list" aria-label="Purchased periods" role="list">
                     {access.purchased_blocks.map((block) => (
-                      <div className="future-purchased-block" key={block.entitlement_id}>
+                      <li className="future-purchased-block" key={block.entitlement_id}>
                         <strong>{block.start_year === block.end_year ? block.start_year : `${block.start_year}-${block.end_year}`}</strong>
                         <span>{block.start_age === block.end_age ? `Age ${block.start_age}` : `Ages ${block.start_age}-${block.end_age}`}</span>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 ) : null}
-                {access?.next_purchase?.can_purchase ? (
-                  <p className="future-next-copy">
-                    {access.next_purchase.start_year === access.next_purchase.end_year
-                      ? `Unlock Your Prediction for ${access.next_purchase.start_year}`
-                      : `Unlock Your Future Prediction: ${access.next_purchase.start_year}-${access.next_purchase.end_year}`}
-                  </p>
+                {nextPurchase?.can_purchase ? (
+                  <div className="future-next-period">
+                    <div>
+                      <span>Next period</span>
+                      <strong>
+                        {nextPurchase.start_year === nextPurchase.end_year
+                          ? `${nextPurchase.start_year} (Age ${nextPurchase.start_age})`
+                          : `${nextPurchase.start_year}-${nextPurchase.end_year} (Ages ${nextPurchase.start_age}-${nextPurchase.end_age})`}
+                      </strong>
+                    </div>
+                    {activeProduct?.display_price ? (
+                      <div>
+                        <span>Price</span>
+                        <strong>{activeProduct.display_price}</strong>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : (
-                  <p className="future-next-copy">{access?.next_purchase?.message || 'No new supported future years are available right now.'}</p>
+                  <p>{nextPurchase?.message || 'No new supported future years are available right now.'}</p>
                 )}
-                {access?.next_purchase?.can_purchase && activeProduct ? (
-                  <div className="future-product-summary">
-                    <span>Next available period</span>
-                    <strong>
-                      {access.next_purchase.start_year === access.next_purchase.end_year
-                        ? `${access.next_purchase.start_year} (Age ${access.next_purchase.start_age})`
-                        : `${access.next_purchase.start_year}-${access.next_purchase.end_year} (Ages ${access.next_purchase.start_age}-${access.next_purchase.end_age})`}
-                    </strong>
-                    <span>Total payable</span>
-                    <strong>{activeProduct.display_price}</strong>
-                  </div>
-                ) : null}
                 {error ? <p className="future-purchase-error">{error}</p> : null}
                 <div className="future-purchase-actions">
-                  <button type="button" onClick={closeFlow}>Not Now</button>
-                  <button type="button" onClick={openExistingFuture}>Watch Purchased Future</button>
-                  <button type="button" disabled={!access?.next_purchase?.can_purchase || isPaying} onClick={continueToPayment}>Proceed to Payment</button>
+                  <button type="button" onClick={closeFlow}>Close</button>
+                  {access?.future_result_ready && <button type="button" aria-label="Watch purchased predictions" onClick={openExistingFuture}>Watch</button>}
+                  {nextPurchase?.can_purchase ? (
+                    <button type="button" disabled={isPaying} onClick={continueToPayment}>Buy Next</button>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -567,7 +554,7 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
                   {paymentAvailability.qr ? (
                     <button type="button" className={selectedPaymentMethod === 'gpay_qr' ? 'is-selected' : ''} onClick={() => setSelectedPaymentMethod('gpay_qr')}>
                       <strong>Pay via GPay QR</strong>
-                      <span>Scan QR and submit proof</span>
+                      <span>{t('qrOption')}</span>
                     </button>
                   ) : null}
                 </div>
@@ -583,69 +570,11 @@ function FuturePurchaseModal({ onClose, onNeedBirthDetails, onUpdated }) {
                         startPayment()
                         return
                       }
-                      if (manualPayment?.status === 'PENDING' || manualPayment?.status === 'VERIFIED') {
-                        setStage('qrSubmitted')
-                        return
-                      }
                       setStage('qrPayment')
                     }}
                   >
                     Continue
                   </button>
-                </div>
-              </>
-            ) : null}
-
-            {!isBusy && stage === 'qrPayment' ? (
-              <form onSubmit={submitQrPayment}>
-                <h2>Pay via GPay QR</h2>
-                <p>Scan the QR code and complete the payment using GPay or any supported UPI app.</p>
-                <div className="future-product-summary">
-                  <span>Product</span>
-                  <strong>{activeProduct?.title || activeProduct?.name || 'Future Prediction'}</strong>
-                  <span>Total payable</span>
-                  <strong>{activeProduct?.display_price || 'Loading...'}</strong>
-                </div>
-                <div className="future-qr-payment-box">
-                  {paymentSettings?.qr_image_url ? (
-                    <img src={paymentSettings.qr_image_url} alt="Future Video GPay QR code" />
-                  ) : (
-                    <span>No QR code is available right now.</span>
-                  )}
-                </div>
-                {manualPayment?.status === 'REJECTED' ? <FutureManualPaymentStatus payment={manualPayment} /> : null}
-                <label className="future-payment-proof">
-                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setPaymentProof(event.target.files?.[0] || null)} />
-                  <strong>{paymentProof ? paymentProof.name : 'Upload payment proof screenshot'}</strong>
-                  <span>PNG, JPG, or WEBP up to 5 MB</span>
-                </label>
-                {error ? <p className="future-purchase-error">{error}</p> : null}
-                <div className="future-purchase-actions">
-                  <button type="button" onClick={() => setStage(paymentAvailability.gateway ? 'paymentMethod' : 'checkout')}>Back</button>
-                  <button type="submit" disabled={isPaying || !paymentSettings?.qr_image_url}>
-                    {isPaying ? 'Submitting...' : 'Submit Payment for Verification'}
-                  </button>
-                </div>
-              </form>
-            ) : null}
-
-            {!isBusy && stage === 'qrSubmitted' ? (
-              <>
-                {manualPayment?.status === 'REJECTED' ? (
-                  <>
-                    <h2>Payment could not be verified.</h2>
-                    {manualPayment?.rejection_reason ? <p>{manualPayment.rejection_reason}</p> : <p>Please upload a new payment proof screenshot.</p>}
-                  </>
-                ) : (
-                  <>
-                    <h2>Thank you!</h2>
-                    <p>Your payment proof has been submitted successfully. Our team will verify the payment and enable your Future Video shortly. You will be able to access it from your account once the verification is completed.</p>
-                  </>
-                )}
-                {error ? <p className="future-purchase-error">{error}</p> : null}
-                <div className="future-purchase-actions">
-                  <button type="button" onClick={closeFlow}>Close</button>
-                  {manualPayment?.status === 'REJECTED' ? <button type="button" onClick={() => setStage('qrPayment')}>Submit Again</button> : null}
                 </div>
               </>
             ) : null}
@@ -701,12 +630,12 @@ function defaultFuturePaymentMethod(settings) {
 function FutureManualPaymentStatus({ payment }) {
   const status = payment?.status || 'PENDING'
   const label = status === 'PENDING'
-    ? 'Pending Verification'
+    ? t('pending')
     : status === 'VERIFIED'
-      ? 'Verified'
+      ? t('verified')
       : status === 'REJECTED'
         ? 'Rejected'
-        : payment?.status_label || status
+        : status === 'AWAITING_SUBMISSION' ? t('resume') : payment?.status_label || status
 
   return (
     <div className={`future-manual-payment-status is-${status.toLowerCase()}`}>

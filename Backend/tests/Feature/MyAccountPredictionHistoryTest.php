@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AdminUser;
 use App\Models\PaymentTransaction;
 use App\Models\PredictionEntitlement;
 use App\Models\PredictionProduct;
@@ -48,6 +49,41 @@ class MyAccountPredictionHistoryTest extends TestCase
     {
         $this->getJson('/api/my-account/predictions')
             ->assertUnauthorized();
+    }
+
+    public function test_admin_can_view_a_selected_customers_dashboard_without_playback_credentials(): void
+    {
+        $lastLogin = now()->subDays(3)->startOfSecond();
+        $customer = User::factory()->create([
+            'email' => 'dashboard-customer@example.com',
+            'last_login_at' => $lastLogin,
+        ]);
+        $profile = $this->predictionRequest(['email' => $customer->email]);
+        $path = '/api/admin/users/'.$customer->id.'/account';
+        $this->getJson($path)->assertUnauthorized();
+        $this->actingAs($customer, 'sanctum')->getJson($path)->assertForbidden();
+
+        $admin = AdminUser::query()->create([
+            'name' => 'Account Admin',
+            'email' => 'account-admin@example.com',
+            'password' => 'secret',
+            'is_active' => true,
+        ]);
+        $this->actingAs($admin, 'sanctum')->getJson($path)
+            ->assertOk()
+            ->assertJsonPath('data.user.id', $customer->id)
+            ->assertJsonPath('data.identity.email', $customer->email)
+            ->assertJsonPath('data.identity.name', $profile->full_name)
+            ->assertJsonPath('data.past.available', true)
+            ->assertJsonMissingPath('data.past.watch')
+            ->assertJsonMissingPath('data.user.last_login_at')
+            ->assertJsonCount(0, 'data.temple_remedies')
+            ->assertJsonCount(0, 'data.appointments.groups.pending')
+            ->assertJsonCount(0, 'data.appointments.groups.upcoming')
+            ->assertJsonCount(0, 'data.appointments.groups.completed');
+        $this->assertTrue($customer->refresh()->last_login_at->equalTo($lastLogin));
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->getJson('/api/admin/users/999999/account')->assertNotFound();
     }
 
     public function test_past_summary_returns_engine_matching_range_without_yearly_history(): void

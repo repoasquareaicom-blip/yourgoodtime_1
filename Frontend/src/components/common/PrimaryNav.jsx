@@ -23,19 +23,22 @@ const navItems = [
   },
 ]
 
-function PrimaryNav() {
+function PrimaryNav({ accountPreview = false }) {
   const navigate = useNavigate()
   const location = useLocation()
 
   return (
     <nav className="home-footer-nav" aria-label="Primary">
       {navItems.map((item) => {
-        const isActive = item.activePaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))
+        const isActive = accountPreview
+          ? item.path === '/account'
+          : item.activePaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))
 
         return (
           <button
             key={item.path}
             type="button"
+            disabled={accountPreview}
             className={`footer-nav-item ${isActive ? 'is-active' : ''}`}
             aria-current={isActive ? 'page' : undefined}
             onClick={() => {
@@ -52,6 +55,7 @@ function PrimaryNav() {
       })}
       <button
         type="button"
+        disabled={accountPreview}
         className="footer-nav-item footer-nav-chat"
         onClick={openYgtChatbot}
       >

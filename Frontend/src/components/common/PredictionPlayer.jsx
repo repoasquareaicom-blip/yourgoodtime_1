@@ -126,6 +126,8 @@ function PredictionPlayer({
   predictionRequestAccess,
   predictionResultId,
   predictionType = 'past',
+  loadPlaybackUrl = fetchProtectedVideoPlaybackUrl,
+  readOnly = false,
   requireFeedbackOnFinish = false,
   onFeedbackSaved,
   onFeedbackSubmitted,
@@ -265,7 +267,7 @@ function PredictionPlayer({
       return undefined
     }
 
-    if (!predictionRequestAccess?.predictionRequestId || !predictionRequestAccess?.requestUuid) {
+    if (loadPlaybackUrl === fetchProtectedVideoPlaybackUrl && (!predictionRequestAccess?.predictionRequestId || !predictionRequestAccess?.requestUuid)) {
       setPlaybackSource({ key: currentVideoKey, url: currentVideo?.url || '', isLoading: false, error: '', debug: null })
       return undefined
     }
@@ -279,7 +281,7 @@ function PredictionPlayer({
       debug: current.key === currentVideoKey ? current.debug : null,
     }))
 
-    fetchProtectedVideoPlaybackUrl({
+    loadPlaybackUrl({
       ...predictionRequestAccess,
       predictionType,
       predictionResultId,
@@ -338,6 +340,7 @@ function PredictionPlayer({
     predictionRequestAccess,
     predictionResultId,
     predictionType,
+    loadPlaybackUrl,
     playbackRefreshKey,
     selectedPlaybackLanguage,
   ])
@@ -498,12 +501,14 @@ function PredictionPlayer({
   }
 
   return (
-    <div className="prediction-player-overlay" role="dialog" aria-modal="true" aria-label="Past prediction video player">
+    <div className="prediction-player-overlay" role="dialog" aria-modal="true" aria-label={predictionType === 'future' ? 'Future prediction video player' : 'Past prediction video player'}>
       <section className="prediction-player">
         <button type="button" className="prediction-player__close" onClick={onClose} aria-label="Close prediction player">x</button>
-        <button type="button" className="prediction-player__feedback-link" onClick={openFeedback}>
-          Rate This Prediction
-        </button>
+        {!readOnly && (
+          <button type="button" className="prediction-player__feedback-link" onClick={openFeedback}>
+            Rate This Prediction
+          </button>
+        )}
 
         <header className="prediction-player__header">
           <span>{isCompleted ? 'Complete' : progressText}</span>
@@ -625,16 +630,16 @@ function PredictionPlayer({
             <div className="prediction-player__complete">
               <span className="prediction-player__complete-ring" aria-hidden="true" />
               <h2>{completionTitle}</h2>
-              <p>
+              {!readOnly && <p>
                 {hasSubmittedFeedback
                   ? 'Thank you for sharing your feedback about this prediction.'
                   : 'Would you like to rate this prediction before returning to your personal dashboard?'}
-              </p>
+              </p>}
               <div className="prediction-player__actions">
-                {!hasSubmittedFeedback ? (
+                {!readOnly && !hasSubmittedFeedback ? (
                   <button type="button" onClick={openFeedback}>Rate This Prediction</button>
                 ) : null}
-                <button type="button" onClick={onComplete || onClose}>Back to Home</button>
+                <button type="button" onClick={onComplete || onClose}>{readOnly ? 'Back to Account Preview' : 'Back to Home'}</button>
               </div>
             </div>
           ) : null}

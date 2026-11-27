@@ -36,4 +36,11 @@ class PredictionResult extends Model
     {
         return $this->belongsTo(PredictionRequest::class);
     }
+
+    public function hasReadingVideos(): bool
+    {
+        return collect(data_get($this->result_payload, 'prediction_videos', []))
+            ->contains(fn ($group): bool => filled(data_get($group, 'video_id'))
+                || collect((array) data_get($group, 'video_ids', []))->contains(fn ($id): bool => is_scalar($id) && filled($id)));
+    }
 }

@@ -2,16 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Models\AdminUser;
+use App\Models\FutureVideoManualPayment;
+use App\Models\PaymentMethodSetting;
 use App\Models\PaymentTransaction;
 use App\Models\PredictionEntitlement;
 use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
 use App\Models\PredictionResult;
 use App\Models\User;
+use App\Services\Prediction\PredictionRegenerationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -32,6 +40,203 @@ class PredictionCommerceTest extends TestCase
         ]);
         File::deleteDirectory($this->predictionDataDirectory());
         $this->fakePredictionWorkbooks(['1998', '1999', '2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007']);
+    }
+
+    public function test_qr_attempt_resumes_and_submits_in_place_with_or_without_proof(): void
+    {
+        Storage::fake('local');
+        $admin = $this->manualPaymentAdmin();
+        [$firstUser, $firstContext] = $this->qrCheckout('first@example.com');
+        [$secondUser, $secondContext] = $this->qrCheckout('second@example.com');
+        $qr = '/api/payments/future-prediction/manual-qr';
+        $list = '/api/admin/future-video-manual-payments';
+
+        $id = $this->actingAs($firstUser, 'sanctum')->postJson($qr.'/begin', $firstContext)
+            ->assertOk()->assertJsonPath('data.status', 'AWAITING_SUBMISSION')
+            ->assertJsonPath('data.amount_minor', 60000)->json('data.id');
+        $this->postJson($qr.'/begin', $firstContext)->assertJsonPath('data.id', $id);
+        $this->actingAs($secondUser, 'sanctum')->postJson($qr, ['payment_id' => $id])->assertNotFound();
+        $this->actingAs($admin, 'sanctum')->getJson($list.'?status=PENDING')->assertJsonCount(0, 'data');
+        $this->getJson($list.'?status=AWAITING_SUBMISSION')->assertJsonPath('data.0.id', $id);
+        $this->actingAs($firstUser, 'sanctum')->getJson('/api/my-account/predictions')
+            ->assertJsonPath('data.future.resume_payment.id', $id);
+
+        $this->postJson($qr, ['payment_id' => $id])->assertCreated()
+            ->assertJsonPath('data.id', $id)->assertJsonPath('data.status', 'PENDING');
+        $this->postJson($qr, ['payment_id' => $id])->assertOk()->assertJsonPath('data.id', $id);
+        $this->getJson('/api/my-account/predictions')->assertJsonPath('data.future.resume_payment', null)
+            ->assertJsonPath('data.future.payment_pending', true);
+
+        $secondId = $this->actingAs($secondUser, 'sanctum')->postJson($qr.'/begin', $secondContext)->json('data.id');
+        $this->post($qr, ['payment_id' => $secondId, 'payment_proof' => UploadedFile::fake()->create('test.txt', 1)], ['Accept' => 'application/json'])
+            ->assertJsonValidationErrors('payment_proof');
+        $this->post($qr, ['payment_id' => $secondId, 'payment_proof' => UploadedFile::fake()->image('proof.png')], ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('data.id', $secondId)->assertJsonPath('data.status', 'PENDING');
+        $this->assertDatabaseCount('future_video_manual_payments', 2);
+        $this->assertDatabaseCount('prediction_entitlements', 0);
+
+        $this->actingAs($admin, 'sanctum')->getJson($list.'?status=PENDING')->assertJsonCount(2, 'data');
+        $this->getJson($list.'/'.$id)->assertJsonPath('data.payment_proof', null);
+        $this->getJson($list.'/'.$secondId)->assertJsonPath('data.payment_proof.file_name', 'proof.png');
+        $this->get($list.'/'.$secondId.'/proof')->assertOk();
+        $this->postJson($list.'/'.$id.'/verify')->assertJsonValidationErrors('payment_confirmed');
+        $this->postJson($list.'/'.$id.'/verify', ['payment_confirmed' => true, 'admin_remarks' => 'Proof received on WhatsApp'])
+            ->assertOk()->assertJsonPath('data.admin_remarks', 'Proof received on WhatsApp')
+            ->assertJsonPath('data.activation_pending', false);
+        $this->actingAs($firstUser, 'sanctum')->getJson('/api/my-account/predictions')
+            ->assertJsonPath('data.future.purchased', true)
+            ->assertJsonPath('data.future.ranges.0.watch_ready', true);
+        $this->assertDatabaseCount('prediction_entitlements', 1);
+    }
+
+    public function test_previously_verified_qr_payment_is_reported_and_can_prepare_its_existing_entitlement(): void
+    {
+        [$user, $context] = $this->qrCheckout('paid-without-result@example.com');
+        $qr = '/api/payments/future-prediction/manual-qr';
+        $id = $this->actingAs($user, 'sanctum')->postJson($qr.'/begin', $context)->assertOk()->json('data.id');
+        $payment = FutureVideoManualPayment::query()->findOrFail($id);
+        $payment->forceFill(['status' => FutureVideoManualPayment::VERIFIED, 'verified_at' => now()])->save();
+        $transaction = $this->transaction($payment->predictionRequest, $payment->product, $user, 'manual_future_video_'.$id);
+        $entitlement = app(\App\Services\FuturePredictionAccessService::class)->activate($transaction, $payment->metadata['next_purchase']);
+        $resultUrl = '/api/admin/prediction-requests?type=future';
+        $paymentUrl = '/api/admin/future-video-manual-payments/'.$id;
+
+        $this->actingAs($this->manualPaymentAdmin(), 'sanctum')->getJson($resultUrl)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.status', 'processing')
+            ->assertJsonPath('data.0.prediction_entitlement_id', $entitlement->id)
+            ->assertJsonPath('data.0.prediction_result_id', null);
+        $this->getJson($paymentUrl)->assertJsonPath('data.activation_pending', true);
+        $this->postJson($paymentUrl.'/retry')->assertOk()->assertJsonPath('data.activation_pending', false);
+        $this->postJson($paymentUrl.'/retry')->assertOk()->assertJsonPath('data.activation_pending', false);
+        $this->getJson($resultUrl)->assertJsonCount(1, 'data')->assertJsonPath('data.0.status', 'completed');
+        $this->assertDatabaseCount('payment_transactions', 1);
+        $this->assertDatabaseCount('prediction_entitlements', 1);
+        $this->assertDatabaseCount('prediction_results', 1);
+    }
+
+    public function test_manual_admin_activates_past_and_reuses_future_payment_with_safe_retry(): void
+    {
+        $admin = $this->manualPaymentAdmin();
+        [$user, $context] = $this->qrCheckout('manual@example.com');
+        $path = '/api/admin/manual-prediction-requests';
+        $paymentId = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/payments/future-prediction/manual-qr/begin', $context)
+            ->assertOk()->json('data.id');
+        $this->getJson($path.'/users?search=manual')->assertForbidden();
+        $this->actingAs($admin, 'sanctum')->getJson($path.'/users?search=79797')
+            ->assertOk()->assertJsonPath('data.0.id', $user->id);
+        $this->getJson($path.'/users?search=manual@example.com')->assertJsonPath('data.0.id', $user->id);
+        $options = $this->getJson($path.'/users/'.$user->id)->assertOk()
+            ->assertJsonPath('data.profile.astrology.rasi', 'Pisces')->json('data.periods');
+        $this->assertSame('AWAITING_SUBMISSION', $options['future']['existing_status']);
+
+        $generator = $this->mock(PredictionRegenerationService::class);
+        $generator->shouldReceive('regenerate')->once()->withArgs(fn ($request, $type, $entitlement) => $type === 'past' && $entitlement === null)
+            ->andReturnUsing(fn ($request) => $this->playableManualResult($request, 'past'));
+        $generator->shouldReceive('regenerate')->once()->withArgs(fn ($request, $type, $entitlement) => $type === 'future' && $entitlement !== null)
+            ->andThrow(new \RuntimeException('Temporary preparation error'));
+        $generator->shouldReceive('regenerate')->once()->withArgs(fn ($request, $type, $entitlement) => $type === 'future' && $entitlement !== null)
+            ->andReturnUsing(fn ($request, $type, $entitlement) => $this->playableManualResult($request, $type, $entitlement));
+
+        $past = [
+            'user_id' => $user->id, 'prediction_type' => 'past', 'period_reference' => $options['past']['reference'],
+            'payment_method' => 'GPAY_QR', 'amount' => '450.00', 'payment_received_on' => now()->toDateString(),
+            'transaction_reference' => 'UPI-001',
+        ];
+        $this->postJson($path, $past)->assertJsonValidationErrors('payment_confirmed');
+        $past['payment_confirmed'] = true;
+        $this->postJson($path, $past)->assertOk()
+            ->assertJsonPath('data.manual_entry', true)->assertJsonPath('data.activation_pending', false);
+        $this->postJson($path, $past)->assertConflict();
+
+        $future = array_replace($past, ['prediction_type' => 'future', 'period_reference' => $options['future']['reference']]);
+        $this->postJson($path, $future)->assertJsonValidationErrors('transaction_reference');
+        $future['transaction_reference'] = 'upi-002';
+        $this->postJson($path, $future)->assertOk()->assertJsonPath('data.id', $paymentId)
+            ->assertJsonPath('data.status', 'VERIFIED')->assertJsonPath('data.activation_pending', true)
+            ->assertJsonPath('data.transaction_reference', 'UPI-002');
+        $this->assertSame($admin->id, FutureVideoManualPayment::query()->findOrFail($paymentId)->verified_by);
+        $this->assertDatabaseCount('payment_transactions', 1);
+        $this->assertDatabaseCount('prediction_entitlements', 1);
+        $this->actingAs($user, 'sanctum')->getJson('/api/my-account/predictions')
+            ->assertJsonPath('data.past.action', 'watch')
+            ->assertJsonPath('data.past.watch_ready', true)
+            ->assertJsonPath('data.future.ranges.0.watch', null);
+
+        $retry = '/api/admin/future-video-manual-payments/'.$paymentId.'/retry';
+        $this->actingAs($admin, 'sanctum')->postJson($retry)->assertOk()->assertJsonPath('data.activation_pending', false);
+        $this->postJson($retry)->assertOk()->assertJsonPath('data.activation_pending', false);
+        $this->assertDatabaseCount('prediction_entitlements', 1);
+        $this->assertDatabaseCount('prediction_results', 2);
+        $this->actingAs($user, 'sanctum')->getJson('/api/my-account/predictions')
+            ->assertJsonPath('data.future.ranges.0.has_result', true)
+            ->assertJsonPath('data.future.ranges.0.watch_ready', true)
+            ->assertJsonPath('data.future.ranges.0.watch.prediction_request_id', $context['prediction_request_id']);
+    }
+
+    public function test_qr_checkout_works_with_the_original_nonnullable_proof_column(): void
+    {
+        Schema::table('future_video_manual_payments', function (Blueprint $table): void {
+            $table->string('payment_proof_path')->nullable(false)->change();
+        });
+        [$user, $context] = $this->qrCheckout('old-schema@example.com');
+        $qr = '/api/payments/future-prediction/manual-qr';
+
+        $id = $this->actingAs($user, 'sanctum')->postJson($qr.'/begin', $context)
+            ->assertOk()->assertJsonPath('data.status', 'AWAITING_SUBMISSION')->json('data.id');
+        $this->postJson($qr, ['payment_id' => $id])
+            ->assertCreated()->assertJsonPath('data.status', 'PENDING');
+        $this->assertDatabaseHas('future_video_manual_payments', ['id' => $id, 'payment_proof_path' => '']);
+        $this->actingAs($this->manualPaymentAdmin(), 'sanctum')
+            ->getJson('/api/admin/future-video-manual-payments/'.$id)->assertJsonPath('data.payment_proof', null);
+    }
+
+    public function test_future_payment_download_serves_only_the_enabled_configured_qr(): void
+    {
+        Storage::fake('public');
+        $this->qrCheckout('qr-download@example.com');
+        $path = 'payment-method-qr/future_video/configured-qr.png';
+        $exampleImage = UploadedFile::fake()->image('qr.png');
+        Storage::disk('public')->putFileAs(dirname($path), $exampleImage, basename($path));
+        $setting = PaymentMethodSetting::query()->where('service_type', PaymentMethodSetting::FUTURE_VIDEO)->firstOrFail();
+        $setting->update(['qr_image_path' => $path]);
+        $route = '/api/payment-method-settings/future-video/qr-download';
+
+        $response = $this->get($route)->assertOk()->assertDownload('your-good-time-upi-qr.png')->assertHeader('Content-Type', 'image/png');
+        $this->assertSame(file_get_contents($exampleImage->getPathname()), $response->streamedContent());
+
+        $setting->update(['gpay_qr_enabled' => false]);
+        $this->get($route)->assertNotFound();
+    }
+
+    private function qrCheckout(string $email): array
+    {
+        $user = User::factory()->create(['email' => $email, 'phone_number' => '9043979797']);
+        $request = $this->predictionRequest(['email' => $email]);
+        $product = PredictionProduct::query()->where('code', 'FUTURE_PREDICTION')->first() ?? $this->futureProduct();
+        PaymentMethodSetting::query()->updateOrCreate(
+            ['service_type' => PaymentMethodSetting::FUTURE_VIDEO],
+            ['gpay_qr_enabled' => true, 'qr_image_path' => 'payments/qr.png']
+        );
+
+        return [$user, ['prediction_request_id' => $request->id, 'request_uuid' => $request->request_uuid, 'product_id' => $product->id]];
+    }
+
+    private function manualPaymentAdmin(): AdminUser
+    {
+        return AdminUser::query()->create(['name' => 'Payment Admin', 'email' => 'payment-admin@example.com', 'password' => 'secret', 'is_active' => true]);
+    }
+
+    private function playableManualResult(PredictionRequest $request, string $type, ?PredictionEntitlement $entitlement = null): PredictionResult
+    {
+        return $request->results()->create([
+            'prediction_type' => $type,
+            'prediction_entitlement_id' => $entitlement?->id,
+            'result_payload' => ['prediction_videos' => [['video_ids' => ['FUTURE_001']]]],
+            'status' => 'completed',
+            'generated_at' => now(),
+        ]);
     }
 
     public function test_future_access_returns_configured_product_price(): void

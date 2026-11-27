@@ -9,6 +9,8 @@ class FutureVideoManualPayment extends Model
 {
     public const SERVICE_TYPE = 'FUTURE_VIDEO';
     public const PAYMENT_METHOD = 'GPAY_QR';
+    public const PAST_SERVICE_TYPE = 'PAST_PREDICTION';
+    public const AWAITING = 'AWAITING_SUBMISSION';
     public const PENDING = 'PENDING';
     public const VERIFIED = 'VERIFIED';
     public const REJECTED = 'REJECTED';
@@ -31,6 +33,7 @@ class FutureVideoManualPayment extends Model
         'verified_at',
         'verified_by',
         'rejection_reason',
+        'transaction_reference',
         'metadata',
     ];
 

@@ -40,6 +40,22 @@ export async function fetchFutureQrPaymentStatus({ predictionRequestId, requestU
   return response.data?.data || null
 }
 
+export async function downloadFutureQrImage() {
+  const { data: image } = await api.get('/payment-method-settings/future-video/qr-download', { responseType: 'blob' })
+  const extensions = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+  const extension = extensions[image.type]
+  if (!extension) throw new Error('Invalid QR image')
+
+  const url = URL.createObjectURL(image)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `your-good-time-upi-qr.${extension}`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export async function createFuturePredictionOrder({ predictionRequestId, requestUuid, productId }) {
   const response = await api.post('/payments/future-prediction/order', {
     prediction_request_id: predictionRequestId,
@@ -50,12 +66,26 @@ export async function createFuturePredictionOrder({ predictionRequestId, request
   return response.data?.data
 }
 
-export async function submitFutureQrPayment({ predictionRequestId, requestUuid, productId, paymentProof }) {
+export async function beginFutureQrPayment({ predictionRequestId, requestUuid, productId }) {
+  const response = await api.post('/payments/future-prediction/manual-qr/begin', {
+    prediction_request_id: predictionRequestId,
+    request_uuid: requestUuid,
+    product_id: productId,
+  })
+
+  return response.data?.data
+}
+
+export async function submitFutureQrPayment({ paymentId, predictionRequestId, requestUuid, productId, paymentProof }) {
   const payload = new FormData()
-  payload.append('prediction_request_id', predictionRequestId)
-  payload.append('request_uuid', requestUuid)
-  payload.append('product_id', productId)
-  payload.append('payment_proof', paymentProof)
+  if (paymentId) {
+    payload.append('payment_id', paymentId)
+  } else {
+    payload.append('prediction_request_id', predictionRequestId)
+    payload.append('request_uuid', requestUuid)
+    payload.append('product_id', productId)
+  }
+  if (paymentProof) payload.append('payment_proof', paymentProof)
 
   const response = await api.post('/payments/future-prediction/manual-qr', payload)
 

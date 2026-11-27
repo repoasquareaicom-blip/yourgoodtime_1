@@ -1,3 +1,5 @@
+import PredictionQrPayment from '../components/common/PredictionQrPayment'
+import { predictionPaymentText as t } from '../data/predictionPaymentCopy'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import ActionModal from '../components/common/ActionModal'
@@ -24,7 +26,6 @@ import {
   fetchFuturePaymentSettings,
   fetchFutureQrPaymentStatus,
   loadRazorpayScript,
-  submitFutureQrPayment,
   verifyRazorpayPayment,
 } from '../services/paymentService'
 import { getUser, isLoggedIn, removeToken, removeUser, saveToken, saveUser } from '../utils/auth'
@@ -192,7 +193,6 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
   const [futurePaymentSettings, setFuturePaymentSettings] = useState(null)
   const [futureManualPayment, setFutureManualPayment] = useState(null)
   const [futurePaymentMethod, setFuturePaymentMethod] = useState('')
-  const [futureQrProof, setFutureQrProof] = useState(null)
   const [checkoutError, setCheckoutError] = useState('')
   const [checkoutStatus, setCheckoutStatus] = useState('idle')
   const [futureResult, setFutureResult] = useState(null)
@@ -1133,6 +1133,11 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
     const availability = futurePaymentAvailability(futurePaymentSettings)
     setCheckoutError('')
 
+    if (['AWAITING_SUBMISSION', 'PENDING'].includes(futureManualPayment?.status)) {
+      setPostReadingStage('futureQrPayment')
+      return
+    }
+
     if (!availability.hasAny) {
       setCheckoutError('Payment options are currently unavailable. Please try again later.')
       return
@@ -1144,10 +1149,6 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
     }
 
     if (!availability.gateway && availability.qr) {
-      if (futureManualPayment?.status === 'PENDING' || futureManualPayment?.status === 'VERIFIED') {
-        setPostReadingStage('futureQrSubmitted')
-        return
-      }
       setFuturePaymentMethod('gpay_qr')
       setPostReadingStage('futureQrPayment')
       return
@@ -1155,40 +1156,6 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
 
     setFuturePaymentMethod(futurePaymentMethod || 'payment_gateway')
     setPostReadingStage('futurePaymentMethod')
-  }
-
-  const submitFutureQrPaymentProof = async (event) => {
-    event.preventDefault()
-
-    if (!predictionRequestAccess || !futureAccess?.product?.product_id) {
-      setCheckoutError('Future prediction checkout is not available right now.')
-      return
-    }
-
-    if (!futureQrProof) {
-      setCheckoutError('Upload the payment proof screenshot.')
-      return
-    }
-
-    setCheckoutStatus('submittingQr')
-    setCheckoutError('')
-
-    try {
-      const response = await submitFutureQrPayment({
-        ...predictionRequestAccess,
-        productId: futureAccess.product.product_id,
-        paymentProof: futureQrProof,
-      })
-      setFutureManualPayment(response.data)
-      setFutureQrProof(null)
-      setPostReadingStage('futureQrSubmitted')
-      setCheckoutStatus('idle')
-    } catch (qrError) {
-      const existingPayment = qrError?.response?.data?.data
-      if (existingPayment) setFutureManualPayment(existingPayment)
-      setCheckoutError(qrError?.response?.data?.message || 'Unable to submit payment proof.')
-      setCheckoutStatus('idle')
-    }
   }
 
   useEffect(() => {
@@ -1708,7 +1675,7 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
               {futurePaymentAvailability(futurePaymentSettings).qr ? (
                 <button type="button" className={futurePaymentMethod === 'gpay_qr' ? 'is-selected' : ''} onClick={() => setFuturePaymentMethod('gpay_qr')}>
                   <strong>Pay via GPay QR</strong>
-                  <span>Scan QR and submit proof</span>
+                  <span>{t('qrOption')}</span>
                 </button>
               ) : null}
             </div>
@@ -1724,10 +1691,6 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
                     handleFuturePayment()
                     return
                   }
-                  if (futureManualPayment?.status === 'PENDING' || futureManualPayment?.status === 'VERIFIED') {
-                    setPostReadingStage('futureQrSubmitted')
-                    return
-                  }
                   setPostReadingStage('futureQrPayment')
                 }}
               >
@@ -1739,57 +1702,14 @@ function PastPredictionPage({ forceModal = false, onClose, predictionIntent = 'p
       ) : null}
 
       {postReadingStage === 'futureQrPayment' ? (
-        <section className="post-reading-overlay" role="dialog" aria-modal="true" aria-label="Future prediction GPay QR payment">
-          <form className="post-reading-panel" onSubmit={submitFutureQrPaymentProof}>
-            <h2>Pay via GPay QR</h2>
-            <p>Scan the QR code and complete the payment using GPay or any supported UPI app.</p>
-            <div className="checkout-summary">
-              <span>Product</span>
-              <strong>{futureAccess?.product?.name || 'Future Prediction'}</strong>
-              <span>Total payable</span>
-              <strong>{futureAccess?.product?.display_price || 'Loading...'}</strong>
-            </div>
-            <div className="future-qr-payment-box">
-              {futurePaymentSettings?.qr_image_url ? (
-                <img src={futurePaymentSettings.qr_image_url} alt="Future Video GPay QR code" />
-              ) : (
-                <span>No QR code is available right now.</span>
-              )}
-            </div>
-            {futureManualPayment?.status === 'REJECTED' ? <FutureManualPaymentStatus payment={futureManualPayment} /> : null}
-            <label className="future-payment-proof">
-              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setFutureQrProof(event.target.files?.[0] || null)} />
-              <strong>{futureQrProof ? futureQrProof.name : 'Upload payment proof screenshot'}</strong>
-              <span>PNG, JPG, or WEBP up to 5 MB</span>
-            </label>
-            {checkoutError ? <p className="post-reading-error">{checkoutError}</p> : null}
-            <div className="post-reading-actions">
-              <button type="button" onClick={() => setPostReadingStage(futurePaymentAvailability(futurePaymentSettings).gateway ? 'futurePaymentMethod' : 'checkout')}>Back</button>
-              <button type="submit" disabled={checkoutStatus === 'submittingQr' || !futurePaymentSettings?.qr_image_url}>
-                {checkoutStatus === 'submittingQr' ? 'Submitting...' : 'Submit Payment for Verification'}
-              </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
-
-      {postReadingStage === 'futureQrSubmitted' ? (
-        <section className="post-reading-overlay" role="dialog" aria-modal="true" aria-label="Future prediction QR payment submitted">
-          <div className="post-reading-panel">
-            <h2>{futureManualPayment?.status === 'REJECTED' ? 'Payment could not be verified.' : 'Thank you!'}</h2>
-            <p>
-              {futureManualPayment?.status === 'REJECTED'
-                ? 'Please upload a clear payment screenshot and submit again.'
-                : 'Your payment proof has been submitted successfully. Our team will verify the payment and enable your Future Video shortly. You will be able to access it from your account once the verification is completed.'}
-            </p>
-            {futureManualPayment ? <FutureManualPaymentStatus payment={futureManualPayment} /> : null}
-            {checkoutError ? <p className="post-reading-error">{checkoutError}</p> : null}
-            <div className="post-reading-actions">
-              <button type="button" onClick={handleClose}>Close</button>
-              {futureManualPayment?.status === 'REJECTED' ? <button type="button" onClick={() => setPostReadingStage('futureQrPayment')}>Submit Again</button> : null}
-            </div>
-          </div>
-        </section>
+        <PredictionQrPayment
+          context={predictionRequestAccess && futureAccess?.product?.product_id ? { ...predictionRequestAccess, productId: futureAccess.product.product_id } : null}
+          initialPayment={futureManualPayment}
+          product={futureAccess?.product}
+          qrUrl={futurePaymentSettings?.qr_image_url}
+          onClose={() => futureManualPayment?.status === 'PENDING' || futureManualPayment?.status === 'VERIFIED' ? handleClose() : setPostReadingStage('checkout')}
+          onChange={setFutureManualPayment}
+        />
       ) : null}
 
       {postReadingStage === 'futureReady' ? (
@@ -1852,12 +1772,12 @@ function defaultFuturePaymentMethod(settings) {
 function FutureManualPaymentStatus({ payment }) {
   const status = payment?.status || 'PENDING'
   const label = status === 'PENDING'
-    ? 'Pending Verification'
+    ? t('pending')
     : status === 'VERIFIED'
-      ? 'Verified'
+      ? t('verified')
       : status === 'REJECTED'
         ? 'Rejected'
-        : payment?.status_label || status
+        : status === 'AWAITING_SUBMISSION' ? t('resume') : payment?.status_label || status
 
   return (
     <div className={`future-manual-payment-status is-${status.toLowerCase()}`}>

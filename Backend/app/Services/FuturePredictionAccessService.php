@@ -143,10 +143,13 @@ class FuturePredictionAccessService
         );
     }
 
-    public function activate(PaymentTransaction $transaction): PredictionEntitlement
+    public function activate(PaymentTransaction $transaction, ?array $reservedBlock = null): PredictionEntitlement
     {
-        return DB::transaction(function () use ($transaction): PredictionEntitlement {
+        return DB::transaction(function () use ($transaction, $reservedBlock): PredictionEntitlement {
             $transaction->refresh();
+            $product = PredictionProduct::query()->lockForUpdate()->findOrFail($transaction->product_id);
+            $predictionRequest = PredictionRequest::query()->lockForUpdate()->findOrFail($transaction->prediction_request_id);
+            $user = User::query()->lockForUpdate()->findOrFail($transaction->user_id);
             $existing = PredictionEntitlement::query()
                 ->where('payment_transaction_id', $transaction->id)
                 ->where('prediction_type', 'future')
@@ -157,10 +160,7 @@ class FuturePredictionAccessService
                 return $existing;
             }
 
-            $product = PredictionProduct::query()->lockForUpdate()->findOrFail($transaction->product_id);
-            $predictionRequest = PredictionRequest::query()->lockForUpdate()->findOrFail($transaction->prediction_request_id);
-            $user = User::query()->lockForUpdate()->findOrFail($transaction->user_id);
-            PredictionEntitlement::query()
+            $owned = PredictionEntitlement::query()
                 ->where('user_id', $user->id)
                 ->where('prediction_type', 'future')
                 ->lockForUpdate()
@@ -168,7 +168,7 @@ class FuturePredictionAccessService
 
             $timezone = config('services.prediction_billing.business_timezone', 'Asia/Kolkata');
             $now = CarbonImmutable::now($timezone);
-            $block = $this->nextPurchaseBlock($user, $predictionRequest);
+            $block = $reservedBlock ?? $this->nextPurchaseBlock($user, $predictionRequest);
 
             if (! $block['can_purchase']) {
                 throw new \RuntimeException($block['message'] ?? 'No new future years are available.');
@@ -176,6 +176,12 @@ class FuturePredictionAccessService
 
             $startYear = (int) $block['next_start_year'];
             $endYear = (int) $block['next_end_year'];
+            if ($reservedBlock !== null && ($endYear <= $now->year || $owned->contains(
+                fn (PredictionEntitlement $entitlement): bool => in_array($entitlement->status, ['ACTIVE', 'EXPIRED'], true)
+                    && $entitlement->access_start_year <= $endYear && $entitlement->access_end_year >= $startYear
+            ))) {
+                throw new \RuntimeException('This prediction period has elapsed or is already owned.');
+            }
             $expiresAt = CarbonImmutable::create($endYear, 12, 31, 23, 59, 59, $timezone);
 
             return PredictionEntitlement::query()->create(

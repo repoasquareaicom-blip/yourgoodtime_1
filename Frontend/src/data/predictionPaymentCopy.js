@@ -1,0 +1,53 @@
+export const paymentSupportNumber = '90439 79797'
+export const paymentSupportUrl = 'https://wa.me/919043979797'
+
+const copy = {
+  title: 'Important Payment Instructions',
+  scan: 'Scan the QR code using any UPI payment application and complete your payment.',
+  screenshot: 'Take a screenshot of your successful payment confirmation.',
+  share: 'Send your payment screenshot via WhatsApp to {number}. You can also upload it here.',
+  submitStep: 'After completing your payment, you must click the Submit for Payment Verification button.',
+  beforeWarning: 'IMPORTANT: Completing the UPI payment alone will not activate your prediction. After making the payment, you must click the “Submit for Payment Verification” button.',
+  optional: 'You can also upload your screenshot on the payment screen.',
+  shareAfter: 'Send your payment screenshot on WhatsApp.',
+  downloadQr: 'Download QR code',
+  downloadingQr: 'Downloading QR code…',
+  downloadError: 'The QR code could not be downloaded. Please try again.',
+  proceed: 'I Understand – Proceed to Payment',
+  qrTitle: 'Pay via UPI QR',
+  afterTitle: 'IMPORTANT – AFTER PAYMENT',
+  afterWarning: 'After completing your UPI payment, you must click the “Submit for Payment Verification” button below. Do not close this screen without submitting your request.',
+  activation: 'Your prediction will be activated once your payment is verified.',
+  upload: 'Upload Payment Screenshot (Optional)',
+  fileHint: 'PNG, JPG, or WEBP up to 5 MB',
+  invalidFile: 'Choose a PNG, JPG, or WEBP screenshot up to 5 MB.',
+  submit: 'Submit for Payment Verification',
+  busy: 'Please wait…',
+  missed: 'Already paid but missed submitting your request? Please contact us on WhatsApp at {number}.',
+  closeTitle: 'Have you already made the payment?',
+  closeWarning: 'If you have completed your UPI payment, please click the “Submit for Payment Verification” button before closing this screen.',
+  closeSupport: 'If you have already paid and need assistance, please contact us on WhatsApp at {number}.',
+  closeAnyway: 'Close Anyway',
+  continue: 'Continue Verification',
+  resume: 'Resume Payment Verification',
+  resumeHelp: 'If you already paid, submit this request using your original payment.',
+  showQr: 'Show QR code if you still need to pay',
+  thanks: 'Thank You!',
+  success: 'Your payment verification request has been submitted successfully.',
+  team: 'Our team will verify your payment and activate your prediction.',
+  support: 'For any payment-related assistance, please contact us on WhatsApp at {number}.',
+  close: 'Close',
+  amount: 'Total payable',
+  product: 'Product',
+  period: 'Prediction period',
+  error: 'We could not update your payment request. Please try again or contact us on WhatsApp.',
+  pending: 'Pending Verification',
+  preparing: 'Preparing your prediction',
+  verified: 'Payment verified',
+  prepare: 'Prepare Future Prediction',
+  qrOption: 'Scan the QR code and submit for verification',
+}
+
+export function predictionPaymentText(key) {
+  return copy[key].replaceAll('{number}', paymentSupportNumber)
+}

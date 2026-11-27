@@ -1,5 +1,6 @@
+import { predictionPaymentText as t } from '../data/predictionPaymentCopy'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import AppFooter from '../components/common/AppFooter'
 import FuturePurchaseModal from '../components/common/FuturePurchaseModal'
 import HeaderAuthActions from '../components/common/HeaderAuthActions'
@@ -9,6 +10,7 @@ import TempleRemedyModal from '../components/common/TempleRemedyModal'
 import TalkToAstrologerModal from '../components/common/TalkToAstrologerModal'
 import ygtLogo from '../assets/yt-logo.png'
 import { clearMyAccountPredictionCache, fetchMyAccountPredictions } from '../services/myAccountService'
+import { fetchAdminAccountPrediction, fetchAdminPredictionPlaybackUrl, fetchAdminUserAccount } from '../services/adminService'
 import { createAppointmentOrder, createTempleRemedyOrder, loadRazorpayScript, verifyRazorpayPayment } from '../services/paymentService'
 import { buildPredictionPlaylist, fetchPredictionResult, fetchStoredPredictionResult } from '../services/predictionResultService'
 import { clearPredictionSession, savePredictionSession } from '../services/predictionSessionService'
@@ -266,6 +268,7 @@ function PredictionCard({
               <button
                 type="button"
                 key={`${range.entitlement_id}-${range.start_year}-${range.end_year}`}
+                  disabled={disabled}
                 onClick={range.onClick}
               >
                 {periodLabel(range.start_year, range.end_year)}
@@ -273,9 +276,11 @@ function PredictionCard({
             ))}
           </div>
         ) : null}
-        <button type="button" className="account-primary-btn" disabled={disabled} onClick={onAction}>
-          {buttonLabel}
-        </button>
+        {buttonLabel && (
+          <button type="button" className="account-primary-btn" disabled={disabled} onClick={onAction}>
+            {buttonLabel}
+          </button>
+        )}
         {secondaryAction ? (
           <button
             type="button"
@@ -293,7 +298,7 @@ function PredictionCard({
   )
 }
 
-function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewRemedy, onSubmitFeedback, payingRemedyId }) {
+function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewRemedy, onSubmitFeedback, payingRemedyId, readOnly = false }) {
   const items = Array.isArray(remedies) ? remedies : []
   const hasActiveRemedy = items.some((item) => item.status !== 'COMPLETED')
 
@@ -312,7 +317,7 @@ function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewReme
           <strong>{hasActiveRemedy ? 'One active request is in progress' : 'You can request a new remedy'}</strong>
         </div>
         {!hasActiveRemedy ? (
-          <button type="button" onClick={onRequest}>{items.length ? 'Request Another Remedy' : 'Request Temple Remedy'}</button>
+          <button type="button" disabled={readOnly} onClick={onRequest}>{items.length ? 'Request Another Remedy' : 'Request Temple Remedy'}</button>
         ) : (
           <small>Request another remedy after the current request is completed.</small>
         )}
@@ -362,19 +367,19 @@ function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewReme
                 </div>
                 <div className="account-remedy-history-actions">
                   {needsPayment ? (
-                    <button type="button" className="account-remedy-pay-btn" disabled={payingRemedyId === item.id} onClick={() => onPay?.(item)}>
+                    <button type="button" className="account-remedy-pay-btn" disabled={readOnly || payingRemedyId === item.id} onClick={() => onPay?.(item)}>
                       {payingRemedyId === item.id ? 'Opening Payment...' : `Pay Securely${amount ? ` - ${amount}` : ''}`}
                     </button>
                   ) : null}
                   {remedy.available ? (
-                    <button type="button" className="account-remedy-download" onClick={() => onViewRemedy?.(item)}>
+                    <button type="button" className="account-remedy-download" disabled={readOnly} onClick={() => onViewRemedy?.(item)}>
                       View PDF
                     </button>
                   ) : null}
                   {item.feedback?.submitted ? (
                     <small>Feedback submitted</small>
                   ) : remedy.available ? (
-                    <button type="button" className="account-remedy-feedback-link" onClick={() => onSubmitFeedback?.(item)}>
+                    <button type="button" className="account-remedy-feedback-link" disabled={readOnly} onClick={() => onSubmitFeedback?.(item)}>
                       Submit feedback
                     </button>
                   ) : null}
@@ -393,7 +398,7 @@ function TempleRemedySection({ remedies, isLoading, onRequest, onPay, onViewReme
   )
 }
 
-function AppointmentSection({ appointments, isLoading, onBook, onPay, payingAppointmentId }) {
+function AppointmentSection({ appointments, isLoading, onBook, onPay, payingAppointmentId, readOnly = false }) {
   const groups = appointments?.groups || {}
   const pending = groups.pending || []
   const upcoming = groups.upcoming || []
@@ -411,7 +416,7 @@ function AppointmentSection({ appointments, isLoading, onBook, onPay, payingAppo
 
       <article className="account-remedy-card is-empty">
         <p>Book a private online consultation with our astrologer for personalised guidance.</p>
-        <button type="button" onClick={onBook}>Book Consultation</button>
+        <button type="button" disabled={readOnly} onClick={onBook}>Book Consultation</button>
       </article>
 
       {isLoading && !allItems.length ? (
@@ -442,14 +447,16 @@ function AppointmentSection({ appointments, isLoading, onBook, onPay, payingAppo
                 </div>
                 {item.can_pay ? (
                   <div className="account-remedy-status-panel">
-                    <button type="button" className="account-remedy-pay-btn" disabled={payingAppointmentId === item.id} onClick={() => onPay(item)}>
+                    <button type="button" className="account-remedy-pay-btn" disabled={readOnly || payingAppointmentId === item.id} onClick={() => onPay(item)}>
                       {payingAppointmentId === item.id ? 'Opening Payment...' : `Pay Now - ${amount}`}
                     </button>
                   </div>
                 ) : null}
-                {item.meeting_link && ['slot_fixed', 'booked', 'upcoming'].includes(item.status) ? (
+                {(item.meeting_link || item.has_meeting_link) && ['slot_fixed', 'booked', 'upcoming'].includes(item.status) ? (
                   <div className="account-remedy-action-row">
-                    <a className="account-remedy-download" href={item.meeting_link} target="_blank" rel="noreferrer">Open Meeting Link</a>
+                    {readOnly
+                      ? <button type="button" className="account-remedy-download" disabled>Open Meeting Link</button>
+                      : <a className="account-remedy-download" href={item.meeting_link} target="_blank" rel="noreferrer">Open Meeting Link</a>}
                   </div>
                 ) : null}
               </article>
@@ -523,8 +530,13 @@ function TempleRemedyFeedbackPrompt({
   )
 }
 
-function AccountPage() {
+function AccountPage({ previewUserId = null }) {
   const navigate = useNavigate()
+  const isPreview = previewUserId !== null
+  const loadPreviewPlaybackUrl = useCallback(
+    (options) => fetchAdminPredictionPlaybackUrl(previewUserId, options),
+    [previewUserId],
+  )
   const [history, setHistory] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -546,37 +558,44 @@ function AccountPage() {
   const pendingRemedyFeedbackRef = useRef(null)
   const openedRemedyUrlsRef = useRef([])
 
-  const loadHistory = useCallback(async ({ force = false } = {}) => {
+  const loadHistory = useCallback(async ({ force = false, background = false } = {}) => {
     abortControllerRef.current?.abort()
     const controller = new AbortController()
     abortControllerRef.current = controller
 
-    if (force) {
+    if (force && !isPreview) {
       clearMyAccountPredictionCache()
     }
 
-    setIsLoading(true)
-    setError('')
+    if (!background) {
+      setIsLoading(true)
+      setError('')
+    }
 
     try {
-      const data = await fetchMyAccountPredictions({ signal: controller.signal, force })
+      const data = isPreview
+        ? await fetchAdminUserAccount(previewUserId, controller.signal)
+        : await fetchMyAccountPredictions({ signal: controller.signal, force })
       setHistory(data)
     } catch (loadError) {
       if (loadError?.name === 'CanceledError' || loadError?.code === 'ERR_CANCELED') return
 
       if (loadError?.response?.status === 401) {
-        navigate('/login?redirect=/account', { replace: true })
+        const previewPath = `/admin/users/${previewUserId}/account`
+        navigate(isPreview ? `/admin-login?redirect=${encodeURIComponent(previewPath)}` : '/login?redirect=/account', { replace: true })
         return
       }
 
-      setError('We could not load your prediction history right now.')
+      if (!background) setError(isPreview && loadError?.response?.status === 404
+        ? 'User not found.'
+        : 'We could not load the prediction history right now.')
     } finally {
       if (abortControllerRef.current === controller) {
         setIsLoading(false)
         abortControllerRef.current = null
       }
     }
-  }, [navigate])
+  }, [navigate, isPreview, previewUserId])
 
   useEffect(() => {
     loadHistory({ force: true })
@@ -587,7 +606,15 @@ function AccountPage() {
   }, [loadHistory])
 
   const futureRanges = useMemo(() => history?.future?.ranges || [], [history?.future?.ranges])
-  const firstWatchableFuture = futureRanges.find((range) => accessFromWatch(range.watch)) || futureRanges[0]
+  const canOpenFutureRange = (range) => isPreview ? range.can_open : accessFromWatch(range.watch)
+  const watchableFutureRanges = futureRanges.filter((range) => (range.watch_ready ?? range.has_result) && canOpenFutureRange(range))
+  const firstWatchableFuture = watchableFutureRanges[0]
+  const firstPreparableFuture = futureRanges.find(canOpenFutureRange)
+  const resumePayment = history?.future?.resume_payment
+  const pendingPayment = history?.future?.payment_pending
+  const preparingFuture = history?.future?.activation_pending
+  const preparingPast = history?.past?.action === 'preparing'
+  const futureActionRange = firstWatchableFuture || firstPreparableFuture
   const identity = history?.identity
   const submittedDetails = identity?.submitted_details || {}
   const pastYears = yearParts(history?.past?.start_year, history?.past?.end_year)
@@ -622,7 +649,7 @@ function AccountPage() {
   const openPredictionPlayer = async ({ type, watch, entitlementId }) => {
     const access = accessFromWatch(watch)
 
-    if (!access) {
+    if (!isPreview && !access) {
       if (type === 'past') {
         navigate('/past-prediction')
         return
@@ -632,14 +659,16 @@ function AccountPage() {
       return
     }
 
-    rememberAccess(access)
+    if (!isPreview) rememberAccess(access)
     setIsPreparing(type)
     setActionMessage('')
 
     try {
       let result
 
-      if (type === 'future') {
+      if (isPreview) {
+        result = await fetchAdminAccountPrediction(previewUserId, { type, entitlementId })
+      } else if (type === 'future') {
         try {
           result = await fetchStoredPredictionResult({ ...access, type: 'future', entitlementId })
         } catch {
@@ -653,7 +682,7 @@ function AccountPage() {
         }
       }
 
-      const playableResult = type === 'past' ? ensureIdentityVideo(result, access) : result
+      const playableResult = !isPreview && type === 'past' ? ensureIdentityVideo(result, access) : result
       const playlist = buildPredictionPlaylist(playableResult, type)
 
       if (!playlist.length) {
@@ -668,10 +697,10 @@ function AccountPage() {
         type,
         playlist,
         resultId: playableResult?.result_id,
-        access,
+        access: isPreview ? { entitlementId } : access,
       })
       setIsPreparing('')
-      loadHistory({ force: true })
+      if (!isPreview) loadHistory({ force: true })
     } catch (playError) {
       setActionMessage(playError?.response?.data?.message || 'We could not open this prediction right now.')
       setIsPreparing('')
@@ -688,13 +717,30 @@ function AccountPage() {
     setFuturePurchaseOpen(true)
   }
 
+  const updateFuturePurchase = (payment) => {
+    if (payment?.status !== 'AWAITING_SUBMISSION' && payment?.status !== 'PENDING') {
+      loadHistory({ force: true, background: true })
+      return
+    }
+
+    clearMyAccountPredictionCache()
+    setHistory((current) => current && {
+      ...current,
+      future: {
+        ...current.future,
+        resume_payment: payment.status === 'AWAITING_SUBMISSION' ? payment : null,
+        payment_pending: payment.status === 'PENDING' || current.future?.payment_pending,
+      },
+    })
+  }
+
   const openPastBirthDetails = () => {
     clearPredictionSession()
     navigate('/past-prediction')
   }
 
   const futureRangeButtons = futureRanges.length > 1
-    ? futureRanges.map((range) => ({
+    ? watchableFutureRanges.map((range) => ({
       ...range,
       onClick: () => openPredictionPlayer({ type: 'future', watch: range.watch, entitlementId: range.entitlement_id }),
     }))
@@ -910,7 +956,7 @@ function AccountPage() {
   }
 
   return (
-    <main className="account-page">
+    <main className={isPreview ? 'account-page is-admin-preview' : 'account-page'}>
       <section className="account-shell">
         <header className="home-hero-header account-header" aria-label="Account page header">
           <div className="home-hero-brand">
@@ -921,7 +967,12 @@ function AccountPage() {
             </div>
           </div>
 
-          <HeaderAuthActions />
+          {isPreview ? (
+            <div className="account-preview-header">
+              <span>Read-only admin preview</span>
+              <Link to="/admin">Back to Users</Link>
+            </div>
+          ) : <HeaderAuthActions />}
         </header>
 
         <section className="account-dashboard" aria-label="My Account dashboard">
@@ -948,12 +999,12 @@ function AccountPage() {
                   copy="Watch your prepared life journey reading."
                   years={history?.past?.available ? pastYears : null}
                   fallbackLabel={isLoading ? 'Loading' : 'Pending'}
-                  buttonLabel={isPreparing === 'past' ? 'Opening...' : isLoading ? 'Loading...' : history?.past?.available ? 'Watch Prediction' : 'Prepare Past Prediction'}
-                  disabled={isPreparing === 'past' || isLoading}
+                  buttonLabel={preparingPast ? null : isPreparing === 'past' ? 'Opening...' : isLoading ? 'Loading...' : history?.past?.watch_ready ? 'Watch Prediction' : 'Prepare Past Prediction'}
+                  disabled={(isPreview && !history?.past?.watch_ready) || Boolean(isPreparing) || isLoading}
                   onAction={() => history?.past?.available
                     ? openPredictionPlayer({ type: 'past', watch: history.past.watch })
                     : openPastBirthDetails()}
-                  note={history?.past?.available
+                  note={preparingPast ? t('preparing') : history?.past?.available
                     ? null
                     : history?.past?.message || 'Complete your details to create your reading.'}
                 />
@@ -967,29 +1018,36 @@ function AccountPage() {
                     : 'Unlock your next future reading.'}
                   years={history?.future?.purchased ? futurePeriodYears : upcomingYears}
                   fallbackLabel={isLoading ? 'Loading' : null}
-                  buttonLabel={history?.future?.purchased
-                    ? isPreparing === 'future' ? 'Opening...' : 'Watch Prediction'
-                    : isLoading ? 'Loading...' : 'Unlock Future Prediction'}
-                  disabled={isPreparing === 'future' || isLoading}
-                  onAction={() => history?.future?.purchased
-                    ? openPredictionPlayer({ type: 'future', watch: firstWatchableFuture?.watch, entitlementId: firstWatchableFuture?.entitlement_id })
+                  buttonLabel={isPreparing === 'future' ? 'Opening...'
+                    : isLoading ? 'Loading...'
+                      : firstWatchableFuture ? 'Watch Prediction'
+                        : resumePayment ? t('resume')
+                          : firstPreparableFuture ? t('prepare')
+                            : (pendingPayment || preparingFuture) ? null
+                              : 'Unlock Future Prediction'}
+                  disabled={(isPreview && !firstWatchableFuture) || Boolean(isPreparing) || isLoading}
+                  onAction={() => firstWatchableFuture || (!resumePayment && firstPreparableFuture)
+                    ? openPredictionPlayer({ type: 'future', watch: futureActionRange.watch, entitlementId: futureActionRange.entitlement_id })
                     : openFuturePurchase()}
-                  note={history?.future?.purchased
-                    ? null
-                    : history?.future?.next_purchase?.message}
+                  note={pendingPayment ? t('pending')
+                    : preparingFuture ? t('preparing')
+                      : history?.future?.purchased || resumePayment ? null : history?.future?.next_purchase?.message}
                   rangeButtons={futureRangeButtons}
-                  secondaryAction={history?.future?.purchased && history?.future?.next_purchase?.available
-                    ? {
-                        label: 'Unlock Next Future Prediction',
-                        years: nextFutureYearsLabel,
-                        disabled: isLoading,
-                        onClick: openFuturePurchase,
-                      }
-                    : null}
+                  secondaryAction={firstWatchableFuture && resumePayment
+                    ? { label: t('resume'), disabled: isPreview || isLoading, onClick: openFuturePurchase }
+                    : history?.future?.purchased && history?.future?.next_purchase?.available && !pendingPayment && !resumePayment && !preparingFuture
+                      ? {
+                          label: 'Unlock Next Future Prediction',
+                          years: nextFutureYearsLabel,
+                          disabled: isPreview || isLoading,
+                          onClick: openFuturePurchase,
+                        }
+                      : null}
                 />
               </section>
 
               <TempleRemedySection
+                readOnly={isPreview}
                 remedies={templeRemedies}
                 isLoading={isLoading}
                 onRequest={() => setIsRemedyModalOpen(true)}
@@ -1000,6 +1058,7 @@ function AccountPage() {
               />
 
               <AppointmentSection
+                readOnly={isPreview}
                 appointments={appointments}
                 isLoading={isLoading}
                 onBook={() => setIsTalkToAstrologerOpen(true)}
@@ -1012,7 +1071,7 @@ function AccountPage() {
           {actionMessage ? <p className="account-action-message" role="status">{actionMessage}</p> : null}
         </section>
 
-        <PrimaryNav />
+        <PrimaryNav accountPreview={isPreview} />
         <AppFooter />
       </section>
 
@@ -1025,16 +1084,16 @@ function AccountPage() {
           predictionRequestAccess={player.access}
           predictionResultId={player.resultId}
           predictionType={player.type}
+          loadPlaybackUrl={isPreview ? loadPreviewPlaybackUrl : undefined}
+          readOnly={isPreview}
         />
       ) : null}
 
       {futurePurchaseOpen ? (
         <FuturePurchaseModal
-          onClose={() => {
-            setFuturePurchaseOpen(false)
-            loadHistory({ force: true })
-          }}
-          onUpdated={() => loadHistory({ force: true })}
+          resumePayment={resumePayment}
+          onClose={() => setFuturePurchaseOpen(false)}
+          onUpdated={updateFuturePurchase}
           onNeedBirthDetails={() => {
             setFuturePurchaseOpen(false)
             navigate('/past-prediction')
@@ -1053,12 +1112,14 @@ function AccountPage() {
         />
       ) : null}
 
-      <TalkToAstrologerModal
-        open={isTalkToAstrologerOpen}
-        onClose={() => setIsTalkToAstrologerOpen(false)}
-        onRequireLogin={() => {}}
-        onSubmitted={() => loadHistory({ force: true })}
-      />
+      {!isPreview && (
+        <TalkToAstrologerModal
+          open={isTalkToAstrologerOpen}
+          onClose={() => setIsTalkToAstrologerOpen(false)}
+          onRequireLogin={() => {}}
+          onSubmitted={() => loadHistory({ force: true })}
+        />
+      )}
 
       {remedyFeedbackPrompt ? (
         <TempleRemedyFeedbackPrompt

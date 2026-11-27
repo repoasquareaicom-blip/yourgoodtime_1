@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PredictionRequest extends Model
@@ -53,5 +54,22 @@ class PredictionRequest extends Model
     public function results(): HasMany
     {
         return $this->hasMany(PredictionResult::class);
+    }
+
+    public function scopeCompletedBirthProfile(Builder $query, string $email): Builder
+    {
+        return $query
+            ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($email))])
+            ->where('status', 'completed')
+            ->whereNotNull('date_of_birth')
+            ->whereNotNull('time_of_birth')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->whereNotNull('timezone')
+            ->whereNotNull('birth_payload')
+            ->whereNotNull('raw_astrology_response')
+            ->whereNotNull('normalized_astrology_data')
+            ->latest('completed_at')
+            ->latest('id');
     }
 }

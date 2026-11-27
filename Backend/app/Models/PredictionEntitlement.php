@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PredictionEntitlement extends Model
 {
@@ -32,5 +33,15 @@ class PredictionEntitlement extends Model
             'expires_at' => 'datetime',
             'purchased_at' => 'datetime',
         ];
+    }
+
+    public function paymentTransaction(): BelongsTo
+    {
+        return $this->belongsTo(PaymentTransaction::class);
+    }
+
+    public function predictionRequest(): BelongsTo
+    {
+        return $this->belongsTo(PredictionRequest::class);
     }
 }

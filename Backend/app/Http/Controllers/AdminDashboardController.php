@@ -13,6 +13,7 @@ use App\Services\Prediction\IdentityVideoRecoveryService;
 use App\Services\Prediction\PredictionInspectService;
 use App\Services\Prediction\PredictionRegenerationService;
 use App\Support\PredictionViewerSignature;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -33,7 +34,8 @@ class AdminDashboardController extends Controller
                 'cards' => [
                     'users' => User::query()->count(),
                     'past_requests' => PredictionRequest::query()->where('prediction_type', 'past')->count(),
-                    'future_requests' => PredictionResult::query()->where('prediction_type', 'future')->count(),
+                    'future_requests' => PredictionResult::query()->where('prediction_type', 'future')->count()
+                        + $this->futureEntitlementsWithoutResult()->count(),
                     'temple_remedies' => TempleRemedyRequest::query()->count(),
                     'pending_appointments' => AstrologerAppointment::query()->whereIn('status', ['open', 'pending', 'reviewing', 'slot_proposed', 'payment_pending'])->count(),
                     'upcoming_appointments' => AstrologerAppointment::query()->whereIn('status', ['slot_fixed', 'booked', 'upcoming'])->count(),
@@ -116,9 +118,27 @@ class AdminDashboardController extends Controller
                 ->get()
                 ->map(fn (PredictionResult $result): array => $this->predictionResultPayload($result));
 
+            $pending = $this->futureEntitlementsWithoutResult()
+                ->with('predictionRequest')
+                ->latest('created_at')->limit(100)->get()
+                ->map(fn (PredictionEntitlement $entitlement): array => [
+                    'id' => 'entitlement-'.$entitlement->id,
+                    'prediction_request_id' => $entitlement->prediction_request_id,
+                    'prediction_result_id' => null,
+                    'prediction_entitlement_id' => $entitlement->id,
+                    'prediction_type' => 'future',
+                    'status' => 'processing',
+                    'created_at' => $entitlement->created_at?->toJSON(),
+                    'period' => $this->predictionPeriod($entitlement->predictionRequest, null, $entitlement),
+                    'identity' => $this->identityPayload($entitlement->predictionRequest),
+                    'entitlement' => $this->entitlementPayload($entitlement),
+                ]);
+
             return response()->json([
                 'success' => true,
-                'data' => $results->values(),
+                'data' => $results->concat($pending)
+                    ->sortByDesc(fn (array $row) => $row['generated_at'] ?? $row['created_at'])
+                    ->take(100)->values(),
             ]);
         }
 
@@ -135,6 +155,15 @@ class AdminDashboardController extends Controller
             'success' => true,
             'data' => $requests->values(),
         ]);
+    }
+
+    private function futureEntitlementsWithoutResult(): Builder
+    {
+        return PredictionEntitlement::query()->where('prediction_type', 'future')
+            ->where('status', 'ACTIVE')
+            ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('prediction_results')
+                ->whereColumn('prediction_results.prediction_entitlement_id', 'prediction_entitlements.id')
+                ->where('prediction_results.prediction_type', 'future'));
     }
 
     public function predictionRequest(PredictionRequest $predictionRequest): JsonResponse
@@ -878,9 +907,9 @@ class AdminDashboardController extends Controller
             ->all();
     }
 
-    private function predictionPeriod(PredictionRequest $request, PredictionResult $result, ?PredictionEntitlement $entitlement = null): array
+    private function predictionPeriod(PredictionRequest $request, ?PredictionResult $result, ?PredictionEntitlement $entitlement = null): array
     {
-        $videos = $this->flattenPredictionVideos($result);
+        $videos = $result ? $this->flattenPredictionVideos($result) : [];
         $years = collect($videos)
             ->flatMap(fn (array $video): array => [
                 $video['system_year_from'] ?? null,

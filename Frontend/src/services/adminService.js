@@ -12,6 +12,35 @@ export async function fetchAdminUsers() {
   return response.data?.data || []
 }
 
+export async function fetchAdminUserAccount(userId, signal) {
+  const response = await adminApi.get(`/admin/users/${userId}/account`, { signal })
+
+  return response.data.data
+}
+
+export async function fetchAdminAccountPrediction(userId, { type, entitlementId }) {
+  const response = await adminApi.get(`/admin/users/${userId}/account/prediction`, {
+    params: { type, entitlement_id: entitlementId },
+  })
+
+  return response.data.data
+}
+
+export async function fetchAdminPredictionPlaybackUrl(userId, {
+  predictionType, predictionResultId, entitlementId, videoId, videoRole, language, signal,
+}) {
+  const response = await adminApi.post(`/admin/users/${userId}/account/playback-url`, {
+    prediction_type: predictionType,
+    prediction_result_id: predictionResultId,
+    entitlement_id: entitlementId,
+    video_id: videoId,
+    video_role: videoRole,
+    language,
+  }, { signal })
+
+  return { ...response.data.data, status: response.status }
+}
+
 export async function fetchAdminGalleryVideos() {
   const response = await adminApi.get('/admin/gallery-videos')
 
@@ -379,8 +408,35 @@ export async function fetchAdminFutureVideoManualPaymentProof(paymentId) {
   return response.data
 }
 
-export async function verifyAdminFutureVideoManualPayment(paymentId) {
-  const response = await adminApi.post(`/admin/future-video-manual-payments/${paymentId}/verify`)
+export async function verifyAdminFutureVideoManualPayment(paymentId, remarks) {
+  const response = await adminApi.post(`/admin/future-video-manual-payments/${paymentId}/verify`, {
+    payment_confirmed: true,
+    admin_remarks: remarks,
+  })
+
+  return response.data
+}
+
+export async function retryAdminManualPredictionActivation(paymentId) {
+  const response = await adminApi.post(`/admin/future-video-manual-payments/${paymentId}/retry`)
+
+  return response.data
+}
+
+export async function searchAdminManualPredictionUsers(search) {
+  const response = await adminApi.get('/admin/manual-prediction-requests/users', { params: { search } })
+
+  return response.data.data
+}
+
+export async function fetchAdminManualPredictionOptions(userId) {
+  const response = await adminApi.get(`/admin/manual-prediction-requests/users/${userId}`)
+
+  return response.data.data
+}
+
+export async function createAdminManualPredictionRequest(payload) {
+  const response = await adminApi.post('/admin/manual-prediction-requests', payload)
 
   return response.data
 }

@@ -2,6 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\AdminUser;
+use App\Models\PaymentTransaction;
+use App\Models\PredictionEntitlement;
+use App\Models\PredictionProduct;
 use App\Models\PredictionRequest;
 use App\Models\PredictionResult;
 use App\Models\User;
@@ -26,6 +30,62 @@ class ProtectedVideoStreamingTest extends TestCase
             'video.public_contents_fallback' => false,
             'video.token_ttl_seconds' => 600,
         ]);
+    }
+
+    public function test_admin_account_preview_can_stream_only_the_selected_users_ready_readings(): void
+    {
+        $lastLogin = now()->subDays(2)->startOfSecond();
+        $customer = User::factory()->create(['last_login_at' => $lastLogin]);
+        $other = User::factory()->create();
+        $profile = $this->predictionRequestFor($customer);
+        $past = $this->predictionResultFor($profile);
+        $product = PredictionProduct::query()->create([
+            'code' => 'FUTURE_PREDICTION',
+            'name' => 'Future Prediction',
+            'prediction_type' => 'future',
+            'price_inclusive_tax_minor' => 60000,
+            'currency' => 'INR',
+        ]);
+        $transaction = PaymentTransaction::query()->create([
+            'prediction_request_id' => $profile->id, 'user_id' => $customer->id,
+            'product_id' => $product->id, 'provider' => 'manual_gpay_qr', 'currency' => 'INR',
+            'amount_minor' => 60000, 'status' => 'CAPTURED',
+        ]);
+        $entitlement = PredictionEntitlement::query()->create([
+            'prediction_request_id' => $profile->id, 'user_id' => $customer->id, 'product_id' => $product->id,
+            'payment_transaction_id' => $transaction->id, 'prediction_type' => 'future', 'status' => 'ACTIVE',
+            'starts_at' => now(), 'expires_at' => now()->addYears(2),
+            'access_start_year' => now()->year + 1, 'access_end_year' => now()->year + 1,
+        ]);
+        $future = $past->replicate()->forceFill(['prediction_type' => 'future', 'prediction_entitlement_id' => $entitlement->id]);
+        $future->save();
+        $admin = AdminUser::query()->create(['name' => 'Preview Admin', 'email' => 'preview-admin@example.com', 'password' => 'secret', 'is_active' => true]);
+        Storage::disk('protected_videos')->put('00353_final.mp4', '0123456789abcdef');
+
+        $base = '/api/admin/users/'.$customer->id.'/account';
+        $this->getJson($base.'/prediction?type=past')->assertUnauthorized();
+        $this->actingAs($customer, 'sanctum')->getJson($base.'/prediction?type=past')->assertForbidden();
+        $this->actingAs($admin, 'sanctum')->getJson($base.'/prediction?type=past')
+            ->assertOk()->assertJsonPath('data.result_id', $past->id)->assertJsonMissingPath('data.request_uuid');
+
+        $query = '?type=future&entitlement_id='.$entitlement->id;
+        $this->getJson($base.'/prediction'.$query)->assertOk()->assertJsonPath('data.result_id', $future->id);
+        $this->getJson('/api/admin/users/'.$other->id.'/account/prediction'.$query)->assertNotFound();
+
+        $input = [
+            'prediction_type' => 'future',
+            'prediction_result_id' => $future->id,
+            'entitlement_id' => $entitlement->id,
+            'video_id' => '00353_final',
+            'video_role' => 'PREDICTION',
+            'language' => 'ta',
+        ];
+        $url = $this->postJson($base.'/playback-url', $input)
+            ->assertOk()->assertJsonMissingPath('data.debug')->json('data.url');
+        $this->get($url, ['Range' => 'bytes=0-2'])->assertStatus(206)->assertHeader('Content-Range', 'bytes 0-2/16');
+        $this->postJson($base.'/playback-url', array_replace($input, ['video_id' => '99999']))->assertForbidden();
+        $this->assertTrue($customer->refresh()->last_login_at->equalTo($lastLogin));
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_authenticated_user_receives_short_lived_playback_url_for_owned_prediction_video(): void

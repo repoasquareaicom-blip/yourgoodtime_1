@@ -4967,3 +4967,51 @@
     grid-template-columns: 1fr;
   }
 }
+.admin-modal.admin-manual-prediction {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+.admin-manual-fields,
+.admin-manual-users {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.admin-manual-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-manual-fields fieldset,
+.admin-manual-fields .admin-manual-wide {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.admin-manual-fields label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-manual-fields :is(input, textarea, select) {
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.admin-manual-fields .admin-manual-confirm {
+  display: flex;
+  align-items: center;
+}
+
+.admin-manual-users [aria-pressed="true"] {
+  outline: 2px solid currentColor;
+}
+
+@media (max-width: 540px) {
+  .admin-manual-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

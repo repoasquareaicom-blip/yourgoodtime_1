@@ -51,6 +51,7 @@ Route::post('/video/playback-url', [ProtectedVideoController::class, 'playbackUr
 Route::get('/video/stream', [ProtectedVideoController::class, 'stream']);
 Route::get('/prediction-products/future/active', [PredictionProductController::class, 'activeFuture']);
 Route::get('/payment-method-settings/future-video', [FutureVideoManualPaymentController::class, 'paymentSettings']);
+Route::get('/payment-method-settings/future-video/qr-download', [FutureVideoManualPaymentController::class, 'downloadQr']);
 Route::get('/gallery/videos', [GalleryVideoController::class, 'index']);
 Route::post('/gallery/videos/{galleryVideo}/view', [GalleryVideoController::class, 'view']);
 Route::post('/gallery/videos/{galleryVideo}/like', [GalleryVideoController::class, 'like']);
@@ -63,6 +64,7 @@ Route::post('/astrologer-appointments/{appointment}/manual-payment', [Astrologer
 Route::post('/astrologer-appointments/{appointment}/cancel', [AstrologerAppointmentController::class, 'cancel'])->middleware('auth:sanctum');
 Route::post('/payments/future-prediction/order', [PaymentController::class, 'createFutureOrder'])->middleware('auth:sanctum');
 Route::get('/payments/future-prediction/manual-qr/status', [FutureVideoManualPaymentController::class, 'status'])->middleware('auth:sanctum');
+Route::post('/payments/future-prediction/manual-qr/begin', [FutureVideoManualPaymentController::class, 'begin'])->middleware('auth:sanctum');
 Route::post('/payments/future-prediction/manual-qr', [FutureVideoManualPaymentController::class, 'store'])->middleware('auth:sanctum');
 Route::post('/payments/temple-remedy/order', [PaymentController::class, 'createTempleRemedyOrder'])->middleware('auth:sanctum');
 Route::post('/payments/astrologer-appointment/order', [PaymentController::class, 'createAppointmentOrder'])->middleware('auth:sanctum');
@@ -92,12 +94,18 @@ Route::prefix('admin')
             Route::post('/auth/logout', [AdminAuthController::class, 'logout']);
             Route::get('/overview', [AdminDashboardController::class, 'overview']);
             Route::get('/users', [AdminDashboardController::class, 'users']);
+            Route::get('/users/{user}/account', [MyAccountPredictionController::class, 'adminShow']);
+            Route::get('/users/{user}/account/prediction', [MyAccountPredictionController::class, 'adminPrediction']);
+            Route::post('/users/{user}/account/playback-url', [MyAccountPredictionController::class, 'adminPlaybackUrl']);
             Route::get('/feedback', [AdminDashboardController::class, 'feedback']);
             Route::get('/contact-queries', [AdminContactQueryController::class, 'index']);
             Route::get('/contact-queries/{contactQuery}', [AdminContactQueryController::class, 'show']);
             Route::get('/contact-queries/{contactQuery}/attachment', [AdminContactQueryController::class, 'attachment']);
             Route::patch('/contact-queries/{contactQuery}/review', [AdminContactQueryController::class, 'markReviewed']);
             Route::get('/prediction-requests', [AdminDashboardController::class, 'predictionRequests']);
+            Route::get('/manual-prediction-requests/users', [FutureVideoManualPaymentController::class, 'adminUsers']);
+            Route::get('/manual-prediction-requests/users/{user}', [FutureVideoManualPaymentController::class, 'adminOptions']);
+            Route::post('/manual-prediction-requests', [FutureVideoManualPaymentController::class, 'adminCreate']);
             Route::get('/prediction-requests/{predictionRequest}', [AdminDashboardController::class, 'predictionRequest']);
             Route::get('/prediction-requests/{predictionRequest}/details', [AdminDashboardController::class, 'predictionRequestDetails']);
             Route::get('/prediction-requests/{predictionRequest}/inspect', [AdminDashboardController::class, 'inspectPredictionRequest']);
@@ -133,6 +141,7 @@ Route::prefix('admin')
             Route::get('/future-video-manual-payments/{payment}', [FutureVideoManualPaymentController::class, 'adminShow']);
             Route::get('/future-video-manual-payments/{payment}/proof', [FutureVideoManualPaymentController::class, 'adminProof']);
             Route::post('/future-video-manual-payments/{payment}/verify', [FutureVideoManualPaymentController::class, 'adminVerify']);
+            Route::post('/future-video-manual-payments/{payment}/retry', [FutureVideoManualPaymentController::class, 'adminRetry']);
             Route::post('/future-video-manual-payments/{payment}/reject', [FutureVideoManualPaymentController::class, 'adminReject']);
             Route::get('/chatbot/settings', [AdminChatbotController::class, 'settings']);
             Route::put('/chatbot/settings', [AdminChatbotController::class, 'updateSettings']);
